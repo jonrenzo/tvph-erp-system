@@ -34,6 +34,11 @@ const MODULE_CONFIG = [
     subModules: [
       { id: "vendor-list", label: "All Vendors", href: "/dashboard/vendors" },
       {
+        id: "purchase-orders",
+        label: "Purchase Orders",
+        href: "/dashboard/purchase-orders",
+      },
+      {
         id: "vendor-contracts",
         label: "Contracts",
         href: "/dashboard/vendors/contracts",
@@ -251,7 +256,6 @@ export function Sidebar({
           ))}
         </div>
 
-        {/* Settings */}
         <div className="border-t border-slate-200 dark:border-slate-800 p-3">
           <Link
             href="/dashboard/settings"
