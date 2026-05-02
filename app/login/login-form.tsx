@@ -1,14 +1,40 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { login } from "./actions";
 
 export function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+  const router = useRouter();
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    startTransition(async () => {
+      const formData = new FormData();
+      formData.append("email", email);
+      formData.append("password", password);
+      const result = await login(formData);
+      if (result?.error) {
+        setError(result.error);
+      } else if (result?.success) {
+        router.push("/dashboard");
+      }
+    });
+  };
 
   return (
-    <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
+    <form className="space-y-4" onSubmit={handleSubmit}>
+      {error && (
+        <div className="rounded-md bg-red-500/10 p-3 text-sm text-red-500 border border-red-500/20">
+          {error}
+        </div>
+      )}
       <div>
         <label
           htmlFor="email"
@@ -18,6 +44,7 @@ export function LoginForm() {
         </label>
         <input
           id="email"
+          name="email"
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
@@ -36,6 +63,7 @@ export function LoginForm() {
         <div className="relative mt-1">
           <input
             id="password"
+            name="password"
             type={showPassword ? "text" : "password"}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -64,9 +92,10 @@ export function LoginForm() {
 
       <button
         type="submit"
-        className="w-full rounded-full bg-primary py-2.5 font-body text-sm font-semibold text-white transition-colors hover:bg-primary-light focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2 focus:ring-offset-slate-900"
+        disabled={isPending}
+        className="w-full rounded-full bg-primary py-2.5 font-body text-sm font-semibold text-white transition-colors hover:bg-primary-light focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2 focus:ring-offset-slate-900 disabled:opacity-50"
       >
-        Sign In
+        {isPending ? "Signing in..." : "Sign In"}
       </button>
     </form>
   );

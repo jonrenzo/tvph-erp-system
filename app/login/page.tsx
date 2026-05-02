@@ -28,7 +28,7 @@ export default function LoginPage() {
                 className="select-none"
               />
             </div>
-            <h1 className="font-plus-jakarta text-3xl font-bold tracking-[-0.05em] text-white">
+            <h1 className="font-plus-jakarta text-3xl font-bold tracking-tighter text-white">
               TelcoVantage Philippines
             </h1>
             <p className="mt-1 font-body text-sm tracking-wide text-slate-400">
