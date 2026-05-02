@@ -7,9 +7,13 @@ import { Header } from './header'
 export function DashboardShell({
   children,
   userEmail,
+  userName,
+  avatarUrl,
 }: {
   children: React.ReactNode
   userEmail: string
+  userName?: string
+  avatarUrl?: string
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
@@ -28,6 +32,8 @@ export function DashboardShell({
       <div className="flex min-w-0 flex-1 flex-col">
         <Header
           userEmail={userEmail}
+          userName={userName}
+          avatarUrl={avatarUrl}
           onSidebarToggle={() => setSidebarOpen(!sidebarOpen)}
           isCollapsed={isCollapsed}
           onCollapseToggle={() => setIsCollapsed(!isCollapsed)}

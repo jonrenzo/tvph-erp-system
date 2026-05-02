@@ -17,6 +17,8 @@ import { ThemeToggle } from "@/components/theme-toggle";
 
 interface HeaderProps {
   userEmail: string;
+  userName?: string;
+  avatarUrl?: string;
   onSidebarToggle: () => void;
   isCollapsed: boolean;
   onCollapseToggle: () => void;
@@ -24,6 +26,8 @@ interface HeaderProps {
 
 export function Header({
   userEmail,
+  userName,
+  avatarUrl,
   onSidebarToggle,
   isCollapsed,
   onCollapseToggle,
@@ -100,12 +104,16 @@ export function Header({
             onClick={() => setDropdownOpen(!dropdownOpen)}
             className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800/50"
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 dark:bg-primary/20">
-              <User className="h-4 w-4 text-primary" />
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 dark:bg-primary/20 overflow-hidden ring-1 ring-slate-200 dark:ring-slate-800">
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="Avatar" className="h-full w-full object-cover" />
+              ) : (
+                <User className="h-4 w-4 text-primary" />
+              )}
             </div>
             <div className="hidden flex-col items-start text-xs sm:flex">
               <span className="font-medium text-slate-900 dark:text-white">
-                Admin
+                {userName || "User"}
               </span>
             </div>
             <ChevronDown className="h-4 w-4 text-slate-600 dark:text-slate-400" />
@@ -120,6 +128,16 @@ export function Header({
                 </span>
               </div>
               <div className="my-1 border-t border-slate-200 dark:border-slate-800" />
+              <button
+                onClick={() => {
+                  setDropdownOpen(false);
+                  router.push("/dashboard/profile");
+                }}
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 dark:text-slate-300 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800"
+              >
+                <User className="h-4 w-4" />
+                Profile Settings
+              </button>
               <button
                 onClick={handleLogout}
                 disabled={isPending}
