@@ -12,6 +12,7 @@ export function DashboardShell({
   userEmail: string
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [isCollapsed, setIsCollapsed] = useState(false)
 
   return (
     <div className="flex h-screen bg-slate-50 dark:bg-[#071F15] overflow-hidden text-slate-600 dark:text-slate-300">
@@ -20,6 +21,7 @@ export function DashboardShell({
         userEmail={userEmail}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
+        isCollapsed={isCollapsed}
       />
 
       {/* Main Content */}
@@ -27,6 +29,8 @@ export function DashboardShell({
         <Header
           userEmail={userEmail}
           onSidebarToggle={() => setSidebarOpen(!sidebarOpen)}
+          isCollapsed={isCollapsed}
+          onCollapseToggle={() => setIsCollapsed(!isCollapsed)}
         />
         <main className="flex-1 overflow-auto bg-white dark:bg-[#0a0a0a]">
           {children}

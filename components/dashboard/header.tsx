@@ -2,16 +2,32 @@
 
 import { useState, useRef, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Menu, Search, Bell, LogOut, User, ChevronDown } from "lucide-react";
+import {
+  Menu,
+  Search,
+  Bell,
+  LogOut,
+  User,
+  ChevronDown,
+  PanelLeftClose,
+  PanelLeftOpen,
+} from "lucide-react";
 import { logout } from "@/app/login/actions";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 interface HeaderProps {
   userEmail: string;
   onSidebarToggle: () => void;
+  isCollapsed: boolean;
+  onCollapseToggle: () => void;
 }
 
-export function Header({ userEmail, onSidebarToggle }: HeaderProps) {
+export function Header({
+  userEmail,
+  onSidebarToggle,
+  isCollapsed,
+  onCollapseToggle,
+}: HeaderProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [isPending, startTransition] = useTransition();
@@ -48,6 +64,18 @@ export function Header({ userEmail, onSidebarToggle }: HeaderProps) {
           <Menu className="h-6 w-6" />
         </button>
 
+        <button
+          onClick={onCollapseToggle}
+          className="hidden lg:flex text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+          title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+        >
+          {isCollapsed ? (
+            <PanelLeftOpen className="h-5 w-5" />
+          ) : (
+            <PanelLeftClose className="h-5 w-5" />
+          )}
+        </button>
+
         <div className="hidden max-w-md flex-1 items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-[#0a0a0a]/50 px-3 py-1.5 md:flex">
           <Search className="h-4 w-4 text-slate-500" />
           <input
@@ -77,7 +105,7 @@ export function Header({ userEmail, onSidebarToggle }: HeaderProps) {
             </div>
             <div className="hidden flex-col items-start text-xs sm:flex">
               <span className="font-medium text-slate-900 dark:text-white">
-                Super Admin
+                Admin
               </span>
             </div>
             <ChevronDown className="h-4 w-4 text-slate-600 dark:text-slate-400" />

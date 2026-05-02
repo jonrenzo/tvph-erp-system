@@ -16,6 +16,8 @@ import {
   Settings,
   Building2,
   ChevronDown,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 
 const MODULE_CONFIG = [
@@ -88,9 +90,18 @@ interface SidebarProps {
   userEmail: string;
   isOpen: boolean;
   onClose: () => void;
+  isCollapsed: boolean;
 }
 
-function SidebarItem({ config, pathname }: { config: any; pathname: string }) {
+function SidebarItem({
+  config,
+  pathname,
+  isCollapsed,
+}: {
+  config: any;
+  pathname: string;
+  isCollapsed: boolean;
+}) {
   const hasSubModules = !!config.subModules;
   const isSubActive =
     hasSubModules &&
@@ -100,23 +111,32 @@ function SidebarItem({ config, pathname }: { config: any; pathname: string }) {
   const [isOpen, setIsOpen] = useState(isSubActive);
 
   useEffect(() => {
-    if (isSubActive) setIsOpen(true);
-  }, [isSubActive]);
+    if (isSubActive && !isCollapsed) setIsOpen(true);
+  }, [isSubActive, isCollapsed]);
 
   const Icon = config.icon;
+
+  const handleParentClick = () => {
+    if (!isCollapsed) {
+      setIsOpen(!isOpen);
+    }
+  };
 
   if (!hasSubModules) {
     return (
       <Link
         href={config.href}
-        className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+        title={isCollapsed ? config.label : undefined}
+        className={`flex items-center rounded-lg py-2 text-sm font-medium transition-colors ${
+          isCollapsed ? "justify-center px-0" : "gap-3 px-3"
+        } ${
           isActive
             ? "bg-primary/10 dark:bg-primary/20 text-primary dark:text-primary-light"
             : "text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white"
         }`}
       >
         <Icon className="h-5 w-5 shrink-0" />
-        {config.label}
+        {!isCollapsed && <span className="truncate">{config.label}</span>}
       </Link>
     );
   }
@@ -124,25 +144,32 @@ function SidebarItem({ config, pathname }: { config: any; pathname: string }) {
   return (
     <div className="space-y-1">
       <button
-        onClick={() => setIsOpen(!isOpen)}
-        className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+        onClick={handleParentClick}
+        title={isCollapsed ? config.label : undefined}
+        className={`flex w-full items-center rounded-lg py-2 text-sm font-medium transition-colors ${
+          isCollapsed ? "justify-center px-0" : "justify-between gap-3 px-3"
+        } ${
           isSubActive
             ? "text-primary dark:text-primary-light"
             : "text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white"
         }`}
       >
-        <div className="flex items-center gap-3">
+        <div
+          className={`flex items-center ${isCollapsed ? "justify-center" : "gap-3"}`}
+        >
           <Icon className="h-5 w-5 shrink-0" />
-          {config.label}
+          {!isCollapsed && <span className="truncate">{config.label}</span>}
         </div>
-        <ChevronDown
-          className={`h-4 w-4 shrink-0 transition-transform ${
-            isOpen ? "rotate-180" : ""
-          }`}
-        />
+        {!isCollapsed && (
+          <ChevronDown
+            className={`h-4 w-4 shrink-0 transition-transform ${
+              isOpen ? "rotate-180" : ""
+            }`}
+          />
+        )}
       </button>
 
-      {isOpen && (
+      {isOpen && !isCollapsed && (
         <div className="ml-9 space-y-1 pt-1">
           {config.subModules.map((sub: any) => {
             const isSubItemActive = pathname === sub.href;
@@ -166,7 +193,12 @@ function SidebarItem({ config, pathname }: { config: any; pathname: string }) {
   );
 }
 
-export function Sidebar({ userEmail, isOpen, onClose }: SidebarProps) {
+export function Sidebar({
+  userEmail,
+  isOpen,
+  onClose,
+  isCollapsed,
+}: SidebarProps) {
   const pathname = usePathname();
 
   return (
@@ -181,56 +213,76 @@ export function Sidebar({ userEmail, isOpen, onClose }: SidebarProps) {
 
       {/* Sidebar Content */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-slate-50 dark:bg-[#071F15] border-r border-slate-200 dark:border-slate-800 transition-transform duration-200 lg:static lg:translate-x-0 ${
-          isOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+        className={`fixed inset-y-0 left-0 z-50 flex flex-col bg-slate-50 dark:bg-[#071F15] border-r border-slate-200 dark:border-slate-800 transition-all duration-300 lg:static ${
+          isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+        } ${isCollapsed ? "w-[72px]" : "w-64"}`}
       >
         {/* Logo */}
-        <div className="flex h-16 shrink-0 items-center gap-2 border-b border-slate-200 dark:border-slate-800 px-6">
+        <div
+          className={`flex h-16 shrink-0 items-center border-b border-slate-200 dark:border-slate-800 overflow-hidden transition-all ${
+            isCollapsed ? "justify-center px-0" : "px-6 gap-2"
+          }`}
+        >
           <Image
             src="/logo.svg"
             alt="TelcoVantage Logo"
-            width={25}
-            height={25}
+            width={isCollapsed ? 28 : 25}
+            height={isCollapsed ? 28 : 25}
             priority
             draggable={false}
-            className="select-none invert dark:invert-0"
+            className="select-none invert dark:invert-0 shrink-0 transition-all"
           />
-          <span className="font-plus-jakarta font-bold text-slate-900 dark:text-white text-base tracking-[-0.06em]">
-            TelcoVantage Philippines
-          </span>
+          {!isCollapsed && (
+            <span className="font-plus-jakarta font-bold text-slate-900 dark:text-white text-base tracking-[-0.06em] whitespace-nowrap">
+              TelcoVantage Philippines
+            </span>
+          )}
         </div>
 
         {/* Navigation Items */}
-        <div className="flex-1 overflow-y-auto px-4 py-6 space-y-1">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-6 space-y-1">
           {MODULE_CONFIG.map((config) => (
-            <SidebarItem key={config.id} config={config} pathname={pathname} />
+            <SidebarItem
+              key={config.id}
+              config={config}
+              pathname={pathname}
+              isCollapsed={isCollapsed}
+            />
           ))}
         </div>
 
         {/* Settings */}
-        <div className="border-t border-slate-200 dark:border-slate-800 p-4">
+        <div className="border-t border-slate-200 dark:border-slate-800 p-3">
           <Link
             href="/dashboard/settings"
-            className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+            title={isCollapsed ? "Settings" : undefined}
+            className={`flex items-center rounded-lg py-2 text-sm font-medium transition-colors ${
+              isCollapsed ? "justify-center px-0" : "gap-3 px-3"
+            } ${
               pathname === "/dashboard/settings"
                 ? "bg-primary/10 dark:bg-primary/20 text-primary dark:text-primary-light"
                 : "text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white"
             }`}
           >
             <Settings className="h-5 w-5 shrink-0" />
-            Settings
+            {!isCollapsed && <span>Settings</span>}
           </Link>
         </div>
 
         {/* Footer Info */}
-        <div className="border-t border-slate-200 dark:border-slate-800 p-4 text-xs text-slate-500">
-          <p className="font-medium text-slate-700 dark:text-slate-300 mb-1">
-            Super Admin
-          </p>
-          <p className="truncate" title={userEmail}>
-            {userEmail}
-          </p>
+        <div
+          className={`border-t border-slate-200 dark:border-slate-800 transition-all ${
+            isCollapsed ? "hidden" : "block p-4"
+          }`}
+        >
+          <div className="text-xs text-slate-500 overflow-hidden">
+            <p className="font-medium text-slate-700 dark:text-slate-300 mb-0.5 whitespace-nowrap">
+              Admin
+            </p>
+            <p className="truncate" title={userEmail}>
+              {userEmail}
+            </p>
+          </div>
         </div>
       </aside>
     </>
