@@ -15,8 +15,11 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "TelcoVantage ERP",
+  title: "TelcoVantage Philippines",
   description: "Enterprise Resource Planning System",
+  icons: {
+    icon: "/logo.svg",
+  },
 };
 
 import { ThemeProvider } from "@/components/theme-provider";
@@ -33,7 +36,12 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col font-sans">
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="dark"
+          enableSystem
+          disableTransitionOnChange
+        >
           {children}
         </ThemeProvider>
       </body>

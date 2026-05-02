@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Building2, Users, CreditCard, ShieldCheck, Save, UserPlus, Shield } from "lucide-react";
+import { Building2, Users, CreditCard, ShieldCheck, Save, Shield } from "lucide-react";
 import { updateOrganizationSettings, updateFinancialSettings, updateUserRole } from "@/app/dashboard/settings/actions";
+import { AddUserButton } from "@/components/dashboard/hr/add-user-button";
 
 export function SettingsTabs({ initialSettings, team }: { initialSettings: any, team: any[] }) {
   const [activeTab, setActiveTab] = useState("organization");
@@ -100,14 +101,12 @@ export function SettingsTabs({ initialSettings, team }: { initialSettings: any, 
         {/* Team Management Tab */}
         {activeTab === "team" && (
           <div className="p-0">
-             <div className="px-8 py-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-[#0a0a0a]/50">
+             <div className="px-8 py-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/50">
                 <div>
-                   <h3 className="font-bold text-slate-900 dark:text-white">Active Team Members</h3>
+                   <h3 className="font-bold text-slate-900 dark:text-white font-plus-jakarta tracking-tight">Active Team Members</h3>
                    <p className="text-xs text-slate-500 mt-0.5">Control access levels and system roles.</p>
                 </div>
-                <button className="inline-flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm">
-                   <UserPlus className="h-4 w-4" /> Add User
-                </button>
+                <AddUserButton />
              </div>
              <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left">
@@ -143,6 +142,7 @@ export function SettingsTabs({ initialSettings, team }: { initialSettings: any, 
                                  <option value="finance">Finance</option>
                                  <option value="procurement">Procurement</option>
                                  <option value="project_manager">Project Manager</option>
+                                 <option value="user">Standard User</option>
                               </select>
                            </td>
                            <td className="px-8 py-4 text-slate-500 text-xs">

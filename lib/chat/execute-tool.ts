@@ -28,6 +28,9 @@ export async function executeTool(name: ToolName, args: any) {
     }
 
     case 'get_purchase_orders': {
+      if (userRole === 'user' || userRole === 'project_manager') {
+        return "ERROR: Unauthorized. Procurement, Finance, or Admin access required for PO data.";
+      }
       let query = supabase.from('purchase_orders').select(`
         po_number, 
         amount, 
@@ -45,6 +48,9 @@ export async function executeTool(name: ToolName, args: any) {
     }
 
     case 'get_compliance_summary': {
+      if (userRole === 'user' || userRole === 'project_manager') {
+        return "ERROR: Unauthorized. Procurement or Admin access required for compliance data.";
+      }
       const { data, error } = await supabase
         .from('vendors')
         .select(`

@@ -14,7 +14,7 @@ export default async function AuditLogsPage(props: { searchParams: Promise<{ [ke
     .from('audit_logs')
     .select(`
       *,
-      profiles (full_name, email)
+      profiles:performed_by (full_name, email)
     `);
 
   if (actionFilter) query = query.eq('action', actionFilter);
