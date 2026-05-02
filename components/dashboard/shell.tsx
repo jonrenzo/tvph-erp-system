@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Sidebar } from './sidebar'
 import { Header } from './header'
+import { AIChatBubble } from './ai/chat-bubble'
 
 export function DashboardShell({
   children,
@@ -42,6 +43,8 @@ export function DashboardShell({
           {children}
         </main>
       </div>
+
+      <AIChatBubble />
     </div>
   )
 }
