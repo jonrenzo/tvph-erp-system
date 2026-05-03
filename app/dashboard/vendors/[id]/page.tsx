@@ -3,13 +3,36 @@ import { createClient } from '@/utils/supabase/server';
 import { ArrowLeft, Building2, MapPin, Phone, Mail, FileText, CreditCard, Clock, FileCheck, CheckCircle2, XCircle } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import { DocumentList } from '@/components/dashboard/vendors/document-list';
+import { Suspense } from 'react';
 
-export default async function VendorDetailPage(props: { 
+export const unstable_instant = { 
+  prefetch: 'static',
+  samples: [{ 
+    params: { id: 'sample-id' },
+    searchParams: { tab: null }
+  }]
+};
+
+export default function VendorDetailPage(props: { 
   params: Promise<{ id: string }>,
   searchParams: Promise<{ tab?: string }> 
 }) {
-  const params = await props.params;
-  const searchParams = await props.searchParams;
+  return (
+    <Suspense fallback={<VendorDetailSkeleton />}>
+      <VendorDetailContent paramsPromise={props.params} searchParamsPromise={props.searchParams} />
+    </Suspense>
+  );
+}
+
+async function VendorDetailContent({ 
+  paramsPromise, 
+  searchParamsPromise 
+}: { 
+  paramsPromise: Promise<{ id: string }>,
+  searchParamsPromise: Promise<{ tab?: string }> 
+}) {
+  const params = await paramsPromise;
+  const searchParams = await searchParamsPromise;
   const tab = searchParams.tab || 'profile';
   
   const supabase = await createClient();
@@ -257,7 +280,7 @@ export default async function VendorDetailPage(props: {
                       </td>
                     </tr>
                   ) : (
-                    pos?.map((po) => (
+                    pos?.map((po: any) => (
                       <tr key={po.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/10 transition-colors">
                         <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">{po.po_number}</td>
                         <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{new Date(po.issued_date).toLocaleDateString()}</td>
@@ -313,7 +336,7 @@ export default async function VendorDetailPage(props: {
                       </td>
                     </tr>
                   ) : (
-                    invoices?.map((inv) => (
+                    invoices?.map((inv: any) => (
                       <tr key={inv.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/10 transition-colors">
                         <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">{inv.invoice_number}</td>
                         <td className="px-6 py-4 text-slate-600 dark:text-slate-400">
@@ -340,6 +363,19 @@ export default async function VendorDetailPage(props: {
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function VendorDetailSkeleton() {
+  return (
+    <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-6 animate-pulse">
+      <div className="h-10 w-64 bg-slate-100 dark:bg-slate-800/50 rounded-lg" />
+      <div className="h-10 w-full border-b border-slate-200 dark:border-slate-800" />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="h-64 bg-slate-100 dark:bg-slate-800/50 rounded-2xl" />
+        <div className="h-64 bg-slate-100 dark:bg-slate-800/50 rounded-2xl" />
       </div>
     </div>
   );

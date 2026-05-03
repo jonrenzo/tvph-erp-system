@@ -3,7 +3,10 @@ import { createClient } from '@/utils/supabase/server';
 import { Plus, Search, Building2, ChevronRight } from 'lucide-react';
 import { Suspense } from 'react';
 
-export const unstable_instant = { prefetch: 'static' };
+export const unstable_instant = { 
+  prefetch: 'static',
+  samples: [{ searchParams: { q: null, status: null } }]
+};
 
 export default function VendorsPage(props: { searchParams?: Promise<{ q?: string; status?: string }> }) {
   return (
@@ -30,7 +33,7 @@ export default function VendorsPage(props: { searchParams?: Promise<{ q?: string
   );
 }
 
-async function VendorsContent({ searchParams: searchParamsPromise }: { searchParams?: Promise<{ q?: string; status?: string }> }) {
+async function VendorsContent({ searchParams: searchParamsPromise }: { searchParams?: Promise<any> }) {
   const searchParams = await searchParamsPromise;
   const supabase = await createClient();
   const q = searchParams?.q || '';
@@ -102,7 +105,7 @@ async function VendorsContent({ searchParams: searchParamsPromise }: { searchPar
                 </td>
               </tr>
             ) : (
-              vendors?.map((vendor) => (
+              vendors?.map((vendor: any) => (
                 <tr key={vendor.id} className="group hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-colors">
                   <td className="px-6 py-4">
                     <div className="font-semibold text-slate-900 dark:text-white">{vendor.name}</div>

@@ -3,19 +3,22 @@ import { createClient } from '@/utils/supabase/server';
 import { Plus, Search, FileText, ChevronRight, TrendingUp } from 'lucide-react';
 import { Suspense } from 'react';
 
-export const unstable_instant = { prefetch: 'static' };
+export const unstable_instant = { 
+  prefetch: 'static',
+  samples: [{ searchParams: { q: null, status: null } }]
+};
 
 export default function PurchaseOrdersPage(props: { 
   searchParams?: Promise<{ q?: string; status?: string }> 
 }) {
   return (
     <Suspense fallback={<PurchaseOrdersSkeleton />}>
-      <PurchaseOrdersContent searchParamsPromise={props.searchParams} />
+      <PurchaseOrdersContent searchParams={props.searchParams} />
     </Suspense>
   );
 }
 
-async function PurchaseOrdersContent({ searchParamsPromise }: { searchParamsPromise: Promise<any> }) {
+async function PurchaseOrdersContent({ searchParams: searchParamsPromise }: { searchParams?: Promise<any> }) {
   const searchParams = await searchParamsPromise;
   const supabase = await createClient();
   const q = searchParams?.q || '';

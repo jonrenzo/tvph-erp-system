@@ -3,9 +3,23 @@ import { createClient } from '@/utils/supabase/server';
 import { ArrowLeft, Building2, Calendar, FileText, CreditCard, Clock, ExternalLink, History, Plus, AlertCircle } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import { RecordPaymentModal } from '@/components/dashboard/invoices/record-payment-modal';
+import { Suspense } from 'react';
 
-export default async function InvoiceDetailPage(props: { params: Promise<{ id: string }> }) {
-  const params = await props.params;
+export const unstable_instant = { 
+  prefetch: 'static',
+  samples: [{ params: { id: 'sample-id' } }]
+};
+
+export default function InvoiceDetailPage(props: { params: Promise<{ id: string }> }) {
+  return (
+    <Suspense fallback={<InvoiceDetailSkeleton />}>
+      <InvoiceDetailContent paramsPromise={props.params} />
+    </Suspense>
+  );
+}
+
+async function InvoiceDetailContent({ paramsPromise }: { paramsPromise: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const supabase = await createClient();
 
   const { data: invoice, error } = await supabase
@@ -139,7 +153,7 @@ export default async function InvoiceDetailPage(props: { params: Promise<{ id: s
                       </td>
                     </tr>
                   ) : (
-                    payments?.map((p) => (
+                    payments?.map((p: any) => (
                       <tr key={p.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors">
                         <td className="px-6 py-4 text-slate-900 dark:text-white font-medium">
                           {new Date(p.payment_date).toLocaleDateString()}
@@ -196,11 +210,23 @@ export default async function InvoiceDetailPage(props: { params: Promise<{ id: s
             <div className="bg-amber-50/50 dark:bg-amber-900/10 border border-amber-200/50 dark:border-amber-800/30 rounded-2xl p-6">
               <h3 className="text-[10px] font-bold text-amber-800 dark:text-amber-500 uppercase mb-2 tracking-widest">Internal Notes</h3>
               <p className="text-xs text-amber-900/70 dark:text-amber-200/70 leading-relaxed italic">
-                "{invoice.notes}"
+                &quot;{invoice.notes}&quot;
               </p>
             </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function InvoiceDetailSkeleton() {
+  return (
+    <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-pulse">
+      <div className="h-10 w-64 bg-slate-100 dark:bg-slate-800/50 rounded-lg" />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-2 h-64 bg-slate-100 dark:bg-slate-800/50 rounded-2xl" />
+        <div className="h-64 bg-slate-100 dark:bg-slate-800/50 rounded-2xl" />
       </div>
     </div>
   );

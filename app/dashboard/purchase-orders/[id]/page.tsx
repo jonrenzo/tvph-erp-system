@@ -16,11 +16,25 @@ import {
   Mail
 } from "lucide-react";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 
-export default async function PurchaseOrderDetailPage(props: {
+export const unstable_instant = { 
+  prefetch: 'static',
+  samples: [{ params: { id: 'sample-id' } }]
+};
+
+export default function PurchaseOrderDetailPage(props: {
   params: Promise<{ id: string }>;
 }) {
-  const params = await props.params;
+  return (
+    <Suspense fallback={<PODetailSkeleton />}>
+      <PODetailContent paramsPromise={props.params} />
+    </Suspense>
+  );
+}
+
+async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const supabase = await createClient();
 
   const { data: po, error } = await supabase
@@ -67,7 +81,7 @@ export default async function PurchaseOrderDetailPage(props: {
   const isOverpaid = totalPaid > poAmount;
 
   return (
-    <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="p-6 lg:p-8 max-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
         <div className="flex items-start gap-4">
@@ -343,7 +357,7 @@ export default async function PurchaseOrderDetailPage(props: {
                       </td>
                     </tr>
                   ) : (
-                    invoices?.map((inv) => (
+                    invoices?.map((inv: any) => (
                       <tr
                         key={inv.id}
                         className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors"
@@ -423,6 +437,18 @@ export default async function PurchaseOrderDetailPage(props: {
             </p>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function PODetailSkeleton() {
+  return (
+    <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-pulse">
+      <div className="h-10 w-64 bg-slate-100 dark:bg-slate-800/50 rounded-lg" />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+         <div className="md:col-span-2 h-64 bg-slate-100 dark:bg-slate-800/50 rounded-3xl" />
+         <div className="h-64 bg-slate-100 dark:bg-slate-800/50 rounded-3xl" />
       </div>
     </div>
   );

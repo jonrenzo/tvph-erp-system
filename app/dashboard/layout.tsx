@@ -22,20 +22,24 @@ export default async function DashboardLayout({
 async function DashboardWithAuth({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
 
-  const { data, error } = await supabase.auth.getUser()
-  if (error || !data?.user) {
-    redirect('/login')
-  }
+  // During build-time pre-rendering for "Instant Navigation", there is no active session.
+  // We rely on middleware.ts to handle the actual authentication redirect for real requests.
+  const { data } = await supabase.auth.getUser()
+  const user = data?.user;
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('full_name, avatar_url')
-    .eq('id', data.user.id)
-    .single();
+  let profile = null;
+  if (user) {
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('full_name, avatar_url')
+      .eq('id', user.id)
+      .single();
+    profile = profileData;
+  }
 
   return (
     <DashboardShell 
-      userEmail={data.user.email || 'Admin'} 
+      userEmail={user?.email || 'Admin'} 
       userName={profile?.full_name || 'User'}
       avatarUrl={profile?.avatar_url}
     >

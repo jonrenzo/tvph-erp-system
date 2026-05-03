@@ -3,28 +3,34 @@ import { redirect } from 'next/navigation';
 import { DocumentsClient } from '@/components/dashboard/documents/documents-client';
 import { Suspense } from 'react';
 
-export const unstable_instant = { prefetch: 'static' };
+export const unstable_instant = { 
+  prefetch: 'static',
+  samples: [{ searchParams: { search: null } }]
+};
 
 export default function DocumentsPage(props: { 
-  searchParams: Promise<{ [key: string]: string | string[] | undefined }> 
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }> 
 }) {
   return (
     <Suspense fallback={<DocumentsSkeleton />}>
-      <DocumentsContent searchParamsPromise={props.searchParams} />
+      <DocumentsContent searchParams={props.searchParams} />
     </Suspense>
   );
 }
 
-async function DocumentsContent({ searchParamsPromise }: { searchParamsPromise: Promise<any> }) {
+async function DocumentsContent({ searchParams: searchParamsPromise }: { searchParams?: Promise<any> }) {
   const searchParams = await searchParamsPromise;
-  const searchQuery = (searchParams.search as string) || "";
+  const searchQuery = (searchParams?.search as string) || "";
   
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-  const userRole = profile?.role || 'user';
+  
+  // Rely on middleware for redirect. During build, user is null.
+  let userRole = 'user';
+  if (user) {
+    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+    userRole = profile?.role || 'user';
+  }
 
   // 1. Fetch & Sign Company Documents
   const { data: rawCompanyDocs } = await supabase.from('tvph_documents').select('*').is('archived_at', null);

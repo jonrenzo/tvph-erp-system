@@ -3,24 +3,27 @@ import { Activity } from 'lucide-react';
 import { AuditLogToolbar } from '@/components/dashboard/audit-logs/audit-log-toolbar';
 import { Suspense } from 'react';
 
-export const unstable_instant = { prefetch: 'static' };
+export const unstable_instant = { 
+  prefetch: 'static',
+  samples: [{ searchParams: { action: null, entity: null } }]
+};
 
-export default function AuditLogsPage(props: { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
+export default function AuditLogsPage(props: { searchParams?: Promise<{ [key: string]: string | string[] | undefined }> }) {
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <Suspense fallback={<AuditLogsSkeleton />}>
-        <AuditLogsContent searchParamsPromise={props.searchParams} />
+        <AuditLogsContent searchParams={props.searchParams} />
       </Suspense>
     </div>
   );
 }
 
-async function AuditLogsContent({ searchParamsPromise }: { searchParamsPromise: Promise<any> }) {
+async function AuditLogsContent({ searchParams: searchParamsPromise }: { searchParams?: Promise<any> }) {
   const searchParams = await searchParamsPromise;
   const supabase = await createClient();
 
-  const actionFilter = searchParams.action as string;
-  const entityFilter = searchParams.entity as string;
+  const actionFilter = searchParams?.action as string;
+  const entityFilter = searchParams?.entity as string;
 
   // Simple query for logs
   let query = supabase
