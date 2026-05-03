@@ -1,24 +1,11 @@
 import Link from 'next/link';
 import { createClient } from '@/utils/supabase/server';
 import { Plus, Search, Building2, ChevronRight } from 'lucide-react';
+import { Suspense } from 'react';
 
-export default async function VendorsPage(props: { searchParams?: Promise<{ q?: string; status?: string }> }) {
-  const searchParams = await props.searchParams;
-  const supabase = await createClient();
-  const q = searchParams?.q || '';
-  const statusFilter = searchParams?.status || 'all';
+export const unstable_instant = { prefetch: 'static' };
 
-  let query = supabase.from('vendors').select('*').is('deleted_at', null).order('created_at', { ascending: false });
-
-  if (q) {
-    query = query.ilike('name', `%${q}%`);
-  }
-  if (statusFilter !== 'all') {
-    query = query.eq('status', statusFilter);
-  }
-
-  const { data: vendors, error } = await query;
-
+export default function VendorsPage(props: { searchParams?: Promise<{ q?: string; status?: string }> }) {
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Header */}
@@ -36,105 +23,136 @@ export default async function VendorsPage(props: { searchParams?: Promise<{ q?: 
         </Link>
       </div>
 
-      {/* Filters and List */}
-      <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-        <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row gap-4 bg-slate-50/50 dark:bg-[#0a0a0a]/50">
-           {/* In a real app, this search input should be a client component that updates the URL. We'll leave it visual for now. */}
-           <div className="relative flex-1 max-w-md">
-             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-             <input 
-                type="text" 
-                placeholder="Search vendors..." 
-                defaultValue={q}
-                className="w-full pl-9 pr-4 py-2 bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" 
-              />
-           </div>
-           
-           <select 
-             className="px-4 py-2 bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-             defaultValue={statusFilter}
-           >
-             <option value="all">All Statuses</option>
-             <option value="active">Active</option>
-             <option value="pending">Pending</option>
-             <option value="inactive">Inactive</option>
-           </select>
-        </div>
+      <Suspense fallback={<VendorsSkeleton />}>
+        <VendorsContent searchParams={props.searchParams} />
+      </Suspense>
+    </div>
+  );
+}
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800/20 border-b border-slate-200 dark:border-slate-800">
-              <tr>
-                <th className="px-6 py-4 font-semibold">Vendor Details</th>
-                <th className="px-6 py-4 font-semibold">TIN</th>
-                <th className="px-6 py-4 font-semibold">Contact Person</th>
-                <th className="px-6 py-4 font-semibold">Status</th>
-                <th className="px-6 py-4 font-semibold text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {error ? (
-                <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-red-500">
-                    Failed to load vendors.
-                  </td>
-                </tr>
-              ) : vendors?.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center">
-                    <div className="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400">
-                      <div className="h-12 w-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-3">
-                        <Building2 className="h-6 w-6 text-slate-400" />
-                      </div>
-                      <p className="text-base font-medium text-slate-900 dark:text-white">No vendors found</p>
-                      <p className="text-sm mt-1">Get started by creating your first vendor record.</p>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                vendors?.map((vendor) => (
-                  <tr key={vendor.id} className="group hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="font-semibold text-slate-900 dark:text-white">{vendor.name}</div>
-                      <div className="text-slate-500 dark:text-slate-400 text-xs mt-0.5 truncate max-w-xs">{vendor.address || 'No address provided'}</div>
-                    </td>
-                    <td className="px-6 py-4 text-slate-600 dark:text-slate-400 font-mono text-xs">
-                      {vendor.tin || '-'}
-                    </td>
-                    <td className="px-6 py-4">
-                      {vendor.contact_person ? (
-                        <div>
-                          <div className="font-medium text-slate-900 dark:text-white">{vendor.contact_person}</div>
-                          <div className="text-slate-500 dark:text-slate-400 text-xs">{vendor.contact_email}</div>
-                        </div>
-                      ) : (
-                        <span className="text-slate-400">-</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${
-                        vendor.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800/50' :
-                        vendor.status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800/50' :
-                        'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
-                      }`}>
-                        {vendor.status.charAt(0).toUpperCase() + vendor.status.slice(1)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <Link 
-                        href={`/dashboard/vendors/${vendor.id}`} 
-                        className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-slate-400 group-hover:text-primary group-hover:bg-primary/10 transition-colors"
-                      >
-                        <ChevronRight className="h-5 w-5" />
-                      </Link>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+async function VendorsContent({ searchParams: searchParamsPromise }: { searchParams?: Promise<{ q?: string; status?: string }> }) {
+  const searchParams = await searchParamsPromise;
+  const supabase = await createClient();
+  const q = searchParams?.q || '';
+  const statusFilter = searchParams?.status || 'all';
+
+  let query = supabase.from('vendors').select('*').is('deleted_at', null).order('created_at', { ascending: false });
+
+  if (q) {
+    query = query.ilike('name', `%${q}%`);
+  }
+  if (statusFilter !== 'all') {
+    query = query.eq('status', statusFilter);
+  }
+
+  const { data: vendors, error } = await query;
+
+  return (
+    <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+      <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row gap-4 bg-slate-50/50 dark:bg-[#0a0a0a]/50">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <input 
+              type="text" 
+              placeholder="Search vendors..." 
+              defaultValue={q}
+              className="w-full pl-9 pr-4 py-2 bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" 
+            />
+          </div>
+          
+          <select 
+            className="px-4 py-2 bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+            defaultValue={statusFilter}
+          >
+            <option value="all">All Statuses</option>
+            <option value="active">Active</option>
+            <option value="pending">Pending</option>
+            <option value="inactive">Inactive</option>
+          </select>
       </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm text-left">
+          <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800/20 border-b border-slate-200 dark:border-slate-800">
+            <tr>
+              <th className="px-6 py-4 font-semibold">Vendor Details</th>
+              <th className="px-6 py-4 font-semibold">TIN</th>
+              <th className="px-6 py-4 font-semibold">Contact Person</th>
+              <th className="px-6 py-4 font-semibold">Status</th>
+              <th className="px-6 py-4 font-semibold text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+            {error ? (
+              <tr>
+                <td colSpan={5} className="px-6 py-12 text-center text-red-500">
+                  Failed to load vendors.
+                </td>
+              </tr>
+            ) : vendors?.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-6 py-12 text-center">
+                  <div className="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400">
+                    <div className="h-12 w-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-3">
+                      <Building2 className="h-6 w-6 text-slate-400" />
+                    </div>
+                    <p className="text-base font-medium text-slate-900 dark:text-white">No vendors found</p>
+                    <p className="text-sm mt-1">Get started by creating your first vendor record.</p>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              vendors?.map((vendor) => (
+                <tr key={vendor.id} className="group hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-colors">
+                  <td className="px-6 py-4">
+                    <div className="font-semibold text-slate-900 dark:text-white">{vendor.name}</div>
+                    <div className="text-slate-500 dark:text-slate-400 text-xs mt-0.5 truncate max-w-xs">{vendor.address || 'No address provided'}</div>
+                  </td>
+                  <td className="px-6 py-4 text-slate-600 dark:text-slate-400 font-mono text-xs">
+                    {vendor.tin || '-'}
+                  </td>
+                  <td className="px-6 py-4">
+                    {vendor.contact_person ? (
+                      <div>
+                        <div className="font-medium text-slate-900 dark:text-white">{vendor.contact_person}</div>
+                        <div className="text-slate-500 dark:text-slate-400 text-xs">{vendor.contact_email}</div>
+                      </div>
+                    ) : (
+                      <span className="text-slate-400">-</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${
+                      vendor.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800/50' :
+                      vendor.status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800/50' :
+                      'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+                    }`}>
+                      {vendor.status.charAt(0).toUpperCase() + vendor.status.slice(1)}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <Link 
+                      href={`/dashboard/vendors/${vendor.id}`} 
+                      className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-slate-400 group-hover:text-primary group-hover:bg-primary/10 transition-colors"
+                    >
+                      <ChevronRight className="h-5 w-5" />
+                    </Link>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function VendorsSkeleton() {
+  return (
+    <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm animate-pulse">
+      <div className="p-4 border-b border-slate-200 dark:border-slate-800 h-16 bg-slate-50/50 dark:bg-[#0a0a0a]/50" />
+      <div className="h-96" />
     </div>
   );
 }

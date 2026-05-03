@@ -12,8 +12,41 @@ import {
   History
 } from 'lucide-react';
 import Link from 'next/link';
+import { Suspense } from 'react';
 
-export default async function DashboardPage() {
+export const unstable_instant = { prefetch: 'static' };
+
+export default function DashboardPage() {
+  return (
+    <div className="p-6 lg:p-8 space-y-8 animate-in fade-in duration-700">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="font-plus-jakarta text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
+            Command Center
+          </h1>
+          <p className="text-slate-500 dark:text-slate-400 mt-1">Welcome back. Here is the operational pulse of TelcoVantage.</p>
+        </div>
+        
+        <div className="flex items-center gap-3">
+          <Link href="/dashboard/purchase-orders/new" className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-lg shadow-primary/20">
+            <Plus className="h-4 w-4" />
+            New PO
+          </Link>
+          <Link href="/dashboard/invoices/new" className="inline-flex items-center gap-2 bg-white dark:bg-[#0a0a0a] border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm">
+            <FileText className="h-4 w-4" />
+            Record Invoice
+          </Link>
+        </div>
+      </div>
+
+      <Suspense fallback={<DashboardSkeleton />}>
+        <DashboardContent />
+      </Suspense>
+    </div>
+  );
+}
+
+async function DashboardContent() {
   const supabase = await createClient();
 
   // 1. Fetch Metrics
@@ -46,15 +79,12 @@ export default async function DashboardPage() {
   // 2. Calculate Totals
   const totalPOCommitment = activePOs?.reduce((sum, po) => sum + Number(po.amount), 0) || 0;
   
-  // For liability, we need to subtract payments from unpaid invoices
-  // (Simplification: just sum of unpaid invoice amounts for now, or fetch payments too)
   const { data: payments } = await supabase
     .from('payments')
     .select('amount_paid');
   
   const totalPaid = payments?.reduce((sum, p) => sum + Number(p.amount_paid), 0) || 0;
   const totalInvoiced = unpaidInvoices?.reduce((sum, inv) => sum + Number(inv.amount), 0) || 0;
-  // This is a rough estimation of current liability
   const outstandingLiability = Math.max(0, totalInvoiced - totalPaid);
 
   // 3. Fetch Recent Activity
@@ -100,27 +130,7 @@ export default async function DashboardPage() {
   ];
 
   return (
-    <div className="p-6 lg:p-8 space-y-8 animate-in fade-in duration-700">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="font-plus-jakarta text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
-            Command Center
-          </h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-1">Welcome back. Here is the operational pulse of TelcoVantage.</p>
-        </div>
-        
-        <div className="flex items-center gap-3">
-          <Link href="/dashboard/purchase-orders/new" className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-lg shadow-primary/20">
-            <Plus className="h-4 w-4" />
-            New PO
-          </Link>
-          <Link href="/dashboard/invoices/new" className="inline-flex items-center gap-2 bg-white dark:bg-[#0a0a0a] border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm">
-            <FileText className="h-4 w-4" />
-            Record Invoice
-          </Link>
-        </div>
-      </div>
-
+    <>
       {/* Primary Stats Grid */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat, i) => (
@@ -166,7 +176,7 @@ export default async function DashboardPage() {
             {recentLogs?.length === 0 ? (
               <div className="p-12 text-center text-slate-400 italic text-sm">No activity recorded yet.</div>
             ) : (
-              recentLogs?.map((log) => (
+              recentLogs?.map((log: any) => (
                 <div key={log.id} className="p-4 hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors flex items-start gap-4">
                    <div className={`mt-1 p-1.5 rounded-full ${
                      log.action === 'CREATE' ? 'bg-emerald-100 text-emerald-600' : 
@@ -221,6 +231,25 @@ export default async function DashboardPage() {
                  ))}
               </div>
            </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-8 animate-pulse">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="h-32 rounded-2xl bg-slate-100 dark:bg-slate-800/50" />
+        ))}
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-2 h-96 rounded-2xl bg-slate-100 dark:bg-slate-800/50" />
+        <div className="space-y-6">
+          <div className="h-40 rounded-2xl bg-slate-100 dark:bg-slate-800/50" />
+          <div className="h-60 rounded-2xl bg-slate-100 dark:bg-slate-800/50" />
         </div>
       </div>
     </div>

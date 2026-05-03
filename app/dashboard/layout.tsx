@@ -1,12 +1,25 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import { DashboardShell } from '@/components/dashboard/shell'
+import { Suspense } from 'react'
+
+export const unstable_instant = { prefetch: 'static' };
 
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  return (
+    <Suspense fallback={<div className="h-screen bg-slate-50 dark:bg-[#020817]" />}>
+      <DashboardWithAuth>
+        {children}
+      </DashboardWithAuth>
+    </Suspense>
+  )
+}
+
+async function DashboardWithAuth({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
 
   const { data, error } = await supabase.auth.getUser()
