@@ -1,11 +1,22 @@
 import Link from 'next/link';
 import { createClient } from '@/utils/supabase/server';
 import { Plus, Search, FileText, ChevronRight, CreditCard, Clock } from 'lucide-react';
+import { Suspense } from 'react';
 
-export default async function InvoicesPage(props: { 
+export const unstable_instant = { prefetch: 'static' };
+
+export default function InvoicesPage(props: { 
   searchParams?: Promise<{ q?: string; status?: string }> 
 }) {
-  const searchParams = await props.searchParams;
+  return (
+    <Suspense fallback={<InvoicesSkeleton />}>
+      <InvoicesContent searchParamsPromise={props.searchParams} />
+    </Suspense>
+  );
+}
+
+async function InvoicesContent({ searchParamsPromise }: { searchParamsPromise: Promise<any> }) {
+  const searchParams = await searchParamsPromise;
   const supabase = await createClient();
   const q = searchParams?.q || '';
   const statusFilter = searchParams?.status || 'all';
@@ -150,6 +161,15 @@ export default async function InvoicesPage(props: {
           </table>
         </div>
       </div>
+    </div>
+  );
+}
+
+function InvoicesSkeleton() {
+  return (
+    <div className="p-6 lg:p-8 space-y-8 animate-pulse">
+       <div className="h-10 w-64 bg-slate-100 dark:bg-slate-800/50 rounded-lg" />
+       <div className="h-96 rounded-2xl bg-slate-100 dark:bg-slate-800/50" />
     </div>
   );
 }

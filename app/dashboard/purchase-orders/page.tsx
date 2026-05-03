@@ -1,11 +1,22 @@
 import Link from 'next/link';
 import { createClient } from '@/utils/supabase/server';
 import { Plus, Search, FileText, ChevronRight, TrendingUp } from 'lucide-react';
+import { Suspense } from 'react';
 
-export default async function PurchaseOrdersPage(props: { 
+export const unstable_instant = { prefetch: 'static' };
+
+export default function PurchaseOrdersPage(props: { 
   searchParams?: Promise<{ q?: string; status?: string }> 
 }) {
-  const searchParams = await props.searchParams;
+  return (
+    <Suspense fallback={<PurchaseOrdersSkeleton />}>
+      <PurchaseOrdersContent searchParamsPromise={props.searchParams} />
+    </Suspense>
+  );
+}
+
+async function PurchaseOrdersContent({ searchParamsPromise }: { searchParamsPromise: Promise<any> }) {
+  const searchParams = await searchParamsPromise;
   const supabase = await createClient();
   const q = searchParams?.q || '';
   const statusFilter = searchParams?.status || 'all';
@@ -66,7 +77,7 @@ export default async function PurchaseOrdersPage(props: {
            <div>
               <div className="text-xs text-slate-500 dark:text-slate-400 font-medium uppercase">Open Amount</div>
               <div className="text-lg font-bold text-slate-900 dark:text-white">
-                 ₱{pos?.filter(p => p.status !== 'paid' && p.status !== 'cancelled').reduce((acc, curr) => acc + Number(curr.amount), 0).toLocaleString()}
+                 ₱{pos?.filter((p: any) => p.status !== 'paid' && p.status !== 'cancelled').reduce((acc: number, curr: any) => acc + Number(curr.amount), 0).toLocaleString()}
               </div>
            </div>
         </div>
@@ -168,6 +179,20 @@ export default async function PurchaseOrdersPage(props: {
           </table>
         </div>
       </div>
+    </div>
+  );
+}
+
+function PurchaseOrdersSkeleton() {
+  return (
+    <div className="p-6 lg:p-8 space-y-8 animate-pulse">
+       <div className="h-10 w-64 bg-slate-100 dark:bg-slate-800/50 rounded-lg" />
+       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+         {[...Array(3)].map((_, i) => (
+           <div key={i} className="h-20 rounded-2xl bg-slate-100 dark:bg-slate-800/50" />
+         ))}
+       </div>
+       <div className="h-96 rounded-2xl bg-slate-100 dark:bg-slate-800/50" />
     </div>
   );
 }

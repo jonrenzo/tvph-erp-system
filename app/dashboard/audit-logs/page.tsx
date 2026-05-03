@@ -1,9 +1,22 @@
 import { createClient } from '@/utils/supabase/server';
 import { Activity } from 'lucide-react';
 import { AuditLogToolbar } from '@/components/dashboard/audit-logs/audit-log-toolbar';
+import { Suspense } from 'react';
 
-export default async function AuditLogsPage(props: { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
-  const searchParams = await props.searchParams;
+export const unstable_instant = { prefetch: 'static' };
+
+export default function AuditLogsPage(props: { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
+  return (
+    <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <Suspense fallback={<AuditLogsSkeleton />}>
+        <AuditLogsContent searchParamsPromise={props.searchParams} />
+      </Suspense>
+    </div>
+  );
+}
+
+async function AuditLogsContent({ searchParamsPromise }: { searchParamsPromise: Promise<any> }) {
+  const searchParams = await searchParamsPromise;
   const supabase = await createClient();
 
   const actionFilter = searchParams.action as string;
@@ -20,12 +33,12 @@ export default async function AuditLogsPage(props: { searchParams: Promise<{ [ke
   if (actionFilter) query = query.eq('action', actionFilter);
   if (entityFilter) query = query.eq('entity_type', entityFilter);
 
-  const { data: logs, error } = await query
+  const { data: logs } = await query
     .order('created_at', { ascending: false })
     .limit(100);
 
   return (
-    <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <>
       {/* Header & Filters */}
       <AuditLogToolbar logs={logs || []} />
 
@@ -43,14 +56,14 @@ export default async function AuditLogsPage(props: { searchParams: Promise<{ [ke
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {logs?.length === 0 ? (
+              {!logs || logs.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-12 text-center text-slate-400 italic">
                     No audit logs found.
                   </td>
                 </tr>
               ) : (
-                logs?.map((log) => (
+                logs.map((log: any) => (
                   <tr key={log.id} className="hover:bg-slate-50/30 dark:hover:bg-slate-800/10 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-slate-900 dark:text-white font-medium">
@@ -105,6 +118,15 @@ export default async function AuditLogsPage(props: { searchParams: Promise<{ [ke
           </table>
         </div>
       </div>
+    </>
+  );
+}
+
+function AuditLogsSkeleton() {
+  return (
+    <div className="space-y-8 animate-pulse">
+      <div className="h-10 w-64 bg-slate-100 dark:bg-slate-800/50 rounded-lg" />
+      <div className="h-96 rounded-2xl bg-slate-100 dark:bg-slate-800/50" />
     </div>
   );
 }

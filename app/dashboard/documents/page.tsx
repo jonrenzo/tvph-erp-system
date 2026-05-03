@@ -1,11 +1,22 @@
 import { createClient } from '@/utils/supabase/server';
 import { redirect } from 'next/navigation';
 import { DocumentsClient } from '@/components/dashboard/documents/documents-client';
+import { Suspense } from 'react';
 
-export default async function DocumentsPage(props: { 
+export const unstable_instant = { prefetch: 'static' };
+
+export default function DocumentsPage(props: { 
   searchParams: Promise<{ [key: string]: string | string[] | undefined }> 
 }) {
-  const searchParams = await props.searchParams;
+  return (
+    <Suspense fallback={<DocumentsSkeleton />}>
+      <DocumentsContent searchParamsPromise={props.searchParams} />
+    </Suspense>
+  );
+}
+
+async function DocumentsContent({ searchParamsPromise }: { searchParamsPromise: Promise<any> }) {
+  const searchParams = await searchParamsPromise;
   const searchQuery = (searchParams.search as string) || "";
   
   const supabase = await createClient();
@@ -51,5 +62,18 @@ export default async function DocumentsPage(props: {
       userRole={userRole} 
       searchQuery={searchQuery}
     />
+  );
+}
+
+function DocumentsSkeleton() {
+  return (
+    <div className="p-6 lg:p-8 space-y-8 animate-pulse">
+      <div className="h-10 w-64 bg-slate-100 dark:bg-slate-800/50 rounded-lg" />
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {[...Array(6)].map((_, i) => (
+          <div key={i} className="h-48 rounded-2xl bg-slate-100 dark:bg-slate-800/50" />
+        ))}
+      </div>
+    </div>
   );
 }
