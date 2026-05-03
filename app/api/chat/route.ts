@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { chat, generateMessageId, type ChatMessage } from "@/lib/chat/gemini";
 
-export const runtime = "nodejs";
 export const maxDuration = 60; // Allow enough time for tool calls
 
 export async function POST(request: NextRequest) {
