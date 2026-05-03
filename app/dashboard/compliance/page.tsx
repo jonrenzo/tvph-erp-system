@@ -133,15 +133,15 @@ export default async function ComplianceHubPage() {
                        const status = getDocStatus(vendor.vendor_documents, doc.id);
                        return (
                          <td key={doc.id} className="px-4 py-4 text-center">
-                            <div className="flex justify-center">
+                            <div className="flex justify-center" title={status === 'submitted' ? 'Pending Review' : status.charAt(0).toUpperCase() + status.slice(1)}>
                                {status === 'approved' ? (
-                                  <CheckCircle2 className="h-5 w-5 text-emerald-500" title="Approved" />
+                                  <CheckCircle2 className="h-5 w-5 text-emerald-500" />
                                ) : status === 'submitted' ? (
-                                  <Clock className="h-5 w-5 text-amber-500" title="Pending Review" />
+                                  <Clock className="h-5 w-5 text-amber-500" />
                                ) : status === 'expired' ? (
-                                  <AlertCircle className="h-5 w-5 text-red-500" title="Expired" />
+                                  <AlertCircle className="h-5 w-5 text-red-500" />
                                ) : (
-                                  <XCircle className="h-5 w-5 text-slate-200 dark:text-slate-700" title="Missing" />
+                                  <XCircle className="h-5 w-5 text-slate-200 dark:text-slate-700" />
                                )}
                             </div>
                          </td>

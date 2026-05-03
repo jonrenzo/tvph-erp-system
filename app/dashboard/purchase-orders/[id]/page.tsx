@@ -45,7 +45,7 @@ export default async function PurchaseOrderDetailPage(props: {
   // Fetch all invoices linked to this PO
   const { data: invoices } = await supabase
     .from("service_invoices")
-    .select("id, amount, status")
+    .select("id, amount, status, invoice_number")
     .eq("po_id", po.id);
 
   const invoiceIds = invoices?.map((i) => i.id) || [];
@@ -418,8 +418,8 @@ export default async function PurchaseOrderDetailPage(props: {
               Internal Note
             </h3>
             <p className="text-sm text-primary/80 leading-relaxed italic">
-              "Please ensure the service report is attached when submitting
-              invoices against this PO."
+              &quot;Please ensure the service report is attached when submitting
+              invoices against this PO.&quot;
             </p>
           </div>
         </div>

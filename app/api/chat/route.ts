@@ -20,8 +20,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Call the "Brain"
-    const result = await chat(history || [], message);
+     // Call the "Brain"
+     const result = await chat(history || [], message);
+     console.log("Chat result:", result); // Debug log
 
     const assistantMessage: ChatMessage = {
       id: generateMessageId(),
@@ -30,10 +31,12 @@ export async function POST(request: NextRequest) {
       timestamp: Date.now(),
     };
 
-    return NextResponse.json({
-      message: assistantMessage,
-      toolCalls: result.toolCalls,
-    });
+     console.log("Sending response:", assistantMessage); // Debug log
+
+     return NextResponse.json({
+       message: assistantMessage,
+       toolCalls: result.toolCalls,
+     });
   } catch (error: any) {
     console.error("Chat API error:", error);
     return NextResponse.json(

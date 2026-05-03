@@ -6,34 +6,50 @@ import {
   type Part,
   type FunctionDeclarationSchema,
 } from "@google/generative-ai";
-import { tools, type ToolName, type Tool } from "./tools";
+import { tools, type ToolName, type Tool, type ToolParameter, type ToolCallResult } from "./tools";
 import { executeTool } from "./execute-tool";
 
 // Initialize Gemini client
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || "");
+const genAI = new GoogleGenerativeAI(
+  process.env.GOOGLE_GENERATIVE_AI_API_KEY || "",
+);
 
-const SYSTEM_PROMPT = `You are the TelcoVantage Philippines ERP Assistant. 
-You help the procurement and finance teams manage vendors, POs, and compliance.
+const SYSTEM_PROMPT = `You are the TelcoVantage Philippines ERP Assistant.
+You help the procurement and finance teams manage vendors, POs, compliance, and documents.
 
 ## Your Capabilities:
 1. **Vendor Intel**: List vendors, check status, and verify accreditation.
 2. **Financial Tracking**: Summarize POs and calculate pending liabilities.
 3. **Compliance Hub**: Identify vendors with missing or expired 14-point documents.
+4. **Document Center**:
+   - List company and vendor documents (metadata: names, types, expiry dates)
+   - Analyze PDF content (summarize, answer questions about documents)
+   - Proactively mention related documents when discussing vendors/compliance
+
+## Proactive Document Mentions (MANDATORY):
+- When answering questions about a vendor, ALWAYS mention their associated documents and link to them: [View Documents](/dashboard/documents?vendor=VENDOR_ID)
+- When answering compliance questions, ALWAYS mention expired/missing documents first
+- When a user asks about a document, offer to analyze its content
 
 ## Link Formatting (MANDATORY):
-You HAVE access to the 'id' field in every tool result. You MUST use it.
-- **NEVER** say you don't have IDs.
-- **ALWAYS** wrap vendor names in links: \`🏢 **[Name](/dashboard/vendors/ID)**\`
-- Use the ACTUAL UUID from the tool (e.g., /dashboard/vendors/550e8400-e29b...)
+- **Vendors**: 🏢 **[Name](/dashboard/vendors/ID)**
+- **Documents**: 📄 **[Doc Name](/dashboard/documents)**
+- Use actual UUIDs from tool results, never say you don't have IDs
 
-## Your Response Template:
+## Your Response Template for Vendors:
 🏢 **[VENDOR NAME](/dashboard/vendors/ID)**
 Status: **STATUS**
+📄 Documents: [View All](/dashboard/documents?vendor=ID)
 ---
+
+## Document Analysis:
+When asked to analyze a document, use the analyze_document tool. Tell the user you're processing the PDF and share the analysis results.
 `;
 
 // Convert a single tool parameter to Gemini schema format
-function convertParameterToSchema(param: ToolParameter): Record<string, unknown> {
+function convertParameterToSchema(
+  param: ToolParameter,
+): Record<string, unknown> {
   const base: Record<string, unknown> = { description: param.description };
   if (param.enum && param.enum.length > 0) {
     base.type = SchemaType.STRING;
@@ -86,12 +102,15 @@ export interface ChatMessage {
 
 interface GeminiResponse {
   response: string;
-  toolCalls?: any[];
+  toolCalls?: ToolCallResult[];
 }
 
-export async function chat(messages: ChatMessage[], userMessage: string): Promise<GeminiResponse> {
+export async function chat(
+  messages: ChatMessage[],
+  userMessage: string,
+): Promise<GeminiResponse> {
   const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-flash",
+    model: "gemini-2.5-flash-lite",
     systemInstruction: SYSTEM_PROMPT,
     tools: [{ functionDeclarations: getGeminiFunctionDeclarations() }],
   });
@@ -106,7 +125,7 @@ export async function chat(messages: ChatMessage[], userMessage: string): Promis
   let result = await chatSession.sendMessage(userMessage);
   let response = result.response;
 
-  const toolCalls: any[] = [];
+  const toolCalls: ToolCallResult[] = [];
 
   // Handle function calls in a loop (Sequential execution)
   while (response.functionCalls() && response.functionCalls()!.length > 0) {
@@ -118,7 +137,10 @@ export async function chat(messages: ChatMessage[], userMessage: string): Promis
       const args = (call.args || {}) as Record<string, unknown>;
 
       const toolResult = await executeTool(toolName, args);
-      console.log(`TOOL RESULT [${toolName}]:`, JSON.stringify(toolResult, null, 2));
+      console.log(
+        `TOOL RESULT [${toolName}]:`,
+        JSON.stringify(toolResult, null, 2),
+      );
 
       toolCalls.push({ name: toolName, args, result: toolResult });
 
@@ -131,8 +153,11 @@ export async function chat(messages: ChatMessage[], userMessage: string): Promis
     response = result.response;
   }
 
+  const finalText = response.text();
+  console.log("Final bot response:", finalText); // Debug
+
   return {
-    response: response.text(),
+    response: finalText,
     toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
   };
 }

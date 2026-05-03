@@ -48,7 +48,7 @@ export function AddUserButton() {
       setTimeout(() => {
         setIsOpen(false);
         setSuccess(false);
-        setFormData({ email: "", fullName: "", role: "user" });
+        setFormData({ email: "", fullName: "", password: "", role: "user" });
         window.location.reload(); // Refresh the list
       }, 2000);
     } catch (err: any) {

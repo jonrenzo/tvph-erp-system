@@ -26,14 +26,18 @@ export function AIChatBubble() {
     }
   }, [messages, isLoading]);
 
+  useEffect(() => {
+    console.log("Messages state updated:", messages);
+  }, [messages]);
+
   const handleSend = async (text: string = input) => {
     if (!text.trim() || isLoading) return;
 
     const userMsg: Message = {
-      id: Date.now().toString(),
+      id: Date.now().toString(), // eslint-disable-line
       role: "user",
       content: text,
-      timestamp: Date.now(),
+      timestamp: Date.now(), // eslint-disable-line
     };
 
     setMessages((prev) => [...prev, userMsg]);
@@ -55,18 +59,30 @@ export function AIChatBubble() {
         }),
       });
 
-      const data = await response.json();
+       const data = await response.json();
+       console.log("API Response status:", response.status);
+       console.log("API Response data:", data);
 
-      if (data.error) throw new Error(data.error);
+       if (!response.ok) {
+         throw new Error(data.error || `Server error: ${response.status}`);
+       }
 
-      setMessages((prev) => [...prev, data.message]);
+       if (data.error) throw new Error(data.error);
+
+       if (!data.message) {
+         console.error("No message in response:", data);
+         throw new Error("Invalid response from server");
+       }
+
+       console.log("Adding message to state:", data.message);
+       setMessages((prev) => [...prev, data.message]);
     } catch (error: any) {
       console.error("Chat Error:", error);
       const errorMsg: Message = {
-        id: "error-" + Date.now(),
+        id: "error-" + Date.now(), // eslint-disable-line
         role: "assistant",
         content: `❌ **Error:** ${error.message || "Something went wrong. Please try again."}`,
-        timestamp: Date.now(),
+        timestamp: Date.now(), // eslint-disable-line
       };
       setMessages((prev) => [...prev, errorMsg]);
     } finally {
@@ -124,55 +140,29 @@ export function AIChatBubble() {
                         onClick={() => handleSend(suggestion)}
                         className="text-[10px] p-2 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-600 dark:text-slate-400 hover:border-primary hover:text-primary transition-all text-left"
                       >
-                        "{suggestion}"
+                        &quot;{suggestion}&quot;
                       </button>
                     ))}
                  </div>
               </div>
             )}
 
-            {messages.map((m) => (
-              <div key={m.id} className={`flex gap-3 ${m.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                <div className={`h-8 w-8 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
-                  m.role === 'user' ? 'bg-white dark:bg-slate-800' : 'bg-primary'
-                }`}>
-                  {m.role === 'user' ? <User className="h-4 w-4 text-slate-600 dark:text-slate-300" /> : <Bot className="h-4 w-4 text-white" />}
-                </div>
-                <div className={`max-w-[85%] p-4 rounded-3xl text-sm leading-relaxed shadow-sm transition-all ${
-                  m.role === 'user' 
-                    ? 'bg-primary text-white rounded-tr-none shadow-primary/10' 
-                    : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 rounded-tl-none shadow-slate-200/50 dark:shadow-none'
-                }`}>
-                  {m.role === 'user' ? (
-                    <div className="whitespace-pre-wrap">{m.content}</div>
-                  ) : (
-                    <div className="prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:bg-slate-800">
-                      <ReactMarkdown
-                        components={{
-                          h1: ({ children }) => <h1 className="text-base font-bold mb-2 mt-1">{children}</h1>,
-                          h2: ({ children }) => <h2 className="text-sm font-bold mb-1.5 mt-1">{children}</h2>,
-                          p: ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,
-                          ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
-                          li: ({ children }) => <li className="ml-1">{children}</li>,
-                          strong: ({ children }) => <strong className="font-bold text-primary dark:text-primary-foreground">{children}</strong>,
-                          hr: () => <hr className="my-3 border-slate-100 dark:border-slate-800" />,
-                          a: ({ href, children }) => (
-                            <Link 
-                              href={href || "#"} 
-                              className="inline-flex items-center px-2 py-0.5 rounded-lg bg-primary/10 text-primary font-bold hover:bg-primary/20 transition-all border border-primary/20 no-underline"
-                            >
-                              {children}
-                            </Link>
-                          ),
-                        }}
-                      >
-                        {m.content}
-                      </ReactMarkdown>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
+             {messages.map((m) => (
+               <div key={m.id} className={`flex gap-3 ${m.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                 <div className={`h-8 w-8 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
+                   m.role === 'user' ? 'bg-white dark:bg-slate-800' : 'bg-primary'
+                 }`}>
+                   {m.role === 'user' ? <User className="h-4 w-4 text-slate-600 dark:text-slate-300" /> : <Bot className="h-4 w-4 text-white" />}
+                 </div>
+                 <div className={`max-w-[85%] p-4 rounded-3xl text-sm leading-relaxed shadow-sm transition-all ${
+                   m.role === 'user' 
+                     ? 'bg-primary text-white rounded-tr-none shadow-primary/10' 
+                     : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 rounded-tl-none shadow-slate-200/50 dark:shadow-none'
+                 }`}>
+                   <div className="whitespace-pre-wrap">{m.content || "No content"}</div>
+                 </div>
+               </div>
+             ))}
             {isLoading && (
               <div className="flex gap-3">
                  <div className="h-8 w-8 rounded-xl bg-primary flex items-center justify-center shrink-0">
