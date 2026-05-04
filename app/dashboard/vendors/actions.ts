@@ -46,7 +46,7 @@ export async function uploadDocument(vendorId: string, docType: string, formData
 
   const { error: uploadError } = await supabase.storage
     .from('vendor-documents')
-    .upload(filePath, file);
+    .upload(filePath, file, { contentType: file.type, upsert: false });
 
   if (uploadError) return { error: uploadError.message };
 

@@ -14,7 +14,11 @@ interface DocumentPreviewProps {
 
 export function DocumentPreview({ document: doc, onClose }: DocumentPreviewProps) {
   const [isLoading, setIsLoading] = useState(true);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  
   const isImage = /\.(jpg|jpeg|png|webp|gif)$/i.test(doc.file_url || doc.file_name || "");
+  const isOffice = /\.(doc|docx|xls|xlsx|ppt|pptx)$/i.test(doc.file_url || doc.file_name || "");
+  const isPdf = /\.(pdf)$/i.test(doc.file_url || doc.file_name || "");
 
   // Prevent background scrolling
   useEffect(() => {
@@ -23,6 +27,47 @@ export function DocumentPreview({ document: doc, onClose }: DocumentPreviewProps
       document.body.style.overflow = 'unset';
     };
   }, []);
+
+  // Blob Intercept Logic
+  useEffect(() => {
+    let active = true;
+    let objectUrl = '';
+
+    if (isOffice) {
+      setBlobUrl(`https://docs.google.com/gview?url=${encodeURIComponent(doc.file_url)}&embedded=true`);
+      return;
+    }
+
+    if (isImage) {
+      setBlobUrl(doc.file_url);
+      return;
+    }
+
+    // For PDFs, fetch and strictly type as application/pdf to bypass download reflex
+    const fetchAndTypeBlob = async () => {
+      try {
+        const res = await fetch(doc.file_url);
+        if (!res.ok) throw new Error('Fetch failed');
+        
+        const rawBlob = await res.blob();
+        // Force the browser to recognize this as a PDF regardless of server headers
+        const typedBlob = new Blob([rawBlob], { type: 'application/pdf' });
+        
+        objectUrl = URL.createObjectURL(typedBlob);
+        if (active) setBlobUrl(`${objectUrl}#toolbar=0`);
+      } catch (err) {
+        console.warn('Blob intercept failed (likely CORS). Falling back to raw URL:', err);
+        if (active) setBlobUrl(`${doc.file_url}#toolbar=0`);
+      }
+    };
+
+    fetchAndTypeBlob();
+
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [doc.file_url, isOffice, isImage]);
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 md:p-10 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-300">
@@ -83,19 +128,19 @@ export function DocumentPreview({ document: doc, onClose }: DocumentPreviewProps
 
           {isImage ? (
             <img 
-              src={doc.file_url} 
+              src={blobUrl || doc.file_url} 
               alt={doc.file_name}
               className="max-w-full max-h-full object-contain p-4 shadow-2xl"
               onLoad={() => setIsLoading(false)}
             />
-          ) : (
+          ) : blobUrl ? (
             <iframe 
-              src={`${doc.file_url}#toolbar=0`}
+              src={blobUrl}
               className="w-full h-full border-none"
               onLoad={() => setIsLoading(false)}
-              title="PDF Preview"
+              title="Document Preview"
             />
-          )}
+          ) : null}
         </div>
 
         {/* Mobile Action Bar */}

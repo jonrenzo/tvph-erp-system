@@ -36,10 +36,30 @@ export async function uploadCompanyDocument(prevState: any, formData: FormData) 
   const safeFileName = `${docType}_${Date.now()}.${fileExt}`;
   const filePath = `tvph/${docType}/${safeFileName}`;
 
+  // Fallback for Windows machines that sometimes drop the MIME type
+  const getMimeType = (filename: string) => {
+    const ext = filename.split('.').pop()?.toLowerCase();
+    switch (ext) {
+      case 'pdf': return 'application/pdf';
+      case 'png': return 'image/png';
+      case 'jpg': case 'jpeg': return 'image/jpeg';
+      case 'doc': return 'application/msword';
+      case 'docx': return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      case 'xls': return 'application/vnd.ms-excel';
+      case 'xlsx': return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      default: return 'application/octet-stream';
+    }
+  };
+
+  const finalMimeType = file.type || getMimeType(file.name);
+
   // 4. Upload to dedicated tvph-documents bucket
   const { error: uploadError } = await supabase.storage
     .from('tvph-documents')
-    .upload(filePath, file, { upsert: false });
+    .upload(filePath, file, { 
+      upsert: false,
+      contentType: finalMimeType 
+    });
 
   if (uploadError) {
     console.error('Storage upload error:', uploadError);

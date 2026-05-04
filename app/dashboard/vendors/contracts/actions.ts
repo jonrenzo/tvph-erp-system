@@ -29,7 +29,7 @@ export async function createContract(prevState: any, formData: FormData) {
     
     const { error: uploadError } = await supabase.storage
       .from('vendor-documents') // Reuse existing bucket or create new
-      .upload(filePath, file);
+      .upload(filePath, file, { contentType: file.type, upsert: false });
 
     if (uploadError) return { error: uploadError.message };
 

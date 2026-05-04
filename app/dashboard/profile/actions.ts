@@ -36,7 +36,7 @@ export async function updateAvatar(formData: FormData) {
   // 1. Upload to Storage
   const { error: uploadError } = await supabase.storage
     .from('avatars')
-    .upload(filePath, file);
+    .upload(filePath, file, { contentType: file.type, upsert: true });
 
   if (uploadError) return { error: uploadError.message };
 

@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { createClient } from '@/utils/supabase/server';
 import { Plus, Search, FileText, ChevronRight, CreditCard, Clock } from 'lucide-react';
 import { Suspense } from 'react';
+import { SearchInput } from '@/components/ui/search-input';
+import { StatusSelect } from '@/components/ui/status-select';
 
 export const unstable_instant = { 
   prefetch: 'static',
@@ -63,27 +65,19 @@ async function InvoicesContent({ searchParams: searchParamsPromise }: { searchPa
       {/* Filters and List */}
       <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
         <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row gap-4 bg-slate-50/50 dark:bg-[#0a0a0a]/50">
-           <div className="relative flex-1 max-w-md">
-             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-             <input 
-                type="text" 
-                placeholder="Search invoice number..." 
-                defaultValue={q}
-                className="w-full pl-9 pr-4 py-2 bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" 
-              />
-           </div>
-           
-           <select 
-             className="px-4 py-2 bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-             defaultValue={statusFilter}
-           >
-             <option value="all">All Statuses</option>
-             <option value="received">Received</option>
-             <option value="approved">Approved</option>
-             <option value="partially_paid">Partially Paid</option>
-             <option value="paid">Paid</option>
-             <option value="disputed">Disputed</option>
-           </select>
+          <SearchInput placeholder="Search invoice number..." paramName="q" />
+          
+          <StatusSelect 
+            paramName="status"
+            options={[
+              { value: 'all', label: 'All Statuses' },
+              { value: 'received', label: 'Received' },
+              { value: 'approved', label: 'Approved' },
+              { value: 'partially_paid', label: 'Partially Paid' },
+              { value: 'paid', label: 'Paid' },
+              { value: 'disputed', label: 'Disputed' }
+            ]}
+          />
         </div>
 
         <div className="overflow-x-auto">

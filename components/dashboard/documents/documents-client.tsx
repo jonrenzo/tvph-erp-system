@@ -6,6 +6,7 @@ import { CompanyLibrary } from "./company-library";
 import { VendorGrid } from "./vendor-grid";
 import { CompanyFolderView } from "./company-folder-view";
 import { UploadCompanyDocModal } from "./upload-company-doc-modal";
+import { SearchInput } from "@/components/ui/search-input";
 
 interface DocumentsClientProps {
   companyDocs: any[];
@@ -36,15 +37,13 @@ export function DocumentsClient({ companyDocs, vendors, userRole, searchQuery }:
           </p>
         </div>
         
-        <form className="relative group w-full md:w-96">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 group-focus-within:text-primary transition-colors" />
-          <input 
-            name="search"
-            defaultValue={searchQuery}
-            placeholder="Search vendors or documents..."
-            className="w-full pl-12 pr-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 transition-all shadow-sm shadow-slate-200/50 dark:shadow-none"
+        <div className="relative group w-full md:w-96">
+          <SearchInput 
+            placeholder="Search vendors or documents..." 
+            paramName="search"
+            className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 transition-all shadow-sm shadow-slate-200/50 dark:shadow-none"
           />
-        </form>
+        </div>
       </div>
 
       {/* 1. Company Library Section */}

@@ -33,7 +33,7 @@ export async function createInvoice(prevState: any, formData: FormData) {
 
     const { error: uploadError } = await supabase.storage
       .from('vendor-documents')
-      .upload(filePath, file);
+      .upload(filePath, file, { contentType: file.type, upsert: false });
 
     if (!uploadError) {
       const { data: { publicUrl } } = supabase.storage

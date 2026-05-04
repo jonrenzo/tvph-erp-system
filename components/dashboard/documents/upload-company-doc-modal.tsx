@@ -14,31 +14,11 @@ import {
 } from "lucide-react";
 import { uploadCompanyDocument } from "@/app/dashboard/documents/actions";
 
-// ── Document type definitions matching DB enum ──────────────────────────────
 const DOC_TYPE_OPTIONS = [
-  { value: "signed_nda", label: "Signed NDA" },
-  { value: "statement_of_commitment", label: "Statement of Commitment" },
-  { value: "company_profile", label: "Company Profile & Client References" },
-  { value: "products_services_list", label: "List of Products or Services" },
-  { value: "vendor_information_summary", label: "Vendor Information Summary" },
-  { value: "general_information_sheet", label: "General Information Sheet" },
-  {
-    value: "audited_financial_statements",
-    label: "Audited Financial Statements (3 Years)",
-  },
-  {
-    value: "sec_registration",
-    label: "SEC Registration & Articles of Incorporation",
-  },
-  { value: "secretary_certificate", label: "Secretary Certificate" },
-  {
-    value: "safety_drug_policy",
-    label: "Safety Code & Drug-Free Workplace Policy",
-  },
-  { value: "iso_certification", label: "ISO Certification" },
-  { value: "pcab_license", label: "PCAB License" },
-  { value: "dole_174", label: "DOLE 174 or Certificate of Exemption" },
-  { value: "other_licenses", label: "Other Licenses or Permits" },
+  { value: "legal", label: "Legal & Compliance" },
+  { value: "hr", label: "HR & Staffing" },
+  { value: "finance", label: "Financials" },
+  { value: "template", label: "Company Templates" },
 ] as const;
 
 type FormState = {
@@ -355,7 +335,7 @@ export function UploadCompanyDocModal({
                           disabled
                           className="text-slate-400 bg-white dark:bg-[#071F15]"
                         >
-                          Select document type…
+                          Select folder destination…
                         </option>
                         {DOC_TYPE_OPTIONS.map((opt) => (
                           <option
@@ -371,22 +351,20 @@ export function UploadCompanyDocModal({
                     </div>
                   </div>
 
-                  {/* ── Custom Label ───────────────────────────────────── */}
+                  {/* ── Document Title ───────────────────────────────────── */}
                   <div className="space-y-1.5">
                     <label
                       htmlFor="label"
                       className="text-xs font-semibold uppercase tracking-widest block text-slate-500 dark:text-slate-400"
                     >
-                      Custom Label{" "}
-                      <span className="font-normal normal-case tracking-normal text-slate-400 dark:text-slate-600">
-                        — optional
-                      </span>
+                      Document Title <span className="text-rose-500">*</span>
                     </label>
                     <input
                       id="label"
                       name="label"
                       type="text"
-                      placeholder={'e.g. "Q1 2025 Audited Financials"'}
+                      required
+                      placeholder={'e.g. "Signed NDA" or "2024 Audit"'}
                       className="w-full rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all
                           text-slate-900 bg-slate-50 border border-slate-200 placeholder:text-slate-300 hover:border-slate-300
                           dark:text-white dark:bg-white/[0.04] dark:border-white/10 dark:placeholder:text-slate-700 dark:hover:border-white/20"

@@ -15,6 +15,7 @@ import {
 import { logout } from "@/app/login/actions";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { NotificationBell } from "@/components/dashboard/notification-bell";
+import { GlobalSearch } from "@/components/dashboard/global-search";
 
 interface HeaderProps {
   userEmail: string;
@@ -81,14 +82,7 @@ export function Header({
           )}
         </button>
 
-        <div className="hidden max-w-md flex-1 items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-[#0a0a0a]/50 px-3 py-1.5 md:flex">
-          <Search className="h-4 w-4 text-slate-500" />
-          <input
-            type="search"
-            placeholder="Search..."
-            className="w-full bg-transparent text-sm text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none"
-          />
-        </div>
+        <GlobalSearch />
       </div>
 
       {/* Right Section */}
