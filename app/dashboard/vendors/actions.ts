@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/utils/supabase/server';
 import { redirect } from 'next/navigation';
+import { createNotification } from '@/utils/notifications';
 
 export async function updateVendorStatus(vendorId: string, status: 'active' | 'inactive') {
   const supabase = await createClient();
@@ -76,6 +77,14 @@ export async function uploadDocument(vendorId: string, docType: string, formData
     action: 'UPDATE',
     changes: { after: { doc_type: docType, status: 'submitted' } },
     performed_by: user.id
+  });
+
+  await createNotification({
+    type: 'vendor',
+    title: '📁 Vendor Document Added',
+    message: `A document was uploaded for a vendor.`,
+    link: `/dashboard/vendors/${vendorId}`,
+    created_by: user.id
   });
 
   revalidatePath(`/dashboard/vendors/${vendorId}`);

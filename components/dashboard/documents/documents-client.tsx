@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Search, Filter, FolderOpen, Building2 } from "lucide-react";
+import { Search, Filter, FolderOpen, Building2, Upload } from "lucide-react";
 import { CompanyLibrary } from "./company-library";
 import { VendorGrid } from "./vendor-grid";
 import { CompanyFolderView } from "./company-folder-view";
+import { UploadCompanyDocModal } from "./upload-company-doc-modal";
 
 interface DocumentsClientProps {
   companyDocs: any[];
@@ -15,6 +16,8 @@ interface DocumentsClientProps {
 
 export function DocumentsClient({ companyDocs, vendors, userRole, searchQuery }: DocumentsClientProps) {
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const isAdmin = userRole === 'admin';
 
   const filteredVendors = vendors?.filter(v => 
     !searchQuery || v.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -46,11 +49,24 @@ export function DocumentsClient({ companyDocs, vendors, userRole, searchQuery }:
 
       {/* 1. Company Library Section */}
       <section className="space-y-4">
-        <div className="flex items-center gap-2 mb-2">
-          <div className="p-2 bg-primary/10 rounded-xl">
-             <FolderOpen className="h-4 w-4 text-primary" />
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <div className="p-2 bg-primary/10 rounded-xl">
+               <FolderOpen className="h-4 w-4 text-primary" />
+            </div>
+            <h2 className="text-sm font-bold text-slate-500 uppercase tracking-widest">Company Library</h2>
           </div>
-          <h2 className="text-sm font-bold text-slate-500 uppercase tracking-widest">Company Library</h2>
+          {isAdmin && (
+            <button
+              id="upload-company-doc-btn"
+              onClick={() => setIsUploadOpen(true)}
+              className="group flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all shadow-md hover:shadow-lg hover:shadow-primary/20 hover:-translate-y-0.5"
+              style={{ background: 'linear-gradient(135deg, #0A5C3B 0%, #0c6a43 100%)' }}
+            >
+              <Upload className="h-4 w-4 transition-transform group-hover:-translate-y-0.5" />
+              <span>Upload Document</span>
+            </button>
+          )}
         </div>
         <CompanyLibrary 
           documents={companyDocs || []} 
@@ -88,6 +104,14 @@ export function DocumentsClient({ companyDocs, vendors, userRole, searchQuery }:
           category={selectedFolder}
           documents={companyDocs.filter(d => d.doc_type === selectedFolder)}
           onClose={() => setSelectedFolder(null)}
+        />
+      )}
+
+      {/* Upload Company Document Modal (admin only) */}
+      {isAdmin && (
+        <UploadCompanyDocModal
+          isOpen={isUploadOpen}
+          onClose={() => setIsUploadOpen(false)}
         />
       )}
     </div>

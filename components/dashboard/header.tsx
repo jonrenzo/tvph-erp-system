@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { logout } from "@/app/login/actions";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { NotificationBell } from "@/components/dashboard/notification-bell";
 
 interface HeaderProps {
   userEmail: string;
@@ -94,10 +95,7 @@ export function Header({
       <div className="flex items-center gap-3">
         <ThemeToggle />
 
-        <button className="relative text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white ml-2">
-          <Bell className="h-5 w-5" />
-          <span className="absolute top-0 right-0 h-2 w-2 rounded-full bg-red-500" />
-        </button>
+        <NotificationBell />
 
         <div className="relative ml-2" ref={dropdownRef}>
           <button

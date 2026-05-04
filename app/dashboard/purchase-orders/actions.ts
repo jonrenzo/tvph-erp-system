@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/utils/supabase/server';
 import { redirect } from 'next/navigation';
+import { createNotification } from '@/utils/notifications';
 
 export async function createPurchaseOrder(prevState: any, formData: FormData) {
   const supabase = await createClient();
@@ -44,6 +45,14 @@ export async function createPurchaseOrder(prevState: any, formData: FormData) {
     performed_by: user.id
   });
 
+  await createNotification({
+    type: 'po',
+    title: '📋 Purchase Order Created',
+    message: `A new purchase order was drafted.`,
+    link: `/dashboard/purchase-orders/${newPO.id}`,
+    created_by: user.id
+  });
+
   revalidatePath('/dashboard/purchase-orders');
   redirect(`/dashboard/purchase-orders/${newPO.id}`);
 }
@@ -66,6 +75,14 @@ export async function updatePOStatus(poId: string, status: string) {
     action: 'UPDATE',
     changes: { after: { status } },
     performed_by: user.id
+  });
+
+  await createNotification({
+    type: 'po',
+    title: `📋 PO Status Updated`,
+    message: `Purchase order status changed to ${status}.`,
+    link: `/dashboard/purchase-orders/${poId}`,
+    created_by: user.id
   });
 
   revalidatePath(`/dashboard/purchase-orders/${poId}`);

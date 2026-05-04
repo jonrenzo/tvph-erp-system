@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/utils/supabase/server';
 import { redirect } from 'next/navigation';
+import { createNotification } from '@/utils/notifications';
 
 export async function createInvoice(prevState: any, formData: FormData) {
   const supabase = await createClient();
@@ -71,6 +72,14 @@ export async function createInvoice(prevState: any, formData: FormData) {
     performed_by: user.id
   });
 
+  await createNotification({
+    type: 'invoice',
+    title: '🧾 Invoice Received',
+    message: `Invoice #${invoice_number} was logged.`,
+    link: `/dashboard/invoices/${newInvoice.id}`,
+    created_by: user.id
+  });
+
   revalidatePath('/dashboard/invoices');
   redirect(`/dashboard/invoices/${newInvoice.id}`);
 }
@@ -93,6 +102,14 @@ export async function updateInvoiceStatus(invoiceId: string, status: string) {
     action: 'UPDATE',
     changes: { after: { status } },
     performed_by: user.id
+  });
+
+  await createNotification({
+    type: 'invoice',
+    title: `🧾 Invoice Status Updated`,
+    message: `Invoice status changed to ${status}.`,
+    link: `/dashboard/invoices/${invoiceId}`,
+    created_by: user.id
   });
 
   revalidatePath(`/dashboard/invoices/${invoiceId}`);
@@ -185,6 +202,14 @@ export async function recordPayment(prevState: any, formData: FormData) {
       await supabase.from('purchase_orders').update({ status: poStatus }).eq('id', po_id);
     }
   }
+
+  await createNotification({
+    type: 'payment',
+    title: `💳 Payment Recorded`,
+    message: `Payment of ${amount_paid} recorded for an invoice.`,
+    link: `/dashboard/invoices/${invoice_id}`,
+    created_by: user.id
+  });
 
   revalidatePath(`/dashboard/invoices/${invoice_id}`);
   return { success: true, error: null };
