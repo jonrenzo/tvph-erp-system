@@ -37,34 +37,39 @@ async function VendorDetailContent({
   
   const supabase = await createClient();
 
-  const { data: vendor, error } = await supabase
-    .from('vendors')
-    .select('*')
-    .eq('id', params.id)
-    .single();
+  // All 4 queries are independent (only depend on params.id) — run in parallel
+  const [
+    { data: vendor, error },
+    { data: rawDocuments },
+    { data: pos },
+    { data: invoices },
+  ] = await Promise.all([
+    supabase
+      .from('vendors')
+      .select('*')
+      .eq('id', params.id)
+      .single(),
+    supabase
+      .from('vendor_documents')
+      .select('*')
+      .eq('vendor_id', params.id),
+    supabase
+      .from('purchase_orders')
+      .select('id, po_number, issued_date, amount, status')
+      .eq('vendor_id', params.id)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('service_invoices')
+      .select('id, invoice_number, amount, status, purchase_orders(po_number)')
+      .eq('vendor_id', params.id)
+      .is('deleted_at', null)
+      .order('invoice_date', { ascending: false }),
+  ]);
 
   if (error || !vendor) {
     notFound();
   }
-
-  const { data: rawDocuments } = await supabase
-    .from('vendor_documents')
-    .select('*')
-    .eq('vendor_id', params.id);
-
-  const { data: pos } = await supabase
-    .from('purchase_orders')
-    .select('*')
-    .eq('vendor_id', params.id)
-    .is('deleted_at', null)
-    .order('created_at', { ascending: false });
-
-  const { data: invoices } = await supabase
-    .from('service_invoices')
-    .select('*, purchase_orders(po_number)')
-    .eq('vendor_id', params.id)
-    .is('deleted_at', null)
-    .order('invoice_date', { ascending: false });
 
   // Generate signed URLs for each document
   const documentsWithUrls = await Promise.all((rawDocuments || []).map(async (doc) => {

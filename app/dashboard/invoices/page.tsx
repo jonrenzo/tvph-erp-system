@@ -29,7 +29,7 @@ async function InvoicesContent({ searchParams: searchParamsPromise }: { searchPa
   let query = supabase
     .from('service_invoices')
     .select(`
-      *,
+      id, invoice_number, invoice_date, amount, due_date, status,
       vendors (name),
       purchase_orders (po_number)
     `)

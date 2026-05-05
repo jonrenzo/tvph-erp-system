@@ -29,7 +29,7 @@ async function AuditLogsContent({ searchParams: searchParamsPromise }: { searchP
   let query = supabase
     .from('audit_logs')
     .select(`
-      *,
+      id, action, entity_type, entity_id, changes, created_at,
       profiles:performed_by (full_name, email)
     `);
 

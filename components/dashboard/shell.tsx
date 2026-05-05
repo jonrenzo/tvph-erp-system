@@ -1,9 +1,15 @@
 'use client'
 
 import { useState } from 'react'
+import dynamic from 'next/dynamic'
 import { Sidebar } from './sidebar'
 import { Header } from './header'
-import { AIChatBubble } from './ai/chat-bubble'
+
+// Lazy load — AI chat is heavy (AI SDK, markdown renderer) and rarely used on first load
+const AIChatBubble = dynamic(
+  () => import('./ai/chat-bubble').then(mod => ({ default: mod.AIChatBubble })),
+  { ssr: false }
+)
 
 export function DashboardShell({
   children,

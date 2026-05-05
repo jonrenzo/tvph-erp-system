@@ -22,26 +22,30 @@ async function InvoiceDetailContent({ paramsPromise }: { paramsPromise: Promise<
   const params = await paramsPromise;
   const supabase = await createClient();
 
-  const { data: invoice, error } = await supabase
-    .from('service_invoices')
-    .select(`
-      *,
-      vendors (name),
-      purchase_orders (po_number, amount)
-    `)
-    .eq('id', params.id)
-    .single();
+  // Both queries only depend on params.id — run in parallel
+  const [
+    { data: invoice, error },
+    { data: payments },
+  ] = await Promise.all([
+    supabase
+      .from('service_invoices')
+      .select(`
+        *,
+        vendors (name),
+        purchase_orders (po_number, amount)
+      `)
+      .eq('id', params.id)
+      .single(),
+    supabase
+      .from('payments')
+      .select('id, payment_date, payment_type, reference_number, amount_paid')
+      .eq('invoice_id', params.id)
+      .order('payment_date', { ascending: false }),
+  ]);
 
   if (error || !invoice) {
     notFound();
   }
-
-  // Fetch payments
-  const { data: payments } = await supabase
-    .from('payments')
-    .select('*')
-    .eq('invoice_id', invoice.id)
-    .order('payment_date', { ascending: false });
 
   const totalPaid = payments?.reduce((sum, p) => sum + Number(p.amount_paid), 0) || 0;
   const balance = Number(invoice.amount) - totalPaid;

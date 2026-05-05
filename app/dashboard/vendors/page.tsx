@@ -41,7 +41,7 @@ async function VendorsContent({ searchParams: searchParamsPromise }: { searchPar
   const q = searchParams?.q || '';
   const statusFilter = searchParams?.status || 'all';
 
-  let query = supabase.from('vendors').select('*').is('deleted_at', null).order('created_at', { ascending: false });
+  let query = supabase.from('vendors').select('id, name, address, tin, contact_person, contact_email, status').is('deleted_at', null).order('created_at', { ascending: false });
 
   if (q) {
     query = query.ilike('name', `%${q}%`);
