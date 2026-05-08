@@ -2,8 +2,6 @@ import { createClient } from '@/utils/supabase/server';
 import { notFound } from 'next/navigation';
 import { ProjectDetailContent } from '@/components/dashboard/projects/project-detail-content';
 
-export const dynamic = 'force-dynamic';
-
 export default async function ProjectPage({ params }: { params: { id: string } }) {
   const supabase = await createClient();
 

@@ -2,8 +2,6 @@ import { createClient } from '@/utils/supabase/server';
 import { FolderGit2, Plus, Clock, ExternalLink, Building2 } from 'lucide-react';
 import Link from 'next/link';
 
-export const dynamic = 'force-dynamic';
-
 export default async function ProjectsPage() {
   const supabase = await createClient();
 
