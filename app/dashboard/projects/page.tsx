@@ -1,14 +1,45 @@
-import { createClient } from '@/utils/supabase/server';
-import { FolderGit2, Clock, ExternalLink, Building2 } from 'lucide-react';
-import Link from 'next/link';
-import { Suspense } from 'react';
+import { createClient } from "@/utils/supabase/server";
+import { FolderGit2, Clock, ExternalLink, Building2 } from "lucide-react";
+import Link from "next/link";
+import { Suspense } from "react";
 
-export default async function ProjectsPage() {
+export const unstable_instant = { prefetch: "static" };
+
+export default function ProjectsPage() {
+  return (
+    <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-plus-jakarta tracking-tight flex items-center gap-2">
+            <FolderGit2 className="h-6 w-6 text-primary" />
+            Projects
+          </h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Manage all projects across your vendors..
+          </p>
+        </div>
+        <Link
+          href="/dashboard/vendors"
+          className="inline-flex items-center gap-2 bg-white dark:bg-[#0a0a0a] border border-slate-200 dark:border-slate-800 hover:border-primary/50 text-slate-700 dark:text-slate-300 px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm active:scale-95 whitespace-nowrap"
+        >
+          <Building2 className="h-4 w-4" /> Go to Vendors to Add Project
+        </Link>
+      </div>
+
+      <Suspense fallback={<ProjectsSkeleton />}>
+        <ProjectsContent />
+      </Suspense>
+    </div>
+  );
+}
+
+async function ProjectsContent() {
   const supabase = await createClient();
 
   const { data: projects } = await supabase
-    .from('projects')
-    .select(`
+    .from("projects")
+    .select(
+      `
       *,
       vendors (
         name
@@ -16,16 +47,21 @@ export default async function ProjectsPage() {
       purchase_orders (
         id
       )
-    `)
-    .is('deleted_at', null)
-    .order('created_at', { ascending: false });
+    `,
+    )
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false });
 
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
-      case 'active': return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400';
-      case 'completed': return 'bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400';
-      case 'on_hold': return 'bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400';
-      default: return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400';
+      case "active":
+        return "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400";
+      case "completed":
+        return "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400";
+      case "on_hold":
+        return "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400";
+      default:
+        return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400";
     }
   };
 
@@ -35,9 +71,12 @@ export default async function ProjectsPage() {
         <div className="h-20 w-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
           <FolderGit2 className="h-10 w-10 text-primary" />
         </div>
-        <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-3">No projects found</h3>
+        <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-3">
+          No projects found
+        </h3>
         <p className="text-slate-500 dark:text-slate-400 max-w-md mx-auto leading-relaxed mb-8">
-          You haven't created any projects yet. Go to a vendor's profile to create your first project and start tracking purchase orders.
+          You haven't created any projects yet. Go to a vendor's profile to
+          create your first project and start tracking purchase orders.
         </p>
         <Link
           href="/dashboard/vendors"
@@ -53,8 +92,8 @@ export default async function ProjectsPage() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       {projects.map((project: any) => (
-        <div 
-          key={project.id} 
+        <div
+          key={project.id}
           className="bg-white dark:bg-[#0a0a0a] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm flex flex-col transition-all hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-md"
         >
           <div className="p-5 flex-1 flex flex-col">
@@ -62,14 +101,16 @@ export default async function ProjectsPage() {
               <h3 className="text-lg font-semibold text-slate-900 dark:text-white line-clamp-1">
                 {project.name}
               </h3>
-              <span className={`shrink-0 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${getStatusColor(project.status)}`}>
-                {project.status?.replace('_', ' ')}
+              <span
+                className={`shrink-0 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${getStatusColor(project.status)}`}
+              >
+                {project.status?.replace("_", " ")}
               </span>
             </div>
-            
+
             <p className="text-sm font-medium text-primary mb-3 flex items-center gap-1.5">
               <Building2 className="h-3.5 w-3.5" />
-              {project.vendors?.name || 'Unknown Vendor'}
+              {project.vendors?.name || "Unknown Vendor"}
             </p>
 
             {project.description && (
@@ -77,7 +118,7 @@ export default async function ProjectsPage() {
                 {project.description}
               </p>
             )}
-            
+
             <div className="flex flex-col gap-2 mt-auto text-xs text-slate-400 dark:text-slate-500 font-medium bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800/50">
               <span className="flex items-center gap-1.5">
                 <Clock className="h-3.5 w-3.5" />
@@ -85,7 +126,8 @@ export default async function ProjectsPage() {
               </span>
               <span className="flex items-center gap-1.5 text-primary">
                 <FolderGit2 className="h-3.5 w-3.5" />
-                {project.purchase_orders?.length || 0} Connected PO{(project.purchase_orders?.length || 0) === 1 ? '' : 's'}
+                {project.purchase_orders?.length || 0} Connected PO
+                {(project.purchase_orders?.length || 0) === 1 ? "" : "s"}
               </span>
             </div>
           </div>
@@ -108,7 +150,10 @@ function ProjectsSkeleton() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       {[1, 2, 3].map((i) => (
-        <div key={i} className="bg-white dark:bg-[#0a0a0a] border border-slate-200 dark:border-slate-800 rounded-2xl h-64 animate-pulse shadow-sm" />
+        <div
+          key={i}
+          className="bg-white dark:bg-[#0a0a0a] border border-slate-200 dark:border-slate-800 rounded-2xl h-64 animate-pulse shadow-sm"
+        />
       ))}
     </div>
   );
