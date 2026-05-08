@@ -3,6 +3,8 @@ import { createClient } from '@/utils/supabase/server';
 import { ArrowLeft, Building2, MapPin, Phone, Mail, FileText, CreditCard, Clock, FileCheck, CheckCircle2, XCircle } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import { DocumentList } from '@/components/dashboard/vendors/document-list';
+import { VendorProfileDetails } from '@/components/dashboard/vendors/vendor-profile-details';
+import { VendorProjectsTab } from '@/components/dashboard/vendors/vendor-projects-tab';
 import { Suspense } from 'react';
 import { RecentActivity } from '@/components/dashboard/shared/recent-activity';
 
@@ -38,12 +40,13 @@ async function VendorDetailContent({
   
   const supabase = await createClient();
 
-  // All 4 queries are independent (only depend on params.id) — run in parallel
+  // All 5 queries are independent (only depend on params.id) — run in parallel
   const [
     { data: vendor, error },
     { data: rawDocuments },
     { data: pos },
     { data: invoices },
+    { data: projects },
   ] = await Promise.all([
     supabase
       .from('vendors')
@@ -56,7 +59,7 @@ async function VendorDetailContent({
       .eq('vendor_id', params.id),
     supabase
       .from('purchase_orders')
-      .select('id, po_number, issued_date, amount, status')
+      .select('id, po_number, issued_date, amount, status, project_id')
       .eq('vendor_id', params.id)
       .is('deleted_at', null)
       .order('created_at', { ascending: false }),
@@ -66,6 +69,12 @@ async function VendorDetailContent({
       .eq('vendor_id', params.id)
       .is('deleted_at', null)
       .order('invoice_date', { ascending: false }),
+    supabase
+      .from('projects')
+      .select('*')
+      .eq('vendor_id', params.id)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false }),
   ]);
 
   if (error || !vendor) {
@@ -88,6 +97,7 @@ async function VendorDetailContent({
 
   const tabs = [
     { id: 'profile', label: 'Profile Overview' },
+    { id: 'projects', label: 'Projects' },
     { id: 'documents', label: 'Accreditation Docs' },
     { id: 'purchase-orders', label: 'Purchase Orders' },
     { id: 'invoices', label: 'Invoices' },
@@ -169,87 +179,11 @@ async function VendorDetailContent({
       {/* Tab Content */}
       <div className="py-4">
         {tab === 'profile' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-in fade-in duration-300">
-            {/* Contact & Location */}
-            <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-6 shadow-sm">
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-                <Building2 className="h-5 w-5 text-primary" /> Company Details
-              </h2>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Registered Address</label>
-                  <p className="mt-1 text-slate-900 dark:text-slate-300 flex items-start gap-2">
-                    <MapPin className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
-                    {vendor.address || 'No address provided'}
-                  </p>
-                </div>
+          <VendorProfileDetails vendor={vendor} />
+        )}
 
-                <div className="grid grid-cols-2 gap-4 pt-2">
-                  <div>
-                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Contact Person</label>
-                    <p className="mt-1 text-slate-900 dark:text-slate-300 font-medium">{vendor.contact_person || '-'}</p>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Phone</label>
-                    <p className="mt-1 text-slate-900 dark:text-slate-300 flex items-center gap-2">
-                      <Phone className="h-3.5 w-3.5 text-slate-400" />
-                      {vendor.contact_phone || '-'}
-                    </p>
-                  </div>
-                  <div className="col-span-2">
-                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Email Address</label>
-                    <p className="mt-1 text-slate-900 dark:text-slate-300 flex items-center gap-2">
-                      <Mail className="h-3.5 w-3.5 text-slate-400" />
-                      {vendor.contact_email || '-'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Financial Details */}
-            <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-6 shadow-sm">
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-                <CreditCard className="h-5 w-5 text-primary" /> Banking & Terms
-              </h2>
-              
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="col-span-2">
-                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Bank Name</label>
-                    <p className="mt-1 text-slate-900 dark:text-slate-300 font-medium">{vendor.bank_name || '-'}</p>
-                  </div>
-                  <div className="col-span-2">
-                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Account Name</label>
-                    <p className="mt-1 text-slate-900 dark:text-slate-300">{vendor.bank_account_name || '-'}</p>
-                  </div>
-                  <div className="col-span-2">
-                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Account Number</label>
-                    <p className="mt-1 text-slate-900 dark:text-slate-300 font-mono tracking-tight">{vendor.bank_account_number || '-'}</p>
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-slate-100 dark:border-slate-800/50">
-                  <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Payment Terms</label>
-                  <p className="mt-1 text-slate-900 dark:text-slate-300 flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-slate-400" />
-                    {vendor.payment_terms || 'Standard Terms'}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Notes Section */}
-            {vendor.notes && (
-              <div className="col-span-1 lg:col-span-2 bg-amber-50/50 dark:bg-amber-900/10 border border-amber-200/50 dark:border-amber-800/30 rounded-2xl p-6">
-                <h3 className="text-sm font-medium text-amber-800 dark:text-amber-500 mb-2">Internal Notes</h3>
-                <p className="text-sm text-amber-900/70 dark:text-amber-200/70 whitespace-pre-wrap leading-relaxed">
-                  {vendor.notes}
-                </p>
-              </div>
-            )}
-          </div>
+        {tab === 'projects' && (
+          <VendorProjectsTab vendorId={vendor.id} projects={projects || []} pos={pos || []} />
         )}
 
         {tab === 'documents' && (
