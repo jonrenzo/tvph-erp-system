@@ -91,7 +91,6 @@ export async function uploadDocument(vendorId: string, docType: string, formData
   return { success: true };
 }
 
-
 export async function createVendor(prevState: any, formData: FormData) {
   const supabase = await createClient();
   
@@ -114,6 +113,20 @@ export async function createVendor(prevState: any, formData: FormData) {
   const payment_terms = formData.get('payment_terms') as string;
   const notes = formData.get('notes') as string;
 
+  let secondary_contacts = [];
+  try {
+    secondary_contacts = JSON.parse((formData.get('secondary_contacts') as string) || '[]');
+  } catch (e) {
+    console.error('Error parsing secondary contacts:', e);
+  }
+
+  let secondary_banking = [];
+  try {
+    secondary_banking = JSON.parse((formData.get('secondary_banking') as string) || '[]');
+  } catch (e) {
+    console.error('Error parsing secondary banking:', e);
+  }
+
   if (!name || name.trim() === '') {
     return { error: 'Vendor name is required.' };
   }
@@ -130,8 +143,10 @@ export async function createVendor(prevState: any, formData: FormData) {
     bank_account_name,
     payment_terms,
     notes,
+    secondary_contacts,
+    secondary_banking,
     created_by: user.id,
-    status: 'pending' // Default status per spec
+    status: 'pending'
   }).select('id').single();
 
   if (error) {
@@ -150,4 +165,138 @@ export async function createVendor(prevState: any, formData: FormData) {
 
   revalidatePath('/dashboard/vendors');
   redirect(`/dashboard/vendors/${newVendor.id}`);
+}
+
+export async function updateVendorProfile(prevState: any, formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Unauthorized' };
+
+  const id = formData.get('id') as string;
+  if (!id) return { error: 'Vendor ID is required.' };
+
+  const address = formData.get('address') as string;
+  const contact_person = formData.get('contact_person') as string;
+  const contact_email = formData.get('contact_email') as string;
+  const contact_phone = formData.get('contact_phone') as string;
+  const bank_name = formData.get('bank_name') as string;
+  const bank_account_number = formData.get('bank_account_number') as string;
+  const bank_account_name = formData.get('bank_account_name') as string;
+  const payment_terms = formData.get('payment_terms') as string;
+  const notes = formData.get('notes') as string;
+
+  let secondary_contacts = [];
+  try {
+    secondary_contacts = JSON.parse((formData.get('secondary_contacts') as string) || '[]');
+  } catch (e) {
+    console.error('Error parsing secondary contacts:', e);
+  }
+
+  let secondary_banking = [];
+  try {
+    secondary_banking = JSON.parse((formData.get('secondary_banking') as string) || '[]');
+  } catch (e) {
+    console.error('Error parsing secondary banking:', e);
+  }
+
+  const { error } = await supabase
+    .from('vendors')
+    .update({
+      address,
+      contact_person,
+      contact_email,
+      contact_phone,
+      bank_name,
+      bank_account_number,
+      bank_account_name,
+      payment_terms,
+      notes,
+      secondary_contacts,
+      secondary_banking,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', id);
+
+  if (error) {
+    console.error('Error updating vendor:', error);
+    return { error: error.message || 'Failed to update vendor.' };
+  }
+
+  await supabase.from('audit_logs').insert({
+    entity_type: 'vendor',
+    entity_id: id,
+    action: 'UPDATE',
+    changes: { after: { contact_person, secondary_contacts, secondary_banking } },
+    performed_by: user.id
+  });
+
+  revalidatePath(`/dashboard/vendors/${id}`);
+  return { success: true };
+}
+
+export async function createProject(prevState: any, formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Unauthorized' };
+
+  const vendor_id = formData.get('vendor_id') as string;
+  const name = formData.get('name') as string;
+  const description = formData.get('description') as string;
+  const contract_url = formData.get('contract_url') as string;
+  const status = formData.get('status') as string || 'active';
+
+  if (!vendor_id || !name) {
+    return { error: 'Vendor ID and Project Name are required.' };
+  }
+
+  const { error } = await supabase.from('projects').insert({
+    vendor_id,
+    name,
+    description,
+    contract_url,
+    status,
+    created_by: user.id
+  });
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath(`/dashboard/vendors/${vendor_id}`);
+  return { success: true };
+}
+
+export async function updateProject(prevState: any, formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Unauthorized' };
+
+  const id = formData.get('id') as string;
+  const vendor_id = formData.get('vendor_id') as string;
+  const name = formData.get('name') as string;
+  const description = formData.get('description') as string;
+  const contract_url = formData.get('contract_url') as string;
+  const status = formData.get('status') as string;
+
+  if (!id || !name) {
+    return { error: 'Project ID and Name are required.' };
+  }
+
+  const { error } = await supabase
+    .from('projects')
+    .update({
+      name,
+      description,
+      contract_url,
+      status,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', id);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath(`/dashboard/vendors/${vendor_id}`);
+  return { success: true };
 }
