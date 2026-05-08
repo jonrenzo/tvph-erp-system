@@ -36,10 +36,18 @@ export function VendorGrid({ vendors, userRole }: { vendors: Vendor[], userRole:
           const complianceRate = Math.min(Math.round((totalDocs / 14) * 100), 100);
 
           return (
-            <button
+            <div
               key={vendor.id}
+              role="button"
+              tabIndex={0}
               onClick={() => setSelectedVendorId(vendor.id)}
-              className="group bg-white dark:bg-[#071F15] rounded-3xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm hover:shadow-xl hover:shadow-primary/5 hover:border-primary/30 transition-all text-left flex flex-col space-y-6"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setSelectedVendorId(vendor.id);
+                }
+              }}
+              className="group bg-white dark:bg-[#071F15] rounded-3xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm hover:shadow-xl hover:shadow-primary/5 hover:border-primary/30 transition-all text-left flex flex-col space-y-6 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-4">
@@ -96,7 +104,7 @@ export function VendorGrid({ vendors, userRole }: { vendors: Vendor[], userRole:
                   <ChevronRight className="h-4 w-4" />
                 </div>
               </div>
-            </button>
+            </div>
           );
         })}
       </div>

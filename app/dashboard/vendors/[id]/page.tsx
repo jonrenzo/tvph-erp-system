@@ -4,6 +4,7 @@ import { ArrowLeft, Building2, MapPin, Phone, Mail, FileText, CreditCard, Clock,
 import { notFound } from 'next/navigation';
 import { DocumentList } from '@/components/dashboard/vendors/document-list';
 import { Suspense } from 'react';
+import { RecentActivity } from '@/components/dashboard/shared/recent-activity';
 
 export const unstable_instant = { 
   prefetch: 'static',

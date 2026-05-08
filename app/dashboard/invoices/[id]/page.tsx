@@ -209,15 +209,6 @@ async function InvoiceDetailContent({ paramsPromise }: { paramsPromise: Promise<
               </div>
             </div>
           </div>
-
-          {invoice.notes && (
-            <div className="bg-amber-50/50 dark:bg-amber-900/10 border border-amber-200/50 dark:border-amber-800/30 rounded-2xl p-6">
-              <h3 className="text-[10px] font-bold text-amber-800 dark:text-amber-500 uppercase mb-2 tracking-widest">Internal Notes</h3>
-              <p className="text-xs text-amber-900/70 dark:text-amber-200/70 leading-relaxed italic">
-                &quot;{invoice.notes}&quot;
-              </p>
-            </div>
-          )}
         </div>
       </div>
     </div>

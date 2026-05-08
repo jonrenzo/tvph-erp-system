@@ -20,6 +20,43 @@ export function AIChatBubble() {
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Drag state
+  const [pos, setPos] = useState({ x: 24, y: 24 }); // distance from bottom-left
+  const dragging = useRef(false);
+  const dragStart = useRef({ mouseX: 0, mouseY: 0, posX: 0, posY: 0 });
+  const moved = useRef(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleDragStart = (e: React.MouseEvent) => {
+    dragging.current = true;
+    moved.current = false;
+    dragStart.current = { mouseX: e.clientX, mouseY: e.clientY, posX: pos.x, posY: pos.y };
+    e.preventDefault();
+  };
+
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      if (!dragging.current) return;
+      const dx = e.clientX - dragStart.current.mouseX;
+      const dy = e.clientY - dragStart.current.mouseY;
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved.current = true;
+      const newX = Math.max(8, Math.min(window.innerWidth - 64, dragStart.current.posX + dx));
+      const newY = Math.max(8, Math.min(window.innerHeight - 64, dragStart.current.posY - dy));
+      setPos({ x: newX, y: newY });
+    };
+    const onMouseUp = () => { dragging.current = false; };
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, []);
+
+  const handleToggleClick = () => {
+    if (!moved.current) setIsOpen((o) => !o);
+  };
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -91,7 +128,11 @@ export function AIChatBubble() {
   };
 
   return (
-    <div className="fixed bottom-6 right-6 z-[100] flex flex-col items-end gap-4">
+    <div
+      ref={containerRef}
+      className="fixed z-[100] flex flex-col items-start gap-3"
+      style={{ left: pos.x, bottom: pos.y }}
+    >
       {isOpen && (
         <div 
           className={`bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 zoom-in-95 duration-300 ${
@@ -200,10 +241,11 @@ export function AIChatBubble() {
         </div>
       )}
 
-      {/* Toggle Button */}
+      {/* Toggle Button — draggable */}
       <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="h-14 w-14 rounded-full bg-primary flex items-center justify-center text-white shadow-2xl shadow-primary/30 hover:scale-110 active:scale-95 transition-all group relative"
+        onMouseDown={handleDragStart}
+        onClick={handleToggleClick}
+        className="h-14 w-14 rounded-full bg-primary flex items-center justify-center text-white shadow-2xl shadow-primary/30 hover:scale-110 active:scale-95 transition-all group relative cursor-grab active:cursor-grabbing select-none"
       >
         {isOpen ? <X className="h-6 w-6" /> : <MessageSquare className="h-6 w-6" />}
       </button>
