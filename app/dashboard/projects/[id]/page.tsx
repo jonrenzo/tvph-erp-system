@@ -3,7 +3,23 @@ import { notFound } from 'next/navigation';
 import { ProjectDetailContent } from '@/components/dashboard/projects/project-detail-content';
 import { Suspense } from 'react';
 
-export default async function ProjectPage({ params }: { params: { id: string } }) {
+export const unstable_instant = {
+  prefetch: 'static',
+  samples: [{
+    params: { id: 'sample-project-id' }
+  }]
+};
+
+export default function ProjectPage(props: { params: Promise<{ id: string }> }) {
+  return (
+    <Suspense fallback={<ProjectDetailSkeleton />}>
+      <ProjectDetailLoader paramsPromise={props.params} />
+    </Suspense>
+  );
+}
+
+async function ProjectDetailLoader({ paramsPromise }: { paramsPromise: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const supabase = await createClient();
 
   const [{ data: project }, { data: pos }] = await Promise.all([

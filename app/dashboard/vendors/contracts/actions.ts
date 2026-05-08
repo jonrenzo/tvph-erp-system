@@ -10,15 +10,24 @@ export async function createContract(prevState: any, formData: FormData) {
 
   const vendor_id = formData.get('vendor_id') as string;
   const contract_number = formData.get('contract_number') as string;
-  const title = formData.get('title') as string;
+  const project_id = formData.get('project_id') as string;
   const start_date = formData.get('start_date') as string;
   const end_date = formData.get('end_date') as string;
   const total_value = formData.get('total_value') as string;
   const file = formData.get('file') as File;
 
-  if (!vendor_id || !contract_number || !title || !start_date) {
+  if (!vendor_id || !contract_number || !project_id || !start_date) {
     return { error: 'Missing required fields.' };
   }
+
+  // Fetch project name to use as title
+  const { data: project } = await supabase
+    .from('projects')
+    .select('name')
+    .eq('id', project_id)
+    .single();
+
+  const title = project ? project.name : 'Project Contract';
 
   let file_url = null;
   let file_name = null;
@@ -26,9 +35,9 @@ export async function createContract(prevState: any, formData: FormData) {
   if (file && file.size > 0) {
     const fileExt = file.name.split('.').pop();
     const filePath = `${vendor_id}/${Math.random()}.${fileExt}`;
-    
+
     const { error: uploadError } = await supabase.storage
-      .from('vendor-documents') // Reuse existing bucket or create new
+      .from('vendor-documents')
       .upload(filePath, file, { contentType: file.type, upsert: false });
 
     if (uploadError) return { error: uploadError.message };
@@ -36,13 +45,14 @@ export async function createContract(prevState: any, formData: FormData) {
     const { data: { publicUrl } } = supabase.storage
       .from('vendor-documents')
       .getPublicUrl(filePath);
-      
+
     file_url = publicUrl;
     file_name = file.name;
   }
 
   const { error } = await supabase.from('vendor_contracts').insert({
     vendor_id,
+    project_id,
     contract_number,
     title,
     start_date,

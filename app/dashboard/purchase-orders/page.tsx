@@ -33,6 +33,9 @@ async function PurchaseOrdersContent({ searchParams: searchParamsPromise }: { se
       *,
       vendors (
         name
+      ),
+      projects (
+        name
       )
     `)
     .is('deleted_at', null)
@@ -113,6 +116,7 @@ async function PurchaseOrdersContent({ searchParams: searchParamsPromise }: { se
               <tr>
                 <th className="px-6 py-4 font-semibold">PO Details</th>
                 <th className="px-6 py-4 font-semibold">Vendor</th>
+                <th className="px-6 py-4 font-semibold">Project</th>
                 <th className="px-6 py-4 font-semibold">Amount</th>
                 <th className="px-6 py-4 font-semibold">Status</th>
                 <th className="px-6 py-4 font-semibold text-right">Actions</th>
@@ -121,13 +125,13 @@ async function PurchaseOrdersContent({ searchParams: searchParamsPromise }: { se
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
               {error ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-red-500">
+                  <td colSpan={6} className="px-6 py-12 text-center text-red-500">
                     Failed to load purchase orders.
                   </td>
                 </tr>
               ) : pos?.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center">
+                  <td colSpan={6} className="px-6 py-12 text-center">
                     <div className="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400">
                       <div className="h-12 w-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-3">
                         <FileText className="h-6 w-6 text-slate-400" />
@@ -146,6 +150,15 @@ async function PurchaseOrdersContent({ searchParams: searchParamsPromise }: { se
                     </td>
                     <td className="px-6 py-4">
                       <div className="font-medium text-slate-900 dark:text-white">{po.vendors?.name || 'Unknown Vendor'}</div>
+                    </td>
+                    <td className="px-6 py-4">
+                      {po.projects ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/5 text-primary text-xs font-semibold border border-primary/10">
+                          {po.projects.name}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-400 italic">No Project</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 font-semibold text-slate-900 dark:text-white">
                       ₱{Number(po.amount).toLocaleString()}
