@@ -11,7 +11,8 @@ export default async function VendorContractsPage() {
     .from('vendor_contracts')
     .select(`
       *,
-      vendors (name)
+      vendors (name),
+      projects (name)
     `)
     .order('created_at', { ascending: false });
 
@@ -19,6 +20,13 @@ export default async function VendorContractsPage() {
   const { data: vendors } = await supabase
     .from('vendors')
     .select('id, name')
+    .is('deleted_at', null)
+    .order('name');
+
+  // Fetch projects for the creation modal
+  const { data: projects } = await supabase
+    .from('projects')
+    .select('id, name, vendor_id')
     .is('deleted_at', null)
     .order('name');
 
@@ -45,7 +53,7 @@ export default async function VendorContractsPage() {
           </p>
         </div>
         
-        <CreateContractModal vendors={vendors || []} />
+        <CreateContractModal vendors={vendors || []} projects={projects || []} />
       </div>
 
       {/* Contracts Table */}
@@ -56,6 +64,7 @@ export default async function VendorContractsPage() {
               <tr>
                 <th className="px-6 py-4 font-semibold">Contract Info</th>
                 <th className="px-6 py-4 font-semibold">Vendor</th>
+                <th className="px-6 py-4 font-semibold">Project</th>
                 <th className="px-6 py-4 font-semibold text-center">Period</th>
                 <th className="px-6 py-4 font-semibold text-center">Total Value</th>
                 <th className="px-6 py-4 font-semibold text-center">Status</th>
@@ -65,7 +74,7 @@ export default async function VendorContractsPage() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {contracts?.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic">
+                  <td colSpan={7} className="px-6 py-12 text-center text-slate-400 italic">
                     No contracts found. Upload your first agreement to get started.
                   </td>
                 </tr>
@@ -83,6 +92,15 @@ export default async function VendorContractsPage() {
                         <Building2 className="h-3.5 w-3.5 text-slate-400" />
                         <span className="font-medium">{contract.vendors?.name}</span>
                       </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      {contract.projects ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/5 text-primary text-xs font-semibold border border-primary/10">
+                          {contract.projects.name}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-400 italic">No Project</span>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                        <div className="flex flex-col items-center gap-1">

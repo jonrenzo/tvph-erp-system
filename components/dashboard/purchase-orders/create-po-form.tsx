@@ -1,11 +1,20 @@
 "use client";
 
-import { useActionState } from "react";
-import { Save, Building2, Calendar, CircleDollarSign, FileText } from "lucide-react";
+import { useActionState, useState } from "react";
+import { Save, Building2, Calendar, CircleDollarSign, FileText, FolderGit2 } from "lucide-react";
 import { createPurchaseOrder } from "@/app/dashboard/purchase-orders/actions";
 
-export function CreatePOForm({ vendors }: { vendors: { id: string, name: string }[] }) {
+export function CreatePOForm({ 
+  vendors, 
+  projects 
+}: { 
+  vendors: { id: string, name: string }[],
+  projects: { id: string, name: string, vendor_id: string }[]
+}) {
   const [state, formAction, isPending] = useActionState(createPurchaseOrder, null);
+  const [selectedVendor, setSelectedVendor] = useState("");
+
+  const filteredProjects = projects.filter(p => p.vendor_id === selectedVendor);
 
   return (
     <form action={formAction} className="space-y-6">
@@ -32,11 +41,37 @@ export function CreatePOForm({ vendors }: { vendors: { id: string, name: string 
                 id="vendor_id"
                 name="vendor_id"
                 required
+                value={selectedVendor}
+                onChange={(e) => setSelectedVendor(e.target.value)}
                 className="w-full pl-9 pr-4 py-2.5 bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all appearance-none"
               >
                 <option value="">Select a vendor</option>
                 {vendors.map((v) => (
                   <option key={v.id} value={v.id}>{v.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="space-y-2 md:col-span-2">
+            <label htmlFor="project_id" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+              Project <span className="text-slate-400 font-normal ml-1">(Optional)</span>
+            </label>
+            <div className="relative">
+              <FolderGit2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <select
+                id="project_id"
+                name="project_id"
+                disabled={!selectedVendor}
+                className="w-full pl-9 pr-4 py-2.5 bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all appearance-none disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed dark:disabled:bg-[#111] dark:disabled:text-slate-600"
+              >
+                <option value="">
+                  {selectedVendor 
+                    ? (filteredProjects.length > 0 ? "Select a project" : "No projects for this vendor") 
+                    : "Select a vendor first"}
+                </option>
+                {filteredProjects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
               </select>
             </div>

@@ -3,9 +3,9 @@ import { notFound } from 'next/navigation';
 import { ProjectDetailContent } from '@/components/dashboard/projects/project-detail-content';
 import { Suspense } from 'react';
 
-export const unstable_instant = { 
+export const unstable_instant = {
   prefetch: 'static',
-  samples: [{ 
+  samples: [{
     params: { id: 'sample-project-id' }
   }]
 };

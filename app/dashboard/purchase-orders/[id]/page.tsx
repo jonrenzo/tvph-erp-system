@@ -13,10 +13,12 @@ import {
   CreditCard,
   Clock,
   User,
-  Mail
+  Mail,
+  FolderGit2
 } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
+import { POProjectAssigner } from "@/components/dashboard/purchase-orders/po-project-assigner";
 import { RecentActivity } from "@/components/dashboard/shared/recent-activity";
 
 export const unstable_instant = { 
@@ -56,6 +58,14 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
   if (error || !po) {
     notFound();
   }
+
+  // Fetch projects for this vendor to allow assignment
+  const { data: vendorProjects } = await supabase
+    .from("projects")
+    .select("id, name")
+    .eq("vendor_id", po.vendor_id)
+    .is("deleted_at", null)
+    .order("name");
 
   // Fetch all invoices linked to this PO
   const { data: invoices } = await supabase
@@ -426,6 +436,17 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
                 </div>
               </div>
             </div>
+          </div>
+
+          <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
+            <h3 className="font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+              <FolderGit2 className="h-4 w-4 text-primary" /> Associated Project
+            </h3>
+            <POProjectAssigner 
+              poId={po.id} 
+              currentProjectId={po.project_id} 
+              projects={vendorProjects || []} 
+            />
           </div>
 
           <div className="bg-primary/5 dark:bg-primary/10 border border-primary/20 rounded-2xl p-6">

@@ -15,6 +15,13 @@ export default async function NewPurchaseOrderPage() {
     .is('deleted_at', null)
     .order('name');
 
+  // Fetch projects for the dropdown
+  const { data: projects } = await supabase
+    .from('projects')
+    .select('id, name, vendor_id')
+    .is('deleted_at', null)
+    .order('name');
+
   return (
     <div className="p-6 lg:p-8 max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Header */}
@@ -35,7 +42,7 @@ export default async function NewPurchaseOrderPage() {
         </div>
       </div>
 
-      <CreatePOForm vendors={vendors || []} />
+      <CreatePOForm vendors={vendors || []} projects={projects || []} />
     </div>
   );
 }

@@ -5,10 +5,19 @@ import { Plus, FileText, Calendar, CircleDollarSign, X, Building2, Upload } from
 import { createContract } from "@/app/dashboard/vendors/contracts/actions";
 import { useRouter } from "next/navigation";
 
-export function CreateContractModal({ vendors }: { vendors: any[] }) {
+export function CreateContractModal({ 
+  vendors,
+  projects
+}: { 
+  vendors: any[],
+  projects: any[]
+}) {
   const [isOpen, setIsOpen] = useState(false);
   const [state, formAction, isPending] = useActionState(createContract, null);
   const router = useRouter();
+  const [selectedVendor, setSelectedVendor] = useState("");
+
+  const filteredProjects = projects.filter(p => p.vendor_id === selectedVendor);
 
   // Close modal on success
   useEffect(() => {
@@ -53,6 +62,8 @@ export function CreateContractModal({ vendors }: { vendors: any[] }) {
                   <select 
                     name="vendor_id"
                     required
+                    value={selectedVendor}
+                    onChange={(e) => setSelectedVendor(e.target.value)}
                     className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:border-primary"
                   >
                     <option value="">Choose a vendor...</option>
@@ -74,14 +85,18 @@ export function CreateContractModal({ vendors }: { vendors: any[] }) {
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Agreement Title</label>
-                <input 
-                  name="title"
-                  type="text"
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Project Selection</label>
+                <select 
+                  name="project_id"
                   required
-                  placeholder="e.g. Master Service Agreement for Site Maintenance"
-                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:border-primary"
-                />
+                  disabled={!selectedVendor}
+                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:border-primary disabled:opacity-50"
+                >
+                  <option value="">{selectedVendor ? (filteredProjects.length > 0 ? "Select a project" : "No projects for this vendor") : "Select a vendor first"}</option>
+                  {filteredProjects.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
