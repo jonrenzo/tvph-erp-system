@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
+import { RecentActivity } from "@/components/dashboard/shared/recent-activity";
 
 export const unstable_instant = { 
   prefetch: 'static',

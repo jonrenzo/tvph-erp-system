@@ -6,6 +6,7 @@ import { DocumentList } from '@/components/dashboard/vendors/document-list';
 import { VendorProfileDetails } from '@/components/dashboard/vendors/vendor-profile-details';
 import { VendorProjectsTab } from '@/components/dashboard/vendors/vendor-projects-tab';
 import { Suspense } from 'react';
+import { RecentActivity } from '@/components/dashboard/shared/recent-activity';
 
 export const unstable_instant = { 
   prefetch: 'static',
