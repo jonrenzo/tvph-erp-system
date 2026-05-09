@@ -40,13 +40,14 @@ async function VendorDetailContent({
   
   const supabase = await createClient();
 
-  // All 5 queries are independent (only depend on params.id) — run in parallel
+  // All queries run in parallel
   const [
     { data: vendor, error },
     { data: rawDocuments },
     { data: pos },
     { data: invoices },
-    { data: projects },
+    { data: projectLinks },
+    { data: userProfile },
   ] = await Promise.all([
     supabase
       .from('vendors')
@@ -59,7 +60,7 @@ async function VendorDetailContent({
       .eq('vendor_id', params.id),
     supabase
       .from('purchase_orders')
-      .select('id, po_number, issued_date, amount, status, project_id')
+      .select('id, po_number, issued_date, amount, status, project_id, currency')
       .eq('vendor_id', params.id)
       .is('deleted_at', null)
       .order('created_at', { ascending: false }),
@@ -70,12 +71,24 @@ async function VendorDetailContent({
       .is('deleted_at', null)
       .order('invoice_date', { ascending: false }),
     supabase
-      .from('projects')
-      .select('*')
-      .eq('vendor_id', params.id)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false }),
+      .from('project_vendors')
+      .select('projects(*)')
+      .eq('vendor_id', params.id),
+    supabase.auth.getUser().then(async ({ data: { user: authUser } }) => {
+      if (!authUser) return { data: null };
+      return supabase.from('profiles').select('role').eq('id', authUser.id).single();
+    }),
   ]);
+
+  const projects = projectLinks?.map((link: any) => link.projects).filter(Boolean) || [];
+  const userRole = userProfile?.role || null;
+
+  // Fetch all projects for the "Link to Project" dropdown
+  const { data: allProjects } = await supabase
+    .from('projects')
+    .select('id, name')
+    .is('deleted_at', null)
+    .order('name');
 
   if (error || !vendor) {
     notFound();
@@ -183,11 +196,11 @@ async function VendorDetailContent({
         )}
 
         {tab === 'projects' && (
-          <VendorProjectsTab vendorId={vendor.id} projects={projects || []} pos={pos || []} />
+          <VendorProjectsTab vendorId={vendor.id} projects={projects || []} pos={pos || []} allProjects={allProjects || []} />
         )}
 
         {tab === 'documents' && (
-          <DocumentList vendorId={vendor.id} documents={documentsWithUrls || []} />
+          <DocumentList vendorId={vendor.id} documents={documentsWithUrls || []} userRole={userRole} />
         )}
 
         {tab === 'purchase-orders' && (
@@ -224,7 +237,7 @@ async function VendorDetailContent({
                       <tr key={po.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/10 transition-colors">
                         <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">{po.po_number}</td>
                         <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{new Date(po.issued_date).toLocaleDateString()}</td>
-                        <td className="px-6 py-4 font-semibold text-slate-900 dark:text-white">₱{Number(po.amount).toLocaleString()}</td>
+                        <td className="px-6 py-4 font-semibold text-slate-900 dark:text-white">{vendor.currency === 'USD' ? '$' : '₱'}{Number(po.amount).toLocaleString()}</td>
                         <td className="px-6 py-4">
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                             po.status === 'paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400' :
@@ -282,7 +295,7 @@ async function VendorDetailContent({
                         <td className="px-6 py-4 text-slate-600 dark:text-slate-400">
                           {inv.purchase_orders?.po_number || <span className="text-slate-400 italic text-xs">No PO</span>}
                         </td>
-                        <td className="px-6 py-4 font-semibold text-slate-900 dark:text-white">₱{Number(inv.amount).toLocaleString()}</td>
+                        <td className="px-6 py-4 font-semibold text-slate-900 dark:text-white">{vendor.currency === 'USD' ? '$' : '₱'}{Number(inv.amount).toLocaleString()}</td>
                         <td className="px-6 py-4">
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                             inv.status === 'paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400' :

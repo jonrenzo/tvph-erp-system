@@ -1,26 +1,77 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { Save, Building2, Calendar, CircleDollarSign, FileText, FolderGit2 } from "lucide-react";
+import { Save, Building2, Calendar, CircleDollarSign, FileText, FolderGit2, AlertTriangle, ShieldCheck } from "lucide-react";
 import { createPurchaseOrder } from "@/app/dashboard/purchase-orders/actions";
+
+interface VendorWithNda {
+  id: string;
+  name: string;
+  currency: string;
+  status: string;
+  nda_approved: boolean;
+}
 
 export function CreatePOForm({ 
   vendors, 
   projects 
 }: { 
-  vendors: { id: string, name: string }[],
-  projects: { id: string, name: string, vendor_id: string }[]
+  vendors: VendorWithNda[],
+  projects: { id: string, name: string }[]
 }) {
   const [state, formAction, isPending] = useActionState(createPurchaseOrder, null);
   const [selectedVendor, setSelectedVendor] = useState("");
 
-  const filteredProjects = projects.filter(p => p.vendor_id === selectedVendor);
+  const vendor = vendors.find(v => v.id === selectedVendor);
+  const ndaBlocked = vendor && !vendor.nda_approved;
+  const statusBlocked = vendor && vendor.status !== 'active';
+  const currencySymbol = vendor?.currency === 'USD' ? '$' : '₱';
+  const currencyLabel = vendor?.currency || 'PHP';
 
   return (
     <form action={formAction} className="space-y-6">
       {state?.error && (
         <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 text-sm font-medium">
           {state.error}
+        </div>
+      )}
+
+      {/* Status Warning Banner */}
+      {statusBlocked && (
+        <div className="flex items-start gap-3 p-4 rounded-2xl bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800/50">
+          <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-red-700 dark:text-red-400">
+              Cannot Create PO — Vendor Not Active
+            </p>
+            <p className="text-xs text-red-600/80 dark:text-red-400/60 mt-1">
+              This vendor is currently marked as &quot;{vendor.status}&quot;. Only active (Accredited) vendors can receive purchase orders.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* NDA Warning Banner */}
+      {ndaBlocked && !statusBlocked && (
+        <div className="flex items-start gap-3 p-4 rounded-2xl bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/50">
+          <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+              Cannot Create PO — Signed NDA Not Approved
+            </p>
+            <p className="text-xs text-amber-600/80 dark:text-amber-400/60 mt-1">
+              This vendor does not have an approved Signed NDA on file. Go to the vendor&apos;s Accreditation Docs tab to submit and approve the NDA before creating a purchase order.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {vendor && vendor.nda_approved && vendor.status === 'active' && (
+        <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800/50">
+          <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+          <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+            Signed NDA approved — PO creation allowed. Currency: {currencyLabel}
+          </span>
         </div>
       )}
 
@@ -47,7 +98,7 @@ export function CreatePOForm({
               >
                 <option value="">Select a vendor</option>
                 {vendors.map((v) => (
-                  <option key={v.id} value={v.id}>{v.name}</option>
+                  <option key={v.id} value={v.id}>{v.name} ({v.currency})</option>
                 ))}
               </select>
             </div>
@@ -62,15 +113,12 @@ export function CreatePOForm({
               <select
                 id="project_id"
                 name="project_id"
-                disabled={!selectedVendor}
-                className="w-full pl-9 pr-4 py-2.5 bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all appearance-none disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed dark:disabled:bg-[#111] dark:disabled:text-slate-600"
+                className="w-full pl-9 pr-4 py-2.5 bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all appearance-none"
               >
                 <option value="">
-                  {selectedVendor 
-                    ? (filteredProjects.length > 0 ? "Select a project" : "No projects for this vendor") 
-                    : "Select a vendor first"}
+                  {projects.length > 0 ? "Select a project" : "No projects available"}
                 </option>
-                {filteredProjects.map((p) => (
+                {projects.map((p) => (
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
               </select>
@@ -92,10 +140,10 @@ export function CreatePOForm({
 
           <div className="space-y-2">
             <label htmlFor="amount" className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              Total Amount (PHP) <span className="text-red-500">*</span>
+              Total Amount ({currencyLabel}) <span className="text-red-500">*</span>
             </label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₱</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">{currencySymbol}</span>
               <input
                 id="amount"
                 name="amount"
@@ -152,7 +200,7 @@ export function CreatePOForm({
         </button>
         <button
           type="submit"
-          disabled={isPending}
+          disabled={isPending || !!ndaBlocked || !!statusBlocked}
           className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2.5 rounded-xl font-medium transition-all hover:shadow-lg hover:shadow-primary/20 active:scale-95"
         >
           {isPending ? (

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/utils/supabase/server';
+import { recordAuditLog } from '@/utils/audit';
 
 export async function updateOrganizationSettings(formData: FormData) {
   const supabase = await createClient();
@@ -24,6 +25,15 @@ export async function updateOrganizationSettings(formData: FormData) {
     .eq('id', 1);
 
   if (error) return { error: error.message };
+
+  // Audit log
+  await recordAuditLog({
+    entity_type: 'system_settings',
+    entity_id: '1',
+    action: 'UPDATE',
+    changes: { after: { company_name, company_address, company_tin } },
+    performed_by: user.id
+  });
 
   revalidatePath('/dashboard/settings');
   return { success: true };
@@ -51,6 +61,15 @@ export async function updateFinancialSettings(formData: FormData) {
 
   if (error) return { error: error.message };
 
+  // Audit log
+  await recordAuditLog({
+    entity_type: 'system_settings',
+    entity_id: '1',
+    action: 'UPDATE',
+    changes: { after: { default_vat_rate, currency } },
+    performed_by: user.id
+  });
+
   revalidatePath('/dashboard/settings');
   return { success: true };
 }
@@ -77,6 +96,15 @@ export async function updateUserRole(userId: string, role: string) {
     .eq('id', userId);
 
   if (error) return { error: error.message };
+
+  // Audit log
+  await recordAuditLog({
+    entity_type: 'profile',
+    entity_id: userId,
+    action: 'UPDATE',
+    changes: { after: { role } },
+    performed_by: user.id
+  });
 
   revalidatePath('/dashboard/settings');
   return { success: true };

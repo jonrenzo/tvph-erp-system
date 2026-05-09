@@ -26,7 +26,7 @@ export default async function VendorContractsPage() {
   // Fetch projects for the creation modal
   const { data: projects } = await supabase
     .from('projects')
-    .select('id, name, vendor_id')
+    .select('id, name')
     .is('deleted_at', null)
     .order('name');
 

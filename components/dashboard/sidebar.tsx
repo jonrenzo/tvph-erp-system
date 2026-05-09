@@ -148,14 +148,15 @@ function SidebarItem({
 
   return (
     <div className="space-y-1">
-      <button
+      <Link
+        href={config.subModules[0].href}
         onClick={handleParentClick}
         title={isCollapsed ? config.label : undefined}
         className={`flex w-full items-center rounded-lg py-2 text-sm font-medium transition-colors ${
           isCollapsed ? "justify-center px-0" : "justify-between gap-3 px-3"
         } ${
           isSubActive
-            ? "text-primary dark:text-primary-light"
+            ? "bg-primary/10 dark:bg-primary/20 text-primary dark:text-primary-light"
             : "text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white"
         }`}
       >
@@ -172,7 +173,7 @@ function SidebarItem({
             }`}
           />
         )}
-      </button>
+      </Link>
 
       {isOpen && !isCollapsed && (
         <div className="ml-9 space-y-1 pt-1">

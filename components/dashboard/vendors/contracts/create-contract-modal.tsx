@@ -17,7 +17,7 @@ export function CreateContractModal({
   const router = useRouter();
   const [selectedVendor, setSelectedVendor] = useState("");
 
-  const filteredProjects = projects.filter(p => p.vendor_id === selectedVendor);
+  const filteredProjects = projects;
 
   // Close modal on success
   useEffect(() => {
@@ -89,10 +89,9 @@ export function CreateContractModal({
                 <select 
                   name="project_id"
                   required
-                  disabled={!selectedVendor}
-                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:border-primary disabled:opacity-50"
+                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:border-primary"
                 >
-                  <option value="">{selectedVendor ? (filteredProjects.length > 0 ? "Select a project" : "No projects for this vendor") : "Select a vendor first"}</option>
+                  <option value="">{filteredProjects.length > 0 ? "Select a project" : "No projects available"}</option>
                   {filteredProjects.map(p => (
                     <option key={p.id} value={p.id}>{p.name}</option>
                   ))}

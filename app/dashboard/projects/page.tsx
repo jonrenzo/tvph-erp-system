@@ -1,5 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
-import { FolderGit2, Clock, ExternalLink, Building2 } from "lucide-react";
+import { FolderGit2, Clock, ExternalLink, Building2, Plus } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 
@@ -15,14 +15,14 @@ export default function ProjectsPage() {
             Projects
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Manage all projects across your vendors..
+            Manage all projects and link vendors to them.
           </p>
         </div>
         <Link
-          href="/dashboard/vendors"
-          className="inline-flex items-center gap-2 bg-white dark:bg-[#0a0a0a] border border-slate-200 dark:border-slate-800 hover:border-primary/50 text-slate-700 dark:text-slate-300 px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm active:scale-95 whitespace-nowrap"
+          href="/dashboard/projects/new"
+          className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2.5 rounded-xl font-medium transition-all hover:shadow-lg hover:shadow-primary/20 active:scale-95 whitespace-nowrap"
         >
-          <Building2 className="h-4 w-4" /> Go to Vendors to Add Project
+          <Plus className="h-5 w-5" /> New Project
         </Link>
       </div>
 
@@ -41,8 +41,11 @@ async function ProjectsContent() {
     .select(
       `
       *,
-      vendors (
-        name
+      project_vendors (
+        vendors (
+          id,
+          name
+        )
       ),
       purchase_orders (
         id
@@ -108,9 +111,23 @@ async function ProjectsContent() {
               </span>
             </div>
 
-            <p className="text-sm font-medium text-primary mb-3 flex items-center gap-1.5">
+            <p className="text-sm font-medium text-primary mb-3 flex items-start gap-1.5">
               <Building2 className="h-3.5 w-3.5" />
-              {project.vendors?.name || "Unknown Vendor"}
+              {(() => {
+                const linkedVendors = (project.project_vendors || [])
+                  .map((pv: any) => pv.vendors?.name)
+                  .filter(Boolean);
+                if (linkedVendors.length === 0) return "No vendors linked";
+                if (linkedVendors.length <= 2)
+                  return (
+                    <span className="flex flex-col">
+                      {linkedVendors.map((name: string, i: number) => (
+                        <span key={i}>{name}</span>
+                      ))}
+                    </span>
+                  );
+                return `${linkedVendors[0]} + ${linkedVendors.length - 1} more`;
+              })()}
             </p>
 
             {project.description && (

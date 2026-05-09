@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/utils/supabase/server';
 import { createNotification } from '@/utils/notifications';
+import { recordAuditLog } from '@/utils/audit';
 
 export async function uploadCompanyDocument(prevState: any, formData: FormData) {
   const supabase = await createClient();
@@ -90,7 +91,7 @@ export async function uploadCompanyDocument(prevState: any, formData: FormData) 
   }
 
   // 7. Audit log
-  await supabase.from('audit_logs').insert({
+  await recordAuditLog({
     entity_type: 'tvph_document',
     entity_id: user.id, // No doc ID returned from insert, use user as anchor
     action: 'CREATE',
@@ -134,6 +135,15 @@ export async function deleteCompanyDocument(docId: string, filePath: string) {
     .eq('id', docId);
 
   if (error) return { error: error.message };
+
+  // Audit log
+  await recordAuditLog({
+    entity_type: 'tvph_document',
+    entity_id: docId,
+    action: 'DELETE',
+    changes: { after: { archived_at: new Date().toISOString() } },
+    performed_by: user.id
+  });
 
   revalidatePath('/dashboard/documents');
   return { success: true };

@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/utils/supabase/server';
 import { redirect } from 'next/navigation';
 import { createNotification } from '@/utils/notifications';
+import { recordAuditLog } from '@/utils/audit';
 
 export async function createInvoice(prevState: any, formData: FormData) {
   const supabase = await createClient();
@@ -21,6 +22,30 @@ export async function createInvoice(prevState: any, formData: FormData) {
 
   if (!vendor_id || !invoice_number || !amount || !invoice_date) {
     return { error: 'Missing required fields.' };
+  }
+
+  // PO Amount Guard — combined invoice amounts cannot exceed the PO total
+  if (po_id) {
+    const [{ data: po }, { data: existingInvoices }] = await Promise.all([
+      supabase.from('purchase_orders').select('amount').eq('id', po_id).single(),
+      supabase.from('service_invoices')
+        .select('amount')
+        .eq('po_id', po_id)
+        .is('deleted_at', null)
+    ]);
+
+    if (po) {
+      const totalExisting = existingInvoices?.reduce((sum, inv) => sum + Number(inv.amount), 0) ?? 0;
+      const newTotal = totalExisting + parseFloat(amount);
+
+      if (newTotal > Number(po.amount)) {
+        const remaining = Number(po.amount) - totalExisting;
+        const currencySymbol = '₱'; // Dashboard uses PHP
+        return {
+          error: `Invoice amount exceeds PO limit. This PO has ${currencySymbol}${remaining.toLocaleString()} remaining capacity, but you entered ${currencySymbol}${parseFloat(amount).toLocaleString()}.`
+        };
+      }
+    }
   }
 
   let file_url = null;
@@ -64,7 +89,7 @@ export async function createInvoice(prevState: any, formData: FormData) {
   }
 
   // Audit log
-  await supabase.from('audit_logs').insert({
+  await recordAuditLog({
     entity_type: 'service_invoice',
     entity_id: newInvoice.id,
     action: 'CREATE',
@@ -96,7 +121,7 @@ export async function updateInvoiceStatus(invoiceId: string, status: string) {
 
   if (error) return { error: error.message };
 
-  await supabase.from('audit_logs').insert({
+  await recordAuditLog({
     entity_type: 'service_invoice',
     entity_id: invoiceId,
     action: 'UPDATE',
@@ -145,6 +170,15 @@ export async function recordPayment(prevState: any, formData: FormData) {
   }).select('*').single();
 
   if (error) return { error: error.message };
+
+  // Audit log
+  await recordAuditLog({
+    entity_type: 'payment',
+    entity_id: payment.id,
+    action: 'CREATE',
+    changes: { after: { amount_paid, payment_type, reference_number, invoice_id } },
+    performed_by: user.id
+  });
 
   // Fetch invoice and PO to update statuses
   const { data: invoice } = await supabase

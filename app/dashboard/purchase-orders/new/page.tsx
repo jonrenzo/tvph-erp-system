@@ -1,24 +1,34 @@
 import Link from 'next/link';
 import { createClient } from '@/utils/supabase/server';
-import { ArrowLeft, Save, FileText, Building2, Calendar, CircleDollarSign } from 'lucide-react';
-import { createPurchaseOrder } from '../actions';
+import { ArrowLeft } from 'lucide-react';
 import { CreatePOForm } from '@/components/dashboard/purchase-orders/create-po-form';
 
 export default async function NewPurchaseOrderPage() {
   const supabase = await createClient();
   
-  // Fetch vendors for the dropdown
+  // Fetch vendors with their NDA status and currency
   const { data: vendors } = await supabase
     .from('vendors')
-    .select('id, name')
-    .eq('status', 'active')
+    .select('id, name, currency, status, vendor_documents(doc_type, status)')
     .is('deleted_at', null)
     .order('name');
 
-  // Fetch projects for the dropdown
+  // Transform to include NDA approval flag
+  const vendorsWithNda = (vendors || []).map((v: any) => {
+    const ndaDoc = v.vendor_documents?.find((d: any) => d.doc_type === 'signed_nda');
+    return {
+      id: v.id,
+      name: v.name,
+      currency: v.currency || 'PHP',
+      status: v.status,
+      nda_approved: ndaDoc?.status === 'approved',
+    };
+  });
+
+  // Fetch all projects (no longer filtered by vendor — many-to-many)
   const { data: projects } = await supabase
     .from('projects')
-    .select('id, name, vendor_id')
+    .select('id, name')
     .is('deleted_at', null)
     .order('name');
 
@@ -42,7 +52,7 @@ export default async function NewPurchaseOrderPage() {
         </div>
       </div>
 
-      <CreatePOForm vendors={vendors || []} projects={projects || []} />
+      <CreatePOForm vendors={vendorsWithNda} projects={projects || []} />
     </div>
   );
 }

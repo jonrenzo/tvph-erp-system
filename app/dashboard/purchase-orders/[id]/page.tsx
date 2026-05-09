@@ -59,11 +59,10 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
     notFound();
   }
 
-  // Fetch projects for this vendor to allow assignment
-  const { data: vendorProjects } = await supabase
+  // Fetch all projects to allow assignment (many-to-many architecture)
+  const { data: allProjects } = await supabase
     .from("projects")
     .select("id, name")
-    .eq("vendor_id", po.vendor_id)
     .is("deleted_at", null)
     .order("name");
 
@@ -445,7 +444,7 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
             <POProjectAssigner 
               poId={po.id} 
               currentProjectId={po.project_id} 
-              projects={vendorProjects || []} 
+              projects={allProjects || []} 
             />
           </div>
 

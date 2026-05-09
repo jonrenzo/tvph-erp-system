@@ -1,13 +1,12 @@
 "use client";
 
-import { useState, useActionState, useEffect } from "react";
-import { FolderGit2, Plus, Edit2, ExternalLink, ChevronDown, ChevronUp, Clock, AlertCircle } from "lucide-react";
-import { createProject, updateProject } from "@/app/dashboard/vendors/actions";
+import { useState, useTransition } from "react";
+import { FolderGit2, Plus, ExternalLink, ChevronDown, ChevronUp, Clock, AlertCircle, Unlink, Loader2 } from "lucide-react";
+import { linkVendorToProject, removeVendorFromProject } from "@/app/dashboard/projects/actions";
 import Link from "next/link";
 
 type Project = {
   id: string;
-  vendor_id: string;
   name: string;
   description: string;
   contract_url: string;
@@ -27,27 +26,24 @@ type PO = {
 export function VendorProjectsTab({ 
   vendorId, 
   projects, 
-  pos 
+  pos,
+  allProjects,
 }: { 
   vendorId: string; 
   projects: Project[]; 
   pos: PO[]; 
+  allProjects?: { id: string; name: string }[];
 }) {
-  const [isAdding, setIsAdding] = useState(false);
-  const [editingProject, setEditingProject] = useState<Project | null>(null);
-  const [expandedProject, setExpandedProject] = useState<string | null>(null);
+  const [isLinking, setIsLinking] = useState(false);
+  const [selectedProject, setSelectedProject] = useState("");
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+  const [isPendingLink, startLinkTransition] = useTransition();
+  const [isPendingRemove, startRemoveTransition] = useTransition();
+  const [removingProjectId, setRemovingProjectId] = useState<string | null>(null);
 
-  const [createState, createAction, isCreating] = useActionState(createProject, null);
-  const [updateState, updateAction, isUpdating] = useActionState(updateProject, null);
-
-  useEffect(() => {
-    if (createState?.success) {
-      setIsAdding(false);
-    }
-    if (updateState?.success) {
-      setEditingProject(null);
-    }
-  }, [createState, updateState]);
+  const linkedProjectIds = projects.map(p => p.id);
+  const availableProjects = (allProjects || []).filter(p => !linkedProjectIds.includes(p.id));
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -58,132 +54,125 @@ export function VendorProjectsTab({
     }
   };
 
+  const handleLink = () => {
+    if (!selectedProject) return;
+    setLinkError(null);
+    startLinkTransition(async () => {
+      const result = await linkVendorToProject(selectedProject, vendorId);
+      if (result.error) {
+        setLinkError(result.error);
+      } else {
+        setIsLinking(false);
+        setSelectedProject("");
+        window.location.reload();
+      }
+    });
+  };
+
+  const handleRemove = (projectId: string) => {
+    setRemoveError(null);
+    setRemovingProjectId(projectId);
+    startRemoveTransition(async () => {
+      const result = await removeVendorFromProject(projectId, vendorId);
+      if (result.error) {
+        setRemoveError(result.error);
+      } else {
+        window.location.reload();
+      }
+      setRemovingProjectId(null);
+    });
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-            <FolderGit2 className="h-5 w-5 text-primary" /> Projects
+            <FolderGit2 className="h-5 w-5 text-primary" /> Linked Projects
           </h2>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Manage projects and their associated purchase orders for this vendor.
+            Projects this vendor is linked to and their associated purchase orders.
           </p>
         </div>
-        {!isAdding && !editingProject && (
-          <button
-            onClick={() => setIsAdding(true)}
-            className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm active:scale-95"
-          >
-            <Plus className="h-4 w-4" /> Add Project
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {!isLinking && (
+            <button
+              onClick={() => setIsLinking(true)}
+              className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm active:scale-95"
+            >
+              <Plus className="h-4 w-4" /> Link to Project
+            </button>
+          )}
+        </div>
       </div>
 
-      {(isAdding || editingProject) && (
-        <div className="bg-white dark:bg-[#071F15] border border-primary/30 rounded-2xl p-6 shadow-sm ring-1 ring-primary/20">
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
-            {isAdding ? "Create New Project" : "Edit Project"}
-          </h3>
-          <form action={isAdding ? createAction : updateAction} className="space-y-4">
-            {(createState?.error || updateState?.error) && (
-              <div className="p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 text-sm font-medium">
-                {createState?.error || updateState?.error}
-              </div>
-            )}
-            
-            <input type="hidden" name="vendor_id" value={vendorId} />
-            {editingProject && <input type="hidden" name="id" value={editingProject.id} />}
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="col-span-2 md:col-span-1">
-                <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1 block">
-                  Project Name
-                </label>
-                <input
-                  name="name"
-                  defaultValue={editingProject?.name || ""}
-                  required
-                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                  placeholder="e.g. Q3 Marketing Campaign"
-                />
-              </div>
-              <div className="col-span-2 md:col-span-1">
-                <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1 block">
-                  Status
-                </label>
-                <select
-                  name="status"
-                  defaultValue={editingProject?.status || "active"}
-                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                >
-                  <option value="active">Active</option>
-                  <option value="completed">Completed</option>
-                  <option value="on_hold">On Hold</option>
-                  <option value="cancelled">Cancelled</option>
-                </select>
-              </div>
-              <div className="col-span-2">
-                <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1 block">
-                  Contract URL (Optional)
-                </label>
-                <input
-                  name="contract_url"
-                  type="url"
-                  defaultValue={editingProject?.contract_url || ""}
-                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                  placeholder="https://..."
-                />
-              </div>
-              <div className="col-span-2">
-                <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1 block">
-                  Description
-                </label>
-                <textarea
-                  name="description"
-                  defaultValue={editingProject?.description || ""}
-                  rows={3}
-                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all resize-none"
-                  placeholder="Project details..."
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-4">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsAdding(false);
-                  setEditingProject(null);
-                }}
-                className="px-4 py-2 rounded-xl font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-sm"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isCreating || isUpdating}
-                className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-white px-5 py-2 rounded-xl text-sm font-medium transition-all"
-              >
-                {(isCreating || isUpdating) ? "Saving..." : "Save Project"}
-              </button>
-            </div>
-          </form>
+      {/* Link Form */}
+      {isLinking && (
+        <div className="bg-white dark:bg-[#071F15] border border-primary/30 rounded-2xl p-5 shadow-sm ring-1 ring-primary/20 space-y-3">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Link to an Existing Project</h3>
+          <select
+            value={selectedProject}
+            onChange={(e) => setSelectedProject(e.target.value)}
+            className="w-full px-4 py-2.5 bg-slate-50 dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary"
+          >
+            <option value="">Select a project...</option>
+            {availableProjects.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+          {availableProjects.length === 0 && (
+            <p className="text-xs text-slate-500">No available projects. <Link href="/dashboard/projects/new" className="text-primary hover:underline">Create one first.</Link></p>
+          )}
+          {linkError && (
+            <p className="text-xs text-red-500 flex items-center gap-1"><AlertCircle className="h-3 w-3" />{linkError}</p>
+          )}
+          <div className="flex gap-2 justify-end">
+            <button
+              onClick={() => { setIsLinking(false); setLinkError(null); }}
+              className="px-4 py-2 rounded-xl font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-sm"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleLink}
+              disabled={isPendingLink || !selectedProject}
+              className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-white px-5 py-2 rounded-xl text-sm font-medium transition-all"
+            >
+              {isPendingLink ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+              Link
+            </button>
+          </div>
         </div>
       )}
 
-      {projects.length === 0 && !isAdding && (
+      {removeError && (
+        <div className="p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/50 text-red-500 text-xs font-medium flex items-start gap-2">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+          {removeError}
+        </div>
+      )}
+
+      {projects.length === 0 && !isLinking && (
         <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl p-12 text-center shadow-sm">
           <FolderGit2 className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-slate-900 dark:text-white mb-2">No projects yet</h3>
+          <h3 className="text-lg font-medium text-slate-900 dark:text-white mb-2">No projects linked</h3>
           <p className="text-slate-500 dark:text-slate-400 max-w-sm mx-auto mb-6">
-            Create a project to start tracking related contracts and purchase orders for this vendor.
+            Link this vendor to an existing project, or create a new one first.
           </p>
-          <button
-            onClick={() => setIsAdding(true)}
-            className="inline-flex items-center gap-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-4 py-2 rounded-xl text-sm font-medium hover:opacity-90 transition-opacity"
-          >
-            <Plus className="h-4 w-4" /> Create First Project
-          </button>
+          <div className="flex items-center justify-center gap-3">
+            <button
+              onClick={() => setIsLinking(true)}
+              className="inline-flex items-center gap-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-4 py-2 rounded-xl text-sm font-medium hover:opacity-90 transition-opacity"
+            >
+              <Plus className="h-4 w-4" /> Link to Project
+            </button>
+            <Link
+              href="/dashboard/projects/new"
+              className="inline-flex items-center gap-2 bg-white dark:bg-[#0a0a0a] border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 px-4 py-2 rounded-xl text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+            >
+              <FolderGit2 className="h-4 w-4" /> Create New Project
+            </Link>
+          </div>
         </div>
       )}
 
@@ -201,9 +190,23 @@ export function VendorProjectsTab({
                   <h3 className="text-lg font-semibold text-slate-900 dark:text-white line-clamp-1">
                     {project.name}
                   </h3>
-                  <span className={`shrink-0 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${getStatusColor(project.status)}`}>
-                    {project.status.replace('_', ' ')}
-                  </span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${getStatusColor(project.status)}`}>
+                      {project.status.replace('_', ' ')}
+                    </span>
+                    <button
+                      onClick={() => handleRemove(project.id)}
+                      disabled={isPendingRemove && removingProjectId === project.id}
+                      className="text-slate-400 hover:text-red-500 transition-colors p-0.5"
+                      title="Unlink from project"
+                    >
+                      {isPendingRemove && removingProjectId === project.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Unlink className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                  </div>
                 </div>
                 
                 {project.description && (

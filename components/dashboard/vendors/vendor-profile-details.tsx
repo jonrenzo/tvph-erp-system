@@ -247,6 +247,21 @@ export function VendorProfileDetails({ vendor }: { vendor: any }) {
                 {vendor.payment_terms || "Standard Terms"}
               </p>
             </div>
+
+            <div className="pt-4 border-t border-slate-100 dark:border-slate-800/50">
+              <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                Currency
+              </label>
+              <p className="mt-1">
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                  vendor.currency === 'USD'
+                    ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400'
+                    : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400'
+                }`}>
+                  {vendor.currency === 'USD' ? '$ USD' : '₱ PHP'}
+                </span>
+              </p>
+            </div>
           </div>
         </div>
 
@@ -508,6 +523,20 @@ export function VendorProfileDetails({ vendor }: { vendor: any }) {
                 defaultValue={vendor.payment_terms}
                 className="w-full px-4 py-2.5 bg-slate-50 dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
               />
+            </div>
+
+            <div className="pt-4 border-t border-slate-100 dark:border-slate-800/50">
+              <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1 block">
+                Currency
+              </label>
+              <select
+                name="currency"
+                defaultValue={vendor.currency || 'PHP'}
+                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all appearance-none"
+              >
+                <option value="PHP">₱ PHP — Philippine Peso</option>
+                <option value="USD">$ USD — US Dollar</option>
+              </select>
             </div>
             
             <div className="pt-4 border-t border-slate-100 dark:border-slate-800/50">

@@ -22,28 +22,44 @@ async function ProjectDetailLoader({ paramsPromise }: { paramsPromise: Promise<{
   const params = await paramsPromise;
   const supabase = await createClient();
 
-  const [{ data: project }, { data: pos }] = await Promise.all([
+  const [{ data: project }, { data: pos }, { data: projectVendors }, { data: allVendors }] = await Promise.all([
     supabase
       .from('projects')
-      .select(`
-        *,
-        vendors (
-          id,
-          name
-        )
-      `)
+      .select('*')
       .eq('id', params.id)
       .single(),
     supabase
       .from('purchase_orders')
-      .select('*')
+      .select('*, vendors(id, name, currency)')
       .eq('project_id', params.id)
-      .order('created_at', { ascending: false })
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('project_vendors')
+      .select('vendor_id, vendors(id, name, currency)')
+      .eq('project_id', params.id),
+    supabase
+      .from('vendors')
+      .select('id, name')
+      .eq('status', 'active')
+      .is('deleted_at', null)
+      .order('name'),
   ]);
 
   if (!project) notFound();
 
-  return <ProjectDetailContent project={project} pos={pos || []} />;
+  const linkedVendors = (projectVendors || []).map((pv: any) => pv.vendors).filter(Boolean);
+  const linkedVendorIds = linkedVendors.map((v: any) => v.id);
+  const availableVendors = (allVendors || []).filter((v: any) => !linkedVendorIds.includes(v.id));
+
+  return (
+    <ProjectDetailContent 
+      project={project} 
+      pos={pos || []} 
+      linkedVendors={linkedVendors}
+      availableVendors={availableVendors}
+    />
+  );
 }
 
 function ProjectDetailSkeleton() {

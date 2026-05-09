@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/utils/supabase/server';
+import { recordAuditLog } from '@/utils/audit';
 
 export async function createContract(prevState: any, formData: FormData) {
   const supabase = await createClient();
@@ -65,6 +66,15 @@ export async function createContract(prevState: any, formData: FormData) {
 
   if (error) return { error: error.message };
 
+  // Audit log
+  await recordAuditLog({
+    entity_type: 'vendor_contract',
+    entity_id: vendor_id,
+    action: 'CREATE',
+    changes: { after: { contract_number, title, total_value } },
+    performed_by: user.id
+  });
+
   revalidatePath('/dashboard/vendors/contracts');
   revalidatePath(`/dashboard/vendors/${vendor_id}`);
   return { success: true };
@@ -78,6 +88,14 @@ export async function updateContractStatus(id: string, status: string) {
     .eq('id', id);
 
   if (error) return { error: error.message };
+
+  // Audit log
+  await recordAuditLog({
+    entity_type: 'vendor_contract',
+    entity_id: id,
+    action: 'UPDATE',
+    changes: { after: { status } }
+  });
 
   revalidatePath('/dashboard/vendors/contracts');
   return { success: true };

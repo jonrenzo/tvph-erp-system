@@ -32,13 +32,16 @@ interface AuditLog {
 }
 
 function formatSummary(log: AuditLog) {
-  if (log.action === "CREATE") return `Created ${log.entity_type.replace(/_/g, " ")}`;
-  if (log.action === "DELETE") return `Deleted ${log.entity_type.replace(/_/g, " ")}`;
+  if (log.action === "CREATE")
+    return `Created ${log.entity_type.replace(/_/g, " ")}`;
+  if (log.action === "DELETE")
+    return `Deleted ${log.entity_type.replace(/_/g, " ")}`;
   const changes = log.changes?.after || {};
   const changedFields = Object.keys(changes).filter(
-    (k) => k !== "updated_at" && k !== "id"
+    (k) => k !== "updated_at" && k !== "id",
   );
-  if (changedFields.length === 1) return `Updated ${changedFields[0].replace(/_/g, " ")}`;
+  if (changedFields.length === 1)
+    return `Updated ${changedFields[0].replace(/_/g, " ")}`;
   if (changedFields.length > 1) return `Updated ${changedFields.length} fields`;
   return `Modified ${log.entity_type.replace(/_/g, " ")}`;
 }
@@ -48,7 +51,10 @@ function formatTimeAgo(dateString: string) {
   if (diff < 60) return "Just now";
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return new Date(dateString).toLocaleDateString([], { month: "short", day: "numeric" });
+  return new Date(dateString).toLocaleDateString([], {
+    month: "short",
+    day: "numeric",
+  });
 }
 
 export function AuditLogCard() {
@@ -68,7 +74,7 @@ export function AuditLogCard() {
   const buildUrl = useCallback(
     (currentOffset: number) =>
       `/api/audit-logs/recent?entityTypes=${entityTypes!.join(",")}&limit=${PAGE_SIZE}&offset=${currentOffset}`,
-    [entityTypes]
+    [entityTypes],
   );
 
   // Initial load — reset everything when route changes
@@ -131,27 +137,21 @@ export function AuditLogCard() {
     <div className="w-[300px] bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-300">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-[#0a0a0a]/60">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 h-3">
           <History className="h-3.5 w-3.5 text-primary shrink-0" />
           <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 capitalize">
             {sectionLabel} logs
           </span>
         </div>
-        <div className="flex items-center gap-2">
-          <Link
-            href="/dashboard/audit-logs"
-            className="text-[9px] font-bold uppercase tracking-widest text-slate-400 hover:text-primary transition-colors"
-          >
-            View All
-          </Link>
+        <div className="flex items-center gap-1">
           <button
             onClick={() => setIsMinimized(!isMinimized)}
             className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
           >
             {isMinimized ? (
-              <ChevronUp className="h-3.5 w-3.5" />
+              <ChevronUp className="h-5 w-5" />
             ) : (
-              <ChevronDown className="h-3.5 w-3.5" />
+              <ChevronDown className="h-5 w-5" />
             )}
           </button>
         </div>
@@ -166,7 +166,9 @@ export function AuditLogCard() {
           {loading ? (
             <div className="flex items-center justify-center h-full gap-2 opacity-50">
               <Loader2 className="h-4 w-4 animate-spin text-primary" />
-              <span className="text-[10px] font-bold uppercase tracking-widest">Loading...</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest">
+                Loading...
+              </span>
             </div>
           ) : logs.length === 0 ? (
             <p className="text-[10px] text-slate-400 italic text-center py-6">
@@ -187,7 +189,8 @@ export function AuditLogCard() {
                       {formatSummary(log)}
                     </p>
                     <p className="text-[9px] text-slate-400 mt-0.5">
-                      {log.profiles?.full_name?.split(" ")[0] ?? "System"} · {formatTimeAgo(log.created_at)}
+                      {log.profiles?.full_name?.split(" ")[0] ?? "System"} ·{" "}
+                      {formatTimeAgo(log.created_at)}
                     </p>
                   </div>
                 </div>
@@ -197,7 +200,9 @@ export function AuditLogCard() {
               {loadingMore && (
                 <div className="flex items-center justify-center py-3 gap-1.5 opacity-50">
                   <Loader2 className="h-3 w-3 animate-spin text-primary" />
-                  <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Loading more...</span>
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">
+                    Loading more...
+                  </span>
                 </div>
               )}
             </>
@@ -208,7 +213,9 @@ export function AuditLogCard() {
       {/* Minimized: show only last log */}
       {isMinimized && logs.length > 0 && (
         <div className="flex items-center gap-3 px-4 py-2.5">
-          <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${ACTION_COLORS[logs[0].action] ?? "bg-slate-400"}`} />
+          <div
+            className={`h-1.5 w-1.5 rounded-full shrink-0 ${ACTION_COLORS[logs[0].action] ?? "bg-slate-400"}`}
+          />
           <p className="text-[10px] text-slate-600 dark:text-slate-400 truncate capitalize flex-1">
             {formatSummary(logs[0])}
           </p>

@@ -383,6 +383,24 @@ export default function NewVendorPage() {
                   placeholder="e.g. 30 Days, DP + 15 Days"
                 />
               </div>
+
+              <div className="space-y-2">
+                <label
+                  htmlFor="currency"
+                  className="text-sm font-medium text-slate-700 dark:text-slate-300"
+                >
+                  Currency
+                </label>
+                <select
+                  id="currency"
+                  name="currency"
+                  defaultValue="PHP"
+                  className="w-full px-4 py-2.5 bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all appearance-none"
+                >
+                  <option value="PHP">₱ PHP — Philippine Peso</option>
+                  <option value="USD">$ USD — US Dollar</option>
+                </select>
+              </div>
             </div>
 
             {/* Secondary Banks */}

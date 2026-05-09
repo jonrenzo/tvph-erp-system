@@ -2,6 +2,7 @@
 
 import { createClient } from '@/utils/supabase/server';
 import { revalidatePath } from 'next/cache';
+import { recordAuditLog } from '@/utils/audit';
 
 export async function updateProfile(formData: FormData) {
   const supabase = await createClient();
@@ -16,6 +17,15 @@ export async function updateProfile(formData: FormData) {
     .eq('id', user.id);
 
   if (error) return { error: error.message };
+
+  // Audit log
+  await recordAuditLog({
+    entity_type: 'profile',
+    entity_id: user.id,
+    action: 'UPDATE',
+    changes: { after: { full_name } },
+    performed_by: user.id
+  });
 
   revalidatePath('/dashboard/profile');
   return { success: true };
@@ -53,6 +63,15 @@ export async function updateAvatar(formData: FormData) {
 
   if (updateError) return { error: updateError.message };
 
+  // Audit log
+  await recordAuditLog({
+    entity_type: 'profile',
+    entity_id: user.id,
+    action: 'UPDATE',
+    changes: { after: { avatar_url: publicUrl } },
+    performed_by: user.id
+  });
+
   revalidatePath('/dashboard/profile');
   return { success: true, url: publicUrl };
 }
@@ -67,6 +86,15 @@ export async function requestPasswordReset() {
   });
 
   if (error) return { error: error.message };
+
+  // Audit log
+  await recordAuditLog({
+    entity_type: 'user',
+    entity_id: user.id,
+    action: 'PASSWORD_RESET',
+    changes: { email: user.email },
+    performed_by: user.id
+  });
 
   return { success: true };
 }

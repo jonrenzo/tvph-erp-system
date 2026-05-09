@@ -4,6 +4,54 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/utils/supabase/server';
 import { redirect } from 'next/navigation';
 import { createNotification } from '@/utils/notifications';
+import { recordAuditLog } from '@/utils/audit';
+
+export async function approveVendorDocument(vendorId: string, docType: string, expiryDate: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Unauthorized' };
+
+  // Role check — admin only
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single();
+
+  if (!profile || profile.role !== 'admin') {
+    return { error: 'Only admins can approve documents.' };
+  }
+
+  if (!expiryDate) {
+    return { error: 'An expiry date is required when approving a document.' };
+  }
+
+  const { error } = await supabase
+    .from('vendor_documents')
+    .update({
+      status: 'approved',
+      approved_at: new Date().toISOString(),
+      expiry_date: expiryDate,
+      uploaded_by: user.id,
+      updated_at: new Date().toISOString()
+    })
+    .eq('vendor_id', vendorId)
+    .eq('doc_type', docType)
+    .is('archived_at', null);
+
+  if (error) return { error: error.message };
+
+  await recordAuditLog({
+    entity_type: 'vendor_document',
+    entity_id: vendorId,
+    action: 'UPDATE',
+    changes: { after: { doc_type: docType, status: 'approved', expiry_date: expiryDate } },
+    performed_by: user.id
+  });
+
+  revalidatePath(`/dashboard/vendors/${vendorId}`);
+  return { success: true };
+}
 
 export async function updateVendorStatus(vendorId: string, status: 'active' | 'inactive') {
   const supabase = await createClient();
@@ -17,7 +65,7 @@ export async function updateVendorStatus(vendorId: string, status: 'active' | 'i
 
   if (error) return { error: error.message };
 
-  await supabase.from('audit_logs').insert({
+  await recordAuditLog({
     entity_type: 'vendor',
     entity_id: vendorId,
     action: 'UPDATE',
@@ -71,7 +119,7 @@ export async function uploadDocument(vendorId: string, docType: string, formData
 
   if (dbError) return { error: dbError.message };
 
-  await supabase.from('audit_logs').insert({
+  await recordAuditLog({
     entity_type: 'vendor_document',
     entity_id: vendorId,
     action: 'UPDATE',
@@ -112,6 +160,7 @@ export async function createVendor(prevState: any, formData: FormData) {
   const bank_account_name = formData.get('bank_account_name') as string;
   const payment_terms = formData.get('payment_terms') as string;
   const notes = formData.get('notes') as string;
+  const currency = (formData.get('currency') as string) || 'PHP';
 
   let secondary_contacts = [];
   try {
@@ -143,6 +192,7 @@ export async function createVendor(prevState: any, formData: FormData) {
     bank_account_name,
     payment_terms,
     notes,
+    currency,
     secondary_contacts,
     secondary_banking,
     created_by: user.id,
@@ -155,7 +205,7 @@ export async function createVendor(prevState: any, formData: FormData) {
   }
 
   // Basic Audit log
-  await supabase.from('audit_logs').insert({
+  await recordAuditLog({
     entity_type: 'vendor',
     entity_id: newVendor.id,
     action: 'CREATE',
@@ -184,6 +234,7 @@ export async function updateVendorProfile(prevState: any, formData: FormData) {
   const bank_account_name = formData.get('bank_account_name') as string;
   const payment_terms = formData.get('payment_terms') as string;
   const notes = formData.get('notes') as string;
+  const currency = (formData.get('currency') as string) || 'PHP';
 
   let secondary_contacts = [];
   try {
@@ -211,6 +262,7 @@ export async function updateVendorProfile(prevState: any, formData: FormData) {
       bank_account_name,
       payment_terms,
       notes,
+      currency,
       secondary_contacts,
       secondary_banking,
       updated_at: new Date().toISOString()
@@ -222,7 +274,7 @@ export async function updateVendorProfile(prevState: any, formData: FormData) {
     return { error: error.message || 'Failed to update vendor.' };
   }
 
-  await supabase.from('audit_logs').insert({
+  await recordAuditLog({
     entity_type: 'vendor',
     entity_id: id,
     action: 'UPDATE',
@@ -234,69 +286,4 @@ export async function updateVendorProfile(prevState: any, formData: FormData) {
   return { success: true };
 }
 
-export async function createProject(prevState: any, formData: FormData) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
-
-  const vendor_id = formData.get('vendor_id') as string;
-  const name = formData.get('name') as string;
-  const description = formData.get('description') as string;
-  const contract_url = formData.get('contract_url') as string;
-  const status = formData.get('status') as string || 'active';
-
-  if (!vendor_id || !name) {
-    return { error: 'Vendor ID and Project Name are required.' };
-  }
-
-  const { error } = await supabase.from('projects').insert({
-    vendor_id,
-    name,
-    description,
-    contract_url,
-    status,
-    created_by: user.id
-  });
-
-  if (error) {
-    return { error: error.message };
-  }
-
-  revalidatePath(`/dashboard/vendors/${vendor_id}`);
-  return { success: true };
-}
-
-export async function updateProject(prevState: any, formData: FormData) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
-
-  const id = formData.get('id') as string;
-  const vendor_id = formData.get('vendor_id') as string;
-  const name = formData.get('name') as string;
-  const description = formData.get('description') as string;
-  const contract_url = formData.get('contract_url') as string;
-  const status = formData.get('status') as string;
-
-  if (!id || !name) {
-    return { error: 'Project ID and Name are required.' };
-  }
-
-  const { error } = await supabase
-    .from('projects')
-    .update({
-      name,
-      description,
-      contract_url,
-      status,
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', id);
-
-  if (error) {
-    return { error: error.message };
-  }
-
-  revalidatePath(`/dashboard/vendors/${vendor_id}`);
-  return { success: true };
-}
+// Project actions have been moved to app/dashboard/projects/actions.ts
