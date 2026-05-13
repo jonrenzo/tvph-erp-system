@@ -34,7 +34,7 @@ export async function GET(
   return new Response(pdfBytes as BodyInit, {
     headers: {
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Disposition': `inline; filename="${filename}"`,
     },
   });
 }

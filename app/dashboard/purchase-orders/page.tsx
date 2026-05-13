@@ -177,8 +177,10 @@ async function PurchaseOrdersContent({ searchParams: searchParamsPromise }: { se
                     <td className="px-6 py-4 text-right flex items-center justify-end gap-1">
                       <a
                         href={`/api/purchase-orders/${po.id}/download`}
+                        target="_blank"
+                        rel="noopener noreferrer"
                         className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-slate-400 hover:text-primary hover:bg-primary/10 transition-colors"
-                        title="Download PDF"
+                        title="View PDF"
                       >
                         <Download className="h-4 w-4" />
                       </a>
