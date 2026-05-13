@@ -14,7 +14,8 @@ import {
   Clock,
   User,
   Mail,
-  FolderGit2
+  FolderGit2,
+  FileDown
 } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
@@ -147,6 +148,13 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
               </button>
             </form>
           )}
+          <a
+            href={`/api/purchase-orders/${po.id}/download`}
+            className="inline-flex items-center gap-2 bg-white dark:bg-[#0a0a0a] border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 px-4 py-2 rounded-xl text-sm font-medium transition-all"
+          >
+            <FileDown className="h-4 w-4" />
+            Download PDF
+          </a>
           <button className="bg-white dark:bg-[#0a0a0a] border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 px-4 py-2 rounded-xl text-sm font-medium transition-all">
             Edit
           </button>

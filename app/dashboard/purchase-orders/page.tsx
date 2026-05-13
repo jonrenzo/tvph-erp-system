@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { createClient } from '@/utils/supabase/server';
-import { Plus, Search, FileText, ChevronRight, TrendingUp } from 'lucide-react';
+import { Plus, Search, FileText, ChevronRight, TrendingUp, Download } from 'lucide-react';
 import { Suspense } from 'react';
 import { SearchInput } from '@/components/ui/search-input';
 import { StatusSelect } from '@/components/ui/status-select';
@@ -174,7 +174,14 @@ async function PurchaseOrdersContent({ searchParams: searchParamsPromise }: { se
                         {po.status.replace('_', ' ').charAt(0).toUpperCase() + po.status.replace('_', ' ').slice(1)}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-right">
+                    <td className="px-6 py-4 text-right flex items-center justify-end gap-1">
+                      <a
+                        href={`/api/purchase-orders/${po.id}/download`}
+                        className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-slate-400 hover:text-primary hover:bg-primary/10 transition-colors"
+                        title="Download PDF"
+                      >
+                        <Download className="h-4 w-4" />
+                      </a>
                       <Link 
                         href={`/dashboard/purchase-orders/${po.id}`} 
                         className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-slate-400 group-hover:text-primary group-hover:bg-primary/10 transition-colors"
