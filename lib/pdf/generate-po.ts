@@ -21,6 +21,7 @@ export interface VendorData {
   address?: string | null
   contact_person?: string | null
   contact_phone?: string | null
+  contact_fax?: string | null
   payment_terms?: string | null
 }
 
@@ -103,6 +104,7 @@ export async function generatePoDocument(
   setField('address_2_p1', city)
   setField('contact_person_p1', vendor.contact_person)
   setField('contact_phone_p1', vendor.contact_phone)
+  setField('contact_fax_p1', vendor.contact_fax)
   setField('payment_terms_p1', vendor.payment_terms)
   setField('date_prepared_p1', dateStr)
   setField('li_01_line_no', '1')
@@ -125,6 +127,7 @@ export async function generatePoDocument(
   setField('address_2_p2', city)
   setField('contact_person_p2', vendor.contact_person)
   setField('contact_phone_p2', vendor.contact_phone)
+  setField('contact_fax_p2', vendor.contact_fax)
   setField('payment_terms_p2', vendor.payment_terms)
   setField('date_prepared_p2', dateStr)
 
@@ -145,6 +148,7 @@ export async function generatePoDocument(
   setField('address_2_p3', city)
   setField('contact_person_p3', vendor.contact_person)
   setField('contact_phone_p3', vendor.contact_phone)
+  setField('contact_fax_p3', vendor.contact_fax)
   setField('payment_terms_p3', vendor.payment_terms)
   setField('date_prepared_p3', dateStr)
 

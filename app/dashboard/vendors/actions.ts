@@ -155,6 +155,7 @@ export async function createVendor(prevState: any, formData: FormData) {
   const contact_person = formData.get('contact_person') as string;
   const contact_email = formData.get('contact_email') as string;
   const contact_phone = formData.get('contact_phone') as string;
+  const contact_fax = formData.get('contact_fax') as string;
   const bank_name = formData.get('bank_name') as string;
   const bank_account_number = formData.get('bank_account_number') as string;
   const bank_account_name = formData.get('bank_account_name') as string;
@@ -187,6 +188,7 @@ export async function createVendor(prevState: any, formData: FormData) {
     contact_person,
     contact_email,
     contact_phone,
+    contact_fax,
     bank_name,
     bank_account_number,
     bank_account_name,
@@ -229,6 +231,7 @@ export async function updateVendorProfile(prevState: any, formData: FormData) {
   const contact_person = formData.get('contact_person') as string;
   const contact_email = formData.get('contact_email') as string;
   const contact_phone = formData.get('contact_phone') as string;
+  const contact_fax = formData.get('contact_fax') as string;
   const bank_name = formData.get('bank_name') as string;
   const bank_account_number = formData.get('bank_account_number') as string;
   const bank_account_name = formData.get('bank_account_name') as string;
@@ -257,6 +260,7 @@ export async function updateVendorProfile(prevState: any, formData: FormData) {
       contact_person,
       contact_email,
       contact_phone,
+      contact_fax,
       bank_name,
       bank_account_number,
       bank_account_name,

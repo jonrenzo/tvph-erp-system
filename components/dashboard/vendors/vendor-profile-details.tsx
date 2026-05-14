@@ -109,6 +109,14 @@ export function VendorProfileDetails({ vendor }: { vendor: any }) {
                   {vendor.contact_phone || "-"}
                 </p>
               </div>
+              <div>
+                <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  Fax
+                </label>
+                <p className="mt-1 text-slate-900 dark:text-slate-300">
+                  {vendor.contact_fax || "-"}
+                </p>
+              </div>
               <div className="col-span-2">
                 <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   Email Address
@@ -342,6 +350,16 @@ export function VendorProfileDetails({ vendor }: { vendor: any }) {
                 <input
                   name="contact_phone"
                   defaultValue={vendor.contact_phone}
+                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                />
+              </div>
+              <div className="col-span-2 md:col-span-1">
+                <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1 block">
+                  Fax
+                </label>
+                <input
+                  name="contact_fax"
+                  defaultValue={vendor.contact_fax}
                   className="w-full px-4 py-2.5 bg-slate-50 dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                 />
               </div>
