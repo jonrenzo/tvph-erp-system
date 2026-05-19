@@ -76,6 +76,37 @@ export async function updateAvatar(formData: FormData) {
   return { success: true, url: publicUrl };
 }
 
+export async function changePassword(currentPassword: string, newPassword: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user || !user.email) return { error: 'Unauthorized' };
+
+  const { error: signInError } = await supabase.auth.signInWithPassword({
+    email: user.email,
+    password: currentPassword,
+  });
+
+  if (signInError) {
+    return { error: 'Current password is incorrect' };
+  }
+
+  const { error: updateError } = await supabase.auth.updateUser({
+    password: newPassword,
+  });
+
+  if (updateError) return { error: updateError.message };
+
+  await recordAuditLog({
+    entity_type: 'user',
+    entity_id: user.id,
+    action: 'PASSWORD_CHANGE',
+    changes: {},
+    performed_by: user.id,
+  });
+
+  return { success: true };
+}
+
 export async function requestPasswordReset() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
