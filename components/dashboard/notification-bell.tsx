@@ -10,6 +10,7 @@ import {
   FileText,
   Building2,
   Users,
+  BriefcaseBusiness,
   CheckCircle2,
   X,
 } from "lucide-react";
@@ -44,6 +45,7 @@ const typeIcons = {
     color: "text-purple-500",
     bg: "bg-purple-500/10",
   },
+  crm: { icon: BriefcaseBusiness, color: "text-indigo-500", bg: "bg-indigo-500/10" },
   vendor: { icon: Building2, color: "text-teal-500", bg: "bg-teal-500/10" },
   hr: { icon: Users, color: "text-orange-500", bg: "bg-orange-500/10" },
 };

@@ -16,8 +16,6 @@ import {
   Settings,
   Building2,
   ChevronDown,
-  PanelLeftClose,
-  PanelLeftOpen,
 } from "lucide-react";
 
 const MODULE_CONFIG = [
@@ -50,7 +48,15 @@ const MODULE_CONFIG = [
       },
     ],
   },
-  { id: "crm", label: "CRM", icon: Users, href: "/dashboard/crm" },
+  {
+    id: "crm",
+    label: "Customers",
+    icon: Users,
+    subModules: [
+      { id: "crm-customers", label: "Customers", href: "/dashboard/crm" },
+      { id: "crm-new-project", label: "New Customer Project", href: "/dashboard/crm/new" },
+    ],
+  },
   {
     id: "projects",
     label: "Projects",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useTransition, useMemo } from "react";
+import { useState, useEffect, useRef, useTransition, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { 
   Search, 
@@ -13,6 +13,7 @@ import {
   CreditCard, 
   FileText, 
   Navigation,
+  BriefcaseBusiness,
   PlusCircle,
   Settings,
   User as UserIcon,
@@ -29,6 +30,8 @@ interface SearchResults {
   projects: any[];
   payments: any[];
   documents: any[];
+  crm_accounts: any[];
+  crm_opportunities: any[];
 }
 
 interface QuickAction {
@@ -46,6 +49,8 @@ const QUICK_ACTIONS: QuickAction[] = [
   { id: 'nav-pos', title: 'Purchase Orders', subtitle: 'Manage POs', path: '/dashboard/purchase-orders', type: 'navigation', icon: ClipboardList },
   { id: 'act-new-po', title: 'New PO', subtitle: 'Create a new purchase order', path: '/dashboard/purchase-orders/new', type: 'action', icon: PlusCircle },
   { id: 'nav-projects', title: 'Projects', subtitle: 'View active projects', path: '/dashboard/projects', type: 'navigation', icon: FolderGit2 },
+  { id: 'nav-crm', title: 'Customers', subtitle: 'Customer accounts and projects', path: '/dashboard/crm', type: 'navigation', icon: BriefcaseBusiness },
+  { id: 'act-new-opportunity', title: 'New Customer Project', subtitle: 'Add customer job', path: '/dashboard/crm/new', type: 'action', icon: PlusCircle },
   { id: 'nav-invoices', title: 'Invoices', subtitle: 'Manage service invoices', path: '/dashboard/invoices', type: 'navigation', icon: Receipt },
   { id: 'nav-payments', title: 'Payments', subtitle: 'Record and track payments', path: '/dashboard/payments', type: 'navigation', icon: CreditCard },
   { id: 'nav-docs', title: 'Documents', subtitle: 'Central document repository', path: '/dashboard/documents', type: 'navigation', icon: FileText },
@@ -58,13 +63,18 @@ export function GlobalSearch() {
   const [query, setQuery] = useState("");
   const [debouncedQuery] = useDebounce(query, 300);
   const [results, setResults] = useState<SearchResults>({ 
-    vendors: [], pos: [], invoices: [], projects: [], payments: [], documents: [] 
+    vendors: [], pos: [], invoices: [], projects: [], payments: [], documents: [], crm_accounts: [], crm_opportunities: []
   });
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isPending, startTransition] = useTransition();
   const [mounted, setMounted] = useState(false);
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
+  const handleNavigate = useCallback((path: string) => {
+    setIsOpen(false);
+    setQuery("");
+    router.push(path);
+  }, [router]);
 
   // Filter quick actions locally
   const filteredActions = useMemo(() => {
@@ -82,6 +92,8 @@ export function GlobalSearch() {
     filteredActions.forEach(a => items.push({ ...a, category: 'Navigation & Actions' }));
     results.vendors.forEach(v => items.push({ ...v, category: 'Vendors', icon: Building2, path: `/dashboard/vendors/${v.id}`, displayTitle: v.name, displaySub: `TIN: ${v.tin || 'N/A'}` }));
     results.projects.forEach(p => items.push({ ...p, category: 'Projects', icon: FolderGit2, path: `/dashboard/projects/${p.id}`, displayTitle: p.name, displaySub: p.project_code }));
+    results.crm_accounts.forEach(a => items.push({ ...a, category: 'Customer Accounts', icon: Building2, path: '/dashboard/crm', displayTitle: a.company_name, displaySub: (a.company_type || '').replace(/_/g, ' ') }));
+    results.crm_opportunities.forEach(o => items.push({ ...o, category: 'Customer Projects', icon: BriefcaseBusiness, path: `/dashboard/crm/${o.id}`, displayTitle: o.title, displaySub: `${(o.stage || '').replace(/_/g, ' ')} • ₱${Number(o.estimated_contract_value || 0).toLocaleString()}` }));
     results.pos.forEach(po => items.push({ ...po, category: 'Purchase Orders', icon: ClipboardList, path: `/dashboard/purchase-orders/${po.id}`, displayTitle: po.po_number, displaySub: `₱${Number(po.amount).toLocaleString()}` }));
     results.invoices.forEach(inv => items.push({ ...inv, category: 'Invoices', icon: Receipt, path: `/dashboard/invoices/${inv.id}`, displayTitle: inv.invoice_number, displaySub: `₱${Number(inv.amount).toLocaleString()}` }));
     results.payments.forEach(pay => items.push({ ...pay, category: 'Payments', icon: CreditCard, path: `/dashboard/invoices/${pay.invoice_id}`, displayTitle: pay.reference_number, displaySub: `₱${Number(pay.amount_paid).toLocaleString()}` }));
@@ -119,7 +131,7 @@ export function GlobalSearch() {
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, flatResults, selectedIndex]);
+  }, [isOpen, flatResults, selectedIndex, handleNavigate]);
 
   useEffect(() => {
     if (isOpen && inputRef.current) {
@@ -135,16 +147,10 @@ export function GlobalSearch() {
         setSelectedIndex(0);
       });
     } else {
-      setResults({ vendors: [], pos: [], invoices: [], projects: [], payments: [], documents: [] });
+      setResults({ vendors: [], pos: [], invoices: [], projects: [], payments: [], documents: [], crm_accounts: [], crm_opportunities: [] });
       setSelectedIndex(0);
     }
   }, [debouncedQuery]);
-
-  const handleNavigate = (path: string) => {
-    setIsOpen(false);
-    setQuery("");
-    router.push(path);
-  };
 
   const hasResults = flatResults.length > 0;
 
