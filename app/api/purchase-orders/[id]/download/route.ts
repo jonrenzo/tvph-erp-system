@@ -3,10 +3,13 @@ import { createClient } from '@/utils/supabase/server';
 import { generatePoDocument } from '@/lib/pdf/generate-po';
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const { searchParams } = new URL(request.url);
+  const editable = searchParams.get('editable') === 'true';
+
   const supabase = await createClient();
 
   const { data: po, error } = await supabase
@@ -23,13 +26,30 @@ export async function GET(
     return new Response('Purchase order not found', { status: 404 });
   }
 
+  // Fetch line items
+  const { data: lineItems } = await supabase
+    .from('po_line_items')
+    .select('*')
+    .eq('po_id', id)
+    .order('line_no');
+
+  // Fetch site details
+  const { data: siteDetails } = await supabase
+    .from('po_site_details')
+    .select('*')
+    .eq('po_id', id)
+    .order('sn');
+
   const pdfBytes = await generatePoDocument(
     po,
     po.vendors,
     po.projects,
+    lineItems || [],
+    siteDetails || [],
+    { editable }
   );
 
-  const filename = `${po.po_number}.pdf`;
+  const filename = `${po.po_number}${editable ? '_editable' : ''}.pdf`;
 
   return new Response(pdfBytes as BodyInit, {
     headers: {

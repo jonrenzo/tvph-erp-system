@@ -290,4 +290,37 @@ export async function updateVendorProfile(prevState: any, formData: FormData) {
   return { success: true };
 }
 
+export async function deleteVendor(vendorId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Unauthorized.' };
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single();
+
+  if (profile?.role !== 'admin') {
+    return { error: 'Forbidden. Only administrators can delete vendors.' };
+  }
+
+  const { error } = await supabase
+    .from('vendors')
+    .delete()
+    .eq('id', vendorId);
+
+  if (error) return { error: error.message };
+
+  await recordAuditLog({
+    entity_type: 'vendor',
+    entity_id: vendorId,
+    action: 'DELETE',
+    performed_by: user.id
+  });
+
+  revalidatePath('/dashboard/vendors');
+  return { success: true };
+}
+
 // Project actions have been moved to app/dashboard/projects/actions.ts
