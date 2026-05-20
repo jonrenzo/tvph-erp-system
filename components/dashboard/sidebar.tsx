@@ -50,12 +50,20 @@ const MODULE_CONFIG = [
   },
   {
     id: "crm",
-    label: "Customers",
+    label: "CRM",
     icon: Users,
     subModules: [
       { id: "crm-customers", label: "Customers", href: "/dashboard/crm" },
-      { id: "crm-new-customer", label: "Add Customer", href: "/dashboard/crm/new" },
-      { id: "crm-new-project", label: "New Customer Project", href: "/dashboard/crm/projects/new" },
+      {
+        id: "crm-new-customer",
+        label: "Add Customer",
+        href: "/dashboard/crm/new",
+      },
+      {
+        id: "crm-new-project",
+        label: "New Customer Project",
+        href: "/dashboard/crm/projects/new",
+      },
     ],
   },
   {
