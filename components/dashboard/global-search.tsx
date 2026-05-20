@@ -49,8 +49,9 @@ const QUICK_ACTIONS: QuickAction[] = [
   { id: 'nav-pos', title: 'Purchase Orders', subtitle: 'Manage POs', path: '/dashboard/purchase-orders', type: 'navigation', icon: ClipboardList },
   { id: 'act-new-po', title: 'New PO', subtitle: 'Create a new purchase order', path: '/dashboard/purchase-orders/new', type: 'action', icon: PlusCircle },
   { id: 'nav-projects', title: 'Projects', subtitle: 'View active projects', path: '/dashboard/projects', type: 'navigation', icon: FolderGit2 },
-  { id: 'nav-crm', title: 'Customers', subtitle: 'Customer accounts and projects', path: '/dashboard/crm', type: 'navigation', icon: BriefcaseBusiness },
-  { id: 'act-new-opportunity', title: 'New Customer Project', subtitle: 'Add customer job', path: '/dashboard/crm/new', type: 'action', icon: PlusCircle },
+  { id: 'nav-crm', title: 'Customers', subtitle: 'Customer profiles and contacts', path: '/dashboard/crm', type: 'navigation', icon: BriefcaseBusiness },
+  { id: 'act-new-customer', title: 'Add Customer', subtitle: 'Create a customer profile', path: '/dashboard/crm/new', type: 'action', icon: PlusCircle },
+  { id: 'act-new-opportunity', title: 'New Customer Project', subtitle: 'Add customer job', path: '/dashboard/crm/projects/new', type: 'action', icon: PlusCircle },
   { id: 'nav-invoices', title: 'Invoices', subtitle: 'Manage service invoices', path: '/dashboard/invoices', type: 'navigation', icon: Receipt },
   { id: 'nav-payments', title: 'Payments', subtitle: 'Record and track payments', path: '/dashboard/payments', type: 'navigation', icon: CreditCard },
   { id: 'nav-docs', title: 'Documents', subtitle: 'Central document repository', path: '/dashboard/documents', type: 'navigation', icon: FileText },
@@ -92,8 +93,8 @@ export function GlobalSearch() {
     filteredActions.forEach(a => items.push({ ...a, category: 'Navigation & Actions' }));
     results.vendors.forEach(v => items.push({ ...v, category: 'Vendors', icon: Building2, path: `/dashboard/vendors/${v.id}`, displayTitle: v.name, displaySub: `TIN: ${v.tin || 'N/A'}` }));
     results.projects.forEach(p => items.push({ ...p, category: 'Projects', icon: FolderGit2, path: `/dashboard/projects/${p.id}`, displayTitle: p.name, displaySub: p.project_code }));
-    results.crm_accounts.forEach(a => items.push({ ...a, category: 'Customer Accounts', icon: Building2, path: '/dashboard/crm', displayTitle: a.company_name, displaySub: (a.company_type || '').replace(/_/g, ' ') }));
-    results.crm_opportunities.forEach(o => items.push({ ...o, category: 'Customer Projects', icon: BriefcaseBusiness, path: `/dashboard/crm/${o.id}`, displayTitle: o.title, displaySub: `${(o.stage || '').replace(/_/g, ' ')} • ₱${Number(o.estimated_contract_value || 0).toLocaleString()}` }));
+    results.crm_accounts.forEach(a => items.push({ ...a, category: 'Customer Accounts', icon: Building2, path: `/dashboard/crm/${a.id}`, displayTitle: a.company_name, displaySub: (a.status || '').replace(/_/g, ' ') }));
+    results.crm_opportunities.forEach(o => items.push({ ...o, category: 'Customer Projects', icon: BriefcaseBusiness, path: `/dashboard/crm/projects/${o.id}`, displayTitle: o.title, displaySub: `${(o.stage || '').replace(/_/g, ' ')} • ₱${Number(o.estimated_contract_value || 0).toLocaleString()}` }));
     results.pos.forEach(po => items.push({ ...po, category: 'Purchase Orders', icon: ClipboardList, path: `/dashboard/purchase-orders/${po.id}`, displayTitle: po.po_number, displaySub: `₱${Number(po.amount).toLocaleString()}` }));
     results.invoices.forEach(inv => items.push({ ...inv, category: 'Invoices', icon: Receipt, path: `/dashboard/invoices/${inv.id}`, displayTitle: inv.invoice_number, displaySub: `₱${Number(inv.amount).toLocaleString()}` }));
     results.payments.forEach(pay => items.push({ ...pay, category: 'Payments', icon: CreditCard, path: `/dashboard/invoices/${pay.invoice_id}`, displayTitle: pay.reference_number, displaySub: `₱${Number(pay.amount_paid).toLocaleString()}` }));

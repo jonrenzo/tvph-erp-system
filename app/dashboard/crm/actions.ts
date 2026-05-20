@@ -8,7 +8,19 @@ import { createNotification } from '@/utils/notifications';
 
 type ActionState = { error?: string; success?: string } | null;
 
+type CustomerContactInput = {
+  id?: string;
+  full_name?: string;
+  job_title?: string;
+  email?: string;
+  phone?: string;
+  fax?: string;
+  notes?: string;
+  is_primary?: boolean;
+};
+
 const COMMERCIAL_ROLES = new Set(['admin', 'commercial_manager']);
+const CUSTOMER_STATUSES = new Set(['pending', 'active', 'inactive']);
 
 async function requireCommercialRole() {
   const supabase = await createClient();
@@ -33,111 +45,304 @@ async function requireCommercialRole() {
   return { supabase, user: profile, error: null };
 }
 
-export async function createAccount(_: ActionState, formData: FormData): Promise<ActionState> {
+function normalizeCustomerContacts(rawContacts: CustomerContactInput[]) {
+  const normalized = rawContacts
+    .map((contact) => ({
+      id: contact.id || undefined,
+      full_name: (contact.full_name || '').trim(),
+      job_title: (contact.job_title || '').trim(),
+      email: (contact.email || '').trim(),
+      phone: (contact.phone || '').trim(),
+      fax: (contact.fax || '').trim(),
+      notes: (contact.notes || '').trim(),
+      is_primary: Boolean(contact.is_primary),
+    }))
+    .filter(
+      (contact) =>
+        contact.full_name ||
+        contact.email ||
+        contact.phone ||
+        contact.fax ||
+        contact.job_title ||
+        contact.notes,
+    );
+
+  if (normalized.length === 0) {
+    return normalized;
+  }
+
+  let primaryFound = false;
+  const withPrimary = normalized.map((contact, index) => {
+    if (contact.is_primary && !primaryFound) {
+      primaryFound = true;
+      return contact;
+    }
+    return { ...contact, is_primary: false };
+  });
+
+  if (!primaryFound) {
+    withPrimary[0] = { ...withPrimary[0], is_primary: true };
+  }
+
+  return withPrimary;
+}
+
+function parseCustomerContacts(formData: FormData) {
+  let contacts: CustomerContactInput[] = [];
+  const rawJson = (formData.get('customer_contacts') as string) || '[]';
+
+  try {
+    contacts = JSON.parse(rawJson);
+  } catch (_error) {
+    contacts = [];
+  }
+
+  // Backward-compatible fallback if contact JSON is missing.
+  if (contacts.length === 0) {
+    const full_name = (formData.get('contact_person') as string)?.trim() || '';
+    const job_title = (formData.get('job_title') as string)?.trim() || '';
+    const email = (formData.get('contact_email') as string)?.trim() || '';
+    const phone = (formData.get('contact_phone') as string)?.trim() || '';
+    const fax = (formData.get('contact_fax') as string)?.trim() || '';
+    if (full_name || email || phone || fax || job_title) {
+      contacts = [{ full_name, job_title, email, phone, fax, is_primary: true }];
+    }
+  }
+
+  return normalizeCustomerContacts(contacts);
+}
+
+export async function createCustomer(_: ActionState, formData: FormData): Promise<ActionState> {
   const { supabase, user, error: roleError } = await requireCommercialRole();
   if (roleError || !user) return { error: roleError || 'Unauthorized' };
 
   const company_name = (formData.get('company_name') as string)?.trim();
-  const company_type = (formData.get('company_type') as string) || 'prospect';
-  const primary_site_location = (formData.get('primary_site_location') as string)?.trim() || null;
-  const industry_note = (formData.get('industry_note') as string)?.trim() || null;
+  const registered_address = (formData.get('registered_address') as string)?.trim() || null;
+  const tin = (formData.get('tin') as string)?.trim() || null;
+  const statusRaw = ((formData.get('status') as string) || 'pending').trim().toLowerCase();
+  const status = CUSTOMER_STATUSES.has(statusRaw) ? statusRaw : 'pending';
   const notes = (formData.get('notes') as string)?.trim() || null;
+  const contacts = parseCustomerContacts(formData);
 
   if (!company_name) {
-    return { error: 'Company name is required.' };
+    return { error: 'Customer name is required.' };
+  }
+  if (contacts.length === 0) {
+    return { error: 'At least one customer contact is required.' };
   }
 
-  const { data: account, error } = await supabase
+  const company_type =
+    status === 'active' ? 'active_customer' : status === 'inactive' ? 'inactive_customer' : 'prospect';
+
+  const { data: account, error: accountError } = await supabase
     .from('crm_accounts')
     .insert({
       company_name,
+      registered_address,
+      tin,
+      status,
       company_type,
-      primary_site_location,
-      industry_note,
       notes,
       created_by: user.id,
     })
     .select('id, company_name')
     .single();
 
-  if (error || !account) {
-    return { error: error?.message || 'Failed to create customer account.' };
+  if (accountError || !account) {
+    return { error: accountError?.message || 'Failed to create customer account.' };
+  }
+
+  const contactRows = contacts.map((contact) => ({
+    account_id: account.id,
+    full_name: contact.full_name,
+    job_title: contact.job_title || null,
+    email: contact.email || null,
+    phone: contact.phone || null,
+    fax: contact.fax || null,
+    notes: contact.notes || null,
+    is_primary: contact.is_primary,
+    created_by: user.id,
+  }));
+
+  const { error: contactError } = await supabase.from('crm_contacts').insert(contactRows);
+
+  if (contactError) {
+    await supabase.from('crm_accounts').update({ deleted_at: new Date().toISOString() }).eq('id', account.id);
+    return { error: contactError.message || 'Failed to create customer contacts.' };
   }
 
   await recordAuditLog({
     entity_type: 'crm_account',
     entity_id: account.id,
     action: 'CREATE',
-    changes: { after: { company_name, company_type } },
+    changes: { after: { company_name, status, tin } },
     performed_by: user.id,
   });
 
   await createNotification({
     type: 'crm',
-    title: 'Customer Account Created',
-    message: `${company_name} was added to customer accounts.`,
-    link: '/dashboard/crm',
+    title: 'Customer Added',
+    message: `${company_name} was added to customers.`,
+    link: `/dashboard/crm/${account.id}`,
     created_by: user.id,
   });
 
   revalidatePath('/dashboard/crm');
   revalidatePath('/dashboard/crm/new');
-  return { success: `Customer created: ${company_name}` };
+  redirect(`/dashboard/crm/${account.id}`);
 }
 
-export async function createContact(_: ActionState, formData: FormData): Promise<ActionState> {
+export async function updateCustomerProfile(_: ActionState, formData: FormData): Promise<ActionState> {
   const { supabase, user, error: roleError } = await requireCommercialRole();
   if (roleError || !user) return { error: roleError || 'Unauthorized' };
 
-  const account_id = formData.get('account_id') as string;
-  const full_name = (formData.get('full_name') as string)?.trim();
-  const job_title = (formData.get('job_title') as string)?.trim() || null;
-  const email = (formData.get('email') as string)?.trim() || null;
-  const phone = (formData.get('phone') as string)?.trim() || null;
+  const id = formData.get('id') as string;
+  if (!id) return { error: 'Customer ID is required.' };
+
+  const company_name = (formData.get('company_name') as string)?.trim();
+  const registered_address = (formData.get('registered_address') as string)?.trim() || null;
+  const tin = (formData.get('tin') as string)?.trim() || null;
+  const statusRaw = ((formData.get('status') as string) || 'pending').trim().toLowerCase();
+  const status = CUSTOMER_STATUSES.has(statusRaw) ? statusRaw : 'pending';
   const notes = (formData.get('notes') as string)?.trim() || null;
-  const is_primary = (formData.get('is_primary') as string) === 'on';
+  const contacts = parseCustomerContacts(formData);
 
-  if (!account_id) return { error: 'Select a customer account first.' };
-  if (!full_name) return { error: 'Contact full name is required.' };
-
-  if (is_primary) {
-    await supabase
-      .from('crm_contacts')
-      .update({ is_primary: false, updated_at: new Date().toISOString() })
-      .eq('account_id', account_id)
-      .eq('is_primary', true);
+  if (!company_name) {
+    return { error: 'Customer name is required.' };
+  }
+  if (contacts.length === 0) {
+    return { error: 'At least one customer contact is required.' };
   }
 
-  const { data: contact, error } = await supabase
-    .from('crm_contacts')
-    .insert({
-      account_id,
-      full_name,
-      job_title,
-      email,
-      phone,
-      notes,
-      is_primary,
-      created_by: user.id,
-    })
-    .select('id, full_name')
-    .single();
+  const company_type =
+    status === 'active' ? 'active_customer' : status === 'inactive' ? 'inactive_customer' : 'prospect';
 
-  if (error || !contact) {
-    return { error: error?.message || 'Failed to create contact.' };
+  const { error: accountError } = await supabase
+    .from('crm_accounts')
+    .update({
+      company_name,
+      registered_address,
+      tin,
+      status,
+      company_type,
+      notes,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id);
+
+  if (accountError) {
+    return { error: accountError.message || 'Failed to update customer profile.' };
+  }
+
+  const { data: existingContacts } = await supabase
+    .from('crm_contacts')
+    .select('id')
+    .eq('account_id', id);
+
+  const existingIds = new Set((existingContacts || []).map((contact) => contact.id));
+  const keptIds = new Set<string>();
+
+  for (const contact of contacts) {
+    const payload = {
+      account_id: id,
+      full_name: contact.full_name,
+      job_title: contact.job_title || null,
+      email: contact.email || null,
+      phone: contact.phone || null,
+      fax: contact.fax || null,
+      notes: contact.notes || null,
+      is_primary: contact.is_primary,
+      updated_at: new Date().toISOString(),
+      deleted_at: null,
+    };
+
+    if (contact.id && existingIds.has(contact.id)) {
+      keptIds.add(contact.id);
+      const { error: updateContactError } = await supabase.from('crm_contacts').update(payload).eq('id', contact.id);
+      if (updateContactError) {
+        return { error: updateContactError.message || 'Failed to update customer contacts.' };
+      }
+      continue;
+    }
+
+    const { data: inserted, error: insertError } = await supabase
+      .from('crm_contacts')
+      .insert({ ...payload, created_by: user.id })
+      .select('id')
+      .single();
+
+    if (insertError) {
+      return { error: insertError.message || 'Failed to update customer contacts.' };
+    }
+
+    if (inserted?.id) {
+      keptIds.add(inserted.id);
+    }
+  }
+
+  for (const existingId of existingIds) {
+    if (!keptIds.has(existingId)) {
+      const { error: archiveContactError } = await supabase
+        .from('crm_contacts')
+        .update({
+          is_primary: false,
+          deleted_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existingId);
+      if (archiveContactError) {
+        return { error: archiveContactError.message || 'Failed to update removed contacts.' };
+      }
+    }
   }
 
   await recordAuditLog({
-    entity_type: 'crm_contact',
-    entity_id: contact.id,
-    action: 'CREATE',
-    changes: { after: { account_id, full_name, email } },
+    entity_type: 'crm_account',
+    entity_id: id,
+    action: 'UPDATE',
+    changes: { after: { company_name, status, tin } },
     performed_by: user.id,
   });
 
-  revalidatePath('/dashboard/crm/new');
   revalidatePath('/dashboard/crm');
-  return { success: `Contact created: ${full_name}` };
+  revalidatePath(`/dashboard/crm/${id}`);
+  return { success: 'Customer profile updated.' };
+}
+
+export async function updateCustomerStatus(customerId: string, status: string) {
+  const { supabase, user, error: roleError } = await requireCommercialRole();
+  if (roleError || !user) return { error: roleError || 'Unauthorized' };
+
+  const statusValue = status.trim().toLowerCase();
+  if (!CUSTOMER_STATUSES.has(statusValue)) {
+    return { error: 'Invalid customer status.' };
+  }
+
+  const company_type =
+    statusValue === 'active' ? 'active_customer' : statusValue === 'inactive' ? 'inactive_customer' : 'prospect';
+
+  const { error } = await supabase
+    .from('crm_accounts')
+    .update({
+      status: statusValue,
+      company_type,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', customerId);
+
+  if (error) return { error: error.message };
+
+  await recordAuditLog({
+    entity_type: 'crm_account',
+    entity_id: customerId,
+    action: 'UPDATE',
+    changes: { after: { status: statusValue } },
+    performed_by: user.id,
+  });
+
+  revalidatePath('/dashboard/crm');
+  revalidatePath(`/dashboard/crm/${customerId}`);
+  return { success: true };
 }
 
 export async function createOpportunity(_: ActionState, formData: FormData): Promise<ActionState> {
@@ -220,13 +425,14 @@ export async function createOpportunity(_: ActionState, formData: FormData): Pro
     type: 'crm',
     title: 'New Customer Project',
     message: `${title} has been added to customer project tracking.`,
-    link: `/dashboard/crm/${opportunity.id}`,
+    link: `/dashboard/crm/projects/${opportunity.id}`,
     created_by: user.id,
   });
 
   revalidatePath('/dashboard/crm');
-  revalidatePath('/dashboard/crm/new');
-  redirect(`/dashboard/crm/${opportunity.id}`);
+  revalidatePath('/dashboard/crm/projects/new');
+  revalidatePath(`/dashboard/crm/${account_id}`);
+  redirect(`/dashboard/crm/projects/${opportunity.id}`);
 }
 
 export async function updateOpportunityStage(opportunityId: string, stage: string) {
@@ -257,7 +463,7 @@ export async function updateOpportunityStage(opportunityId: string, stage: strin
   });
 
   revalidatePath('/dashboard/crm');
-  revalidatePath(`/dashboard/crm/${opportunityId}`);
+  revalidatePath(`/dashboard/crm/projects/${opportunityId}`);
   return { success: true };
 }
 
@@ -286,7 +492,7 @@ export async function markOpportunityAsLost(opportunityId: string, lostReason: s
   });
 
   revalidatePath('/dashboard/crm');
-  revalidatePath(`/dashboard/crm/${opportunityId}`);
+  revalidatePath(`/dashboard/crm/projects/${opportunityId}`);
   return { success: true };
 }
 
@@ -336,7 +542,7 @@ export async function addOpportunityActivity(_: ActionState, formData: FormData)
     performed_by: user.id,
   });
 
-  revalidatePath(`/dashboard/crm/${opportunity_id}`);
+  revalidatePath(`/dashboard/crm/projects/${opportunity_id}`);
   return { success: 'Activity logged.' };
 }
 
@@ -410,7 +616,7 @@ export async function convertOpportunityToProject(opportunityId: string) {
   });
 
   revalidatePath('/dashboard/crm');
-  revalidatePath(`/dashboard/crm/${opportunityId}`);
+  revalidatePath(`/dashboard/crm/projects/${opportunityId}`);
   revalidatePath('/dashboard/projects');
   redirect(`/dashboard/projects/${project.id}`);
 }

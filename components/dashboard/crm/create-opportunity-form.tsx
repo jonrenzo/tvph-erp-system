@@ -1,14 +1,13 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Building2, Save, UserRoundPlus, Briefcase, Phone, MapPin, ShieldAlert, CalendarClock, CircleDollarSign } from "lucide-react";
-import { createAccount, createContact, createOpportunity } from "@/app/dashboard/crm/actions";
+import { useActionState, useMemo, useState } from "react";
+import { Save, Briefcase, MapPin, ShieldAlert, CalendarClock, CircleDollarSign } from "lucide-react";
+import { createOpportunity } from "@/app/dashboard/crm/actions";
 
 interface AccountOption {
   id: string;
   company_name: string;
-  company_type: string;
+  status: string;
 }
 
 interface ContactOption {
@@ -28,24 +27,17 @@ export function CreateOpportunityForm({
   contacts,
   owners,
   currentUserId,
+  initialAccountId = "",
 }: {
   accounts: AccountOption[];
   contacts: ContactOption[];
   owners: OwnerOption[];
   currentUserId: string;
+  initialAccountId?: string;
 }) {
-  const router = useRouter();
-  const [selectedAccount, setSelectedAccount] = useState(accounts[0]?.id || "");
-
-  const [accountState, accountAction, accountPending] = useActionState(createAccount, null);
-  const [contactState, contactAction, contactPending] = useActionState(createContact, null);
+  const defaultAccount = initialAccountId || accounts[0]?.id || "";
+  const [selectedAccount, setSelectedAccount] = useState(defaultAccount);
   const [opportunityState, opportunityAction, opportunityPending] = useActionState(createOpportunity, null);
-
-  useEffect(() => {
-    if (accountState?.success || contactState?.success) {
-      router.refresh();
-    }
-  }, [accountState?.success, contactState?.success, router]);
 
   const filteredContacts = useMemo(
     () => contacts.filter((contact) => contact.account_id === selectedAccount),
@@ -70,324 +62,217 @@ export function CreateOpportunityForm({
   ];
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <form action={accountAction} className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl p-5 space-y-4 shadow-sm">
-          <div className="flex items-center gap-2">
-            <Building2 className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-bold text-slate-900 dark:text-white">Quick Customer Account</h2>
-          </div>
-
-          {accountState?.error && (
-            <p className="text-xs text-red-600 dark:text-red-400">{accountState.error}</p>
-          )}
-          {accountState?.success && (
-            <p className="text-xs text-emerald-600 dark:text-emerald-400">{accountState.success}</p>
-          )}
-
-          <input
-            name="company_name"
-            required
-            placeholder="Customer company name"
-            className="w-full px-3 py-2 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:border-primary"
-          />
-          <select
-            name="company_type"
-            defaultValue="prospect"
-            className="w-full px-3 py-2 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:border-primary"
-          >
-            <option value="prospect">Prospect</option>
-            <option value="active_customer">Active Customer</option>
-            <option value="inactive_customer">Inactive Customer</option>
-          </select>
-          <input
-            name="primary_site_location"
-            placeholder="Primary site/location"
-            className="w-full px-3 py-2 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:border-primary"
-          />
-          <textarea
-            name="notes"
-            rows={2}
-            placeholder="Notes"
-            className="w-full px-3 py-2 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:border-primary resize-none"
-          />
-          <button
-            type="submit"
-            disabled={accountPending}
-            className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white text-xs font-semibold px-3 py-2 rounded-lg disabled:opacity-50"
-          >
-            <UserRoundPlus className="h-4 w-4" />
-            {accountPending ? "Saving..." : "Create Customer"}
-          </button>
-        </form>
-
-        <form action={contactAction} className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl p-5 space-y-4 shadow-sm">
-          <div className="flex items-center gap-2">
-            <Phone className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-bold text-slate-900 dark:text-white">Quick Contact</h2>
-          </div>
-
-          {contactState?.error && (
-            <p className="text-xs text-red-600 dark:text-red-400">{contactState.error}</p>
-          )}
-          {contactState?.success && (
-            <p className="text-xs text-emerald-600 dark:text-emerald-400">{contactState.success}</p>
-          )}
-
-          <select
-            name="account_id"
-            required
-            defaultValue={selectedAccount}
-            onChange={(event) => setSelectedAccount(event.target.value)}
-            className="w-full px-3 py-2 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:border-primary"
-          >
-            {accounts.length === 0 && <option value="">No customer accounts yet</option>}
-            {accounts.map((account) => (
-              <option key={account.id} value={account.id}>
-                {account.company_name}
-              </option>
-            ))}
-          </select>
-          <input
-            name="full_name"
-            required
-            placeholder="Contact full name"
-            className="w-full px-3 py-2 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:border-primary"
-          />
-          <input
-            name="job_title"
-            placeholder="Job title"
-            className="w-full px-3 py-2 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:border-primary"
-          />
-          <input
-            name="email"
-            type="email"
-            placeholder="Email address"
-            className="w-full px-3 py-2 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:border-primary"
-          />
-          <button
-            type="submit"
-            disabled={contactPending || accounts.length === 0}
-            className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white text-xs font-semibold px-3 py-2 rounded-lg disabled:opacity-50"
-          >
-            <UserRoundPlus className="h-4 w-4" />
-            {contactPending ? "Saving..." : "Create Contact"}
-          </button>
-        </form>
+    <form action={opportunityAction} className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+      <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-[#0a0a0a]/50 flex items-center gap-2">
+        <Briefcase className="h-5 w-5 text-primary" />
+        <h2 className="font-semibold text-slate-900 dark:text-white">Create Customer Project</h2>
       </div>
 
-      <form action={opportunityAction} className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-[#0a0a0a]/50 flex items-center gap-2">
-          <Briefcase className="h-5 w-5 text-primary" />
-          <h2 className="font-semibold text-slate-900 dark:text-white">Create Customer Project</h2>
-        </div>
+      <div className="p-6 space-y-4">
+        {opportunityState?.error && (
+          <p className="text-sm text-red-600 dark:text-red-400">{opportunityState.error}</p>
+        )}
 
-        <div className="p-6 space-y-4">
-          {opportunityState?.error && (
-            <p className="text-sm text-red-600 dark:text-red-400">{opportunityState.error}</p>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Customer Account</label>
-              <select
-                name="account_id"
-                required
-                value={selectedAccount}
-                onChange={(event) => setSelectedAccount(event.target.value)}
-                className="w-full px-3 py-2.5 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-primary"
-              >
-                <option value="">Select account</option>
-                {accounts.map((account) => (
-                  <option key={account.id} value={account.id}>
-                    {account.company_name} ({account.company_type.replace(/_/g, " ")})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Primary Contact</label>
-              <select
-                name="contact_id"
-                className="w-full px-3 py-2.5 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-primary"
-              >
-                <option value="">Select contact (optional)</option>
-                {filteredContacts.map((contact) => (
-                  <option key={contact.id} value={contact.id}>
-                    {contact.full_name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-2 md:col-span-2">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Customer Project Title</label>
-              <input
-                name="title"
-                required
-                placeholder="e.g. Pole copper recovery - North Zone"
-                className="w-full px-3 py-2.5 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-primary"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Job Type</label>
-              <select
-                name="job_type"
-                required
-                className="w-full px-3 py-2.5 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-primary"
-              >
-                {jobTypes.map((jobType) => (
-                  <option key={jobType.value} value={jobType.value}>
-                    {jobType.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Initial Project Status</label>
-              <select
-                name="stage"
-                defaultValue="prospect"
-                className="w-full px-3 py-2.5 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-primary"
-              >
-                {stages.map((stage) => (
-                  <option key={stage.value} value={stage.value}>
-                    {stage.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Project Owner</label>
-              <select
-                name="owner_id"
-                defaultValue={currentUserId}
-                className="w-full px-3 py-2.5 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-primary"
-              >
-                {owners.map((owner) => (
-                  <option key={owner.id} value={owner.id}>
-                    {owner.full_name} ({owner.role})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1">
-                <MapPin className="h-3.5 w-3.5" /> Site Location
-              </label>
-              <input
-                name="location"
-                placeholder="Customer site location"
-                className="w-full px-3 py-2.5 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-primary"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1">
-                <CircleDollarSign className="h-3.5 w-3.5" /> Estimated Contract Value
-              </label>
-              <input
-                name="estimated_contract_value"
-                type="number"
-                step="0.01"
-                placeholder="0.00"
-                className="w-full px-3 py-2.5 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-primary"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Estimated Copper Volume</label>
-              <input
-                name="estimated_copper_volume"
-                type="number"
-                step="0.01"
-                placeholder="In tons or agreed unit"
-                className="w-full px-3 py-2.5 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-primary"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1">
-                <CalendarClock className="h-3.5 w-3.5" /> Expected Start Date
-              </label>
-              <input
-                name="expected_start_date"
-                type="date"
-                className="w-full px-3 py-2.5 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-primary"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Expected Close Date</label>
-              <input
-                name="expected_close_date"
-                type="date"
-                className="w-full px-3 py-2.5 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-primary"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Next Follow-up Date</label>
-              <input
-                name="next_follow_up_date"
-                type="date"
-                className="w-full px-3 py-2.5 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-primary"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Source</label>
-              <input
-                name="source"
-                placeholder="Referral, inbound request, repeat customer..."
-                className="w-full px-3 py-2.5 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-primary"
-              />
-            </div>
-
-            <div className="space-y-2 md:col-span-2">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1">
-                <ShieldAlert className="h-3.5 w-3.5" /> Access / Safety / Permit Requirements
-              </label>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <textarea
-                  name="access_requirements"
-                  rows={3}
-                  placeholder="Access requirements"
-                  className="w-full px-3 py-2 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-primary resize-none"
-                />
-                <textarea
-                  name="safety_requirements"
-                  rows={3}
-                  placeholder="Safety requirements"
-                  className="w-full px-3 py-2 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-primary resize-none"
-                />
-                <textarea
-                  name="permit_requirements"
-                  rows={3}
-                  placeholder="Permit requirements"
-                  className="w-full px-3 py-2 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-primary resize-none"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end">
-            <button
-              type="submit"
-              disabled={opportunityPending || accounts.length === 0}
-              className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-5 py-2.5 rounded-xl font-medium transition-all disabled:opacity-50"
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Customer Account</label>
+            <select
+              name="account_id"
+              required
+              value={selectedAccount}
+              onChange={(event) => setSelectedAccount(event.target.value)}
+              className="w-full px-3 py-2.5 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-primary"
             >
-              <Save className="h-4 w-4" />
-              {opportunityPending ? "Creating..." : "Create Customer Project"}
-            </button>
+              <option value="">Select account</option>
+              {accounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.company_name} ({(account.status || "pending").replace(/_/g, " ")})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Primary Contact</label>
+            <select
+              name="contact_id"
+              className="w-full px-3 py-2.5 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-primary"
+            >
+              <option value="">Select contact (optional)</option>
+              {filteredContacts.map((contact) => (
+                <option key={contact.id} value={contact.id}>
+                  {contact.full_name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-2 md:col-span-2">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Customer Project Title</label>
+            <input
+              name="title"
+              required
+              placeholder="e.g. Pole copper recovery - North Zone"
+              className="w-full px-3 py-2.5 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-primary"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Job Type</label>
+            <select
+              name="job_type"
+              required
+              className="w-full px-3 py-2.5 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-primary"
+            >
+              {jobTypes.map((jobType) => (
+                <option key={jobType.value} value={jobType.value}>
+                  {jobType.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Initial Project Status</label>
+            <select
+              name="stage"
+              defaultValue="prospect"
+              className="w-full px-3 py-2.5 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-primary"
+            >
+              {stages.map((stage) => (
+                <option key={stage.value} value={stage.value}>
+                  {stage.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Project Owner</label>
+            <select
+              name="owner_id"
+              defaultValue={currentUserId}
+              className="w-full px-3 py-2.5 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-primary"
+            >
+              {owners.map((owner) => (
+                <option key={owner.id} value={owner.id}>
+                  {owner.full_name} ({owner.role})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1">
+              <MapPin className="h-3.5 w-3.5" /> Site Location
+            </label>
+            <input
+              name="location"
+              placeholder="Customer site location"
+              className="w-full px-3 py-2.5 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-primary"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1">
+              <CircleDollarSign className="h-3.5 w-3.5" /> Estimated Contract Value
+            </label>
+            <input
+              name="estimated_contract_value"
+              type="number"
+              step="0.01"
+              placeholder="0.00"
+              className="w-full px-3 py-2.5 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-primary"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Estimated Copper Volume</label>
+            <input
+              name="estimated_copper_volume"
+              type="number"
+              step="0.01"
+              placeholder="In tons or agreed unit"
+              className="w-full px-3 py-2.5 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-primary"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1">
+              <CalendarClock className="h-3.5 w-3.5" /> Expected Start Date
+            </label>
+            <input
+              name="expected_start_date"
+              type="date"
+              className="w-full px-3 py-2.5 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-primary"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Expected Close Date</label>
+            <input
+              name="expected_close_date"
+              type="date"
+              className="w-full px-3 py-2.5 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-primary"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Next Follow-up Date</label>
+            <input
+              name="next_follow_up_date"
+              type="date"
+              className="w-full px-3 py-2.5 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-primary"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Source</label>
+            <input
+              name="source"
+              placeholder="Referral, inbound request, repeat customer..."
+              className="w-full px-3 py-2.5 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-primary"
+            />
+          </div>
+
+          <div className="space-y-2 md:col-span-2">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1">
+              <ShieldAlert className="h-3.5 w-3.5" /> Access / Safety / Permit Requirements
+            </label>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <textarea
+                name="access_requirements"
+                rows={3}
+                placeholder="Access requirements"
+                className="w-full px-3 py-2 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-primary resize-none"
+              />
+              <textarea
+                name="safety_requirements"
+                rows={3}
+                placeholder="Safety requirements"
+                className="w-full px-3 py-2 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-primary resize-none"
+              />
+              <textarea
+                name="permit_requirements"
+                rows={3}
+                placeholder="Permit requirements"
+                className="w-full px-3 py-2 text-sm bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-primary resize-none"
+              />
+            </div>
           </div>
         </div>
-      </form>
-    </div>
+
+        <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+          <button
+            type="submit"
+            disabled={opportunityPending || accounts.length === 0}
+            className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-5 py-2.5 rounded-xl font-medium transition-all disabled:opacity-50"
+          >
+            <Save className="h-4 w-4" />
+            {opportunityPending ? "Creating..." : "Create Customer Project"}
+          </button>
+        </div>
+      </div>
+    </form>
   );
 }
