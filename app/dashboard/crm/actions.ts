@@ -628,6 +628,7 @@ export async function uploadCustomerDocument(customerId: string, docType: string
 
   const file = formData.get('file') as File;
   if (!file) return { error: 'No file provided' };
+  const notes = (formData.get('notes') as string)?.trim() || null;
 
   const fileExt = file.name.split('.').pop();
   const fileName = `${docType}_${Date.now()}.${fileExt}`;
@@ -643,20 +644,96 @@ export async function uploadCustomerDocument(customerId: string, docType: string
     .from('crm-documents')
     .getPublicUrl(filePath);
 
-  const { error: dbError } = await supabase
+  const { data: logicalDocs } = await supabase
     .from('crm_documents')
-    .upsert({
-      account_id: customerId,
-      doc_type: docType,
-      file_url: publicUrl,
-      file_name: file.name,
-      status: 'submitted',
-      submitted_at: new Date().toISOString(),
-      uploaded_by: user.id,
-      updated_at: new Date().toISOString()
-    }, { onConflict: 'account_id,doc_type' });
+    .select('id, version_number')
+    .eq('account_id', customerId)
+    .eq('doc_type', docType)
+    .is('archived_at', null)
+    .order('created_at', { ascending: false })
+    .limit(1);
 
-  if (dbError) return { error: dbError.message };
+  const logicalDoc = logicalDocs?.[0] || null;
+
+  if (!logicalDoc) {
+    const { data: newDoc, error: insertError } = await supabase
+      .from('crm_documents')
+      .insert({
+        account_id: customerId,
+        doc_type: docType,
+        status: 'submitted',
+        submitted_at: new Date().toISOString(),
+        uploaded_by: user.id,
+        updated_at: new Date().toISOString()
+      })
+      .select('id')
+      .single();
+
+    if (insertError || !newDoc) return { error: insertError?.message || 'Failed to create document' };
+
+    const { data: version, error: versionError } = await supabase
+      .from('crm_document_versions')
+      .insert({
+        document_id: newDoc.id,
+        version_number: 1,
+        file_url: publicUrl,
+        file_name: file.name,
+        file_size: file.size,
+        file_type: file.type,
+        uploaded_by: user.id,
+        notes
+      })
+      .select('id')
+      .single();
+
+    if (versionError) return { error: versionError.message };
+
+    await supabase
+      .from('crm_documents')
+      .update({
+        current_version_id: version.id,
+        file_url: publicUrl,
+        file_name: file.name,
+        version_number: 1,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', newDoc.id);
+  } else {
+    const nextVersion = (logicalDoc.version_number || 0) + 1;
+
+    const { data: version, error: versionError } = await supabase
+      .from('crm_document_versions')
+      .insert({
+        document_id: logicalDoc.id,
+        version_number: nextVersion,
+        file_url: publicUrl,
+        file_name: file.name,
+        file_size: file.size,
+        file_type: file.type,
+        uploaded_by: user.id,
+        notes
+      })
+      .select('id')
+      .single();
+
+    if (versionError) return { error: versionError.message };
+
+    const { error: updateError } = await supabase
+      .from('crm_documents')
+      .update({
+        current_version_id: version.id,
+        file_url: publicUrl,
+        file_name: file.name,
+        version_number: nextVersion,
+        status: 'submitted',
+        submitted_at: new Date().toISOString(),
+        uploaded_by: user.id,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', logicalDoc.id);
+
+    if (updateError) return { error: updateError.message };
+  }
 
   await recordAuditLog({
     entity_type: 'crm_document',
@@ -670,6 +747,353 @@ export async function uploadCustomerDocument(customerId: string, docType: string
     type: 'crm',
     title: 'Customer Document Added',
     message: `A document was uploaded for a customer.`,
+    link: `/dashboard/crm/${customerId}`,
+    created_by: user.id
+  });
+
+  revalidatePath(`/dashboard/crm/${customerId}`);
+  return { success: true };
+}
+
+export async function uploadDocumentVersion(documentId: string, formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Unauthorized' };
+
+  const file = formData.get('file') as File;
+  if (!file) return { error: 'No file provided' };
+  const notes = (formData.get('notes') as string)?.trim() || null;
+
+  const { data: doc } = await supabase
+    .from('crm_documents')
+    .select('id, account_id, version_number, doc_type, label')
+    .eq('id', documentId)
+    .single();
+
+  if (!doc) return { error: 'Document not found' };
+
+  const docType = doc.doc_type === 'custom' ? 'custom' : doc.doc_type;
+  const labelSlug = doc.label
+    ? doc.label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/_+$/, '').slice(0, 40)
+    : docType;
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${labelSlug}_${Date.now()}.${fileExt}`;
+  const filePath = `customers/${doc.account_id}/${docType}/${fileName}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('crm-documents')
+    .upload(filePath, file, { contentType: file.type, upsert: false });
+
+  if (uploadError) return { error: uploadError.message };
+
+  const { data: { publicUrl } } = supabase.storage
+    .from('crm-documents')
+    .getPublicUrl(filePath);
+
+  const nextVersion = (doc.version_number || 0) + 1;
+
+  const { data: version, error: versionError } = await supabase
+    .from('crm_document_versions')
+    .insert({
+      document_id: doc.id,
+      version_number: nextVersion,
+      file_url: publicUrl,
+      file_name: file.name,
+      file_size: file.size,
+      file_type: file.type,
+      uploaded_by: user.id,
+      notes
+    })
+    .select('id')
+    .single();
+
+  if (versionError) return { error: versionError.message };
+
+  const { error: updateError } = await supabase
+    .from('crm_documents')
+    .update({
+      current_version_id: version.id,
+      file_url: publicUrl,
+      file_name: file.name,
+      version_number: nextVersion,
+      status: 'submitted',
+      submitted_at: new Date().toISOString(),
+      uploaded_by: user.id,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', doc.id);
+
+  if (updateError) return { error: updateError.message };
+
+  await recordAuditLog({
+    entity_type: 'crm_document',
+    entity_id: doc.id,
+    action: 'UPDATE',
+    changes: { after: { status: 'submitted', version: nextVersion } },
+    performed_by: user.id
+  });
+
+  await createNotification({
+    type: 'crm',
+    title: 'Document Updated',
+    message: doc.label
+      ? `A new version of "${doc.label}" was uploaded.`
+      : `A new document version was uploaded.`,
+    link: `/dashboard/crm/${doc.account_id}`,
+    created_by: user.id
+  });
+
+  revalidatePath(`/dashboard/crm/${doc.account_id}`);
+  return { success: true };
+}
+
+export async function getDocumentVersions(documentId: string) {
+  const supabase = await createClient();
+  const { data: doc } = await supabase
+    .from('crm_documents')
+    .select('id, current_version_id')
+    .eq('id', documentId)
+    .single();
+
+  if (!doc) return { versions: [] };
+
+  const { data: versions, error } = await supabase
+    .from('crm_document_versions')
+    .select(`
+      id,
+      version_number,
+      file_name,
+      file_size,
+      file_type,
+      notes,
+      created_at,
+      uploaded_by,
+      profiles!uploaded_by(full_name, email)
+    `)
+    .eq('document_id', documentId)
+    .order('version_number', { ascending: false });
+
+  if (error) return { error: error.message };
+
+  return {
+    versions: (versions || []).map(v => ({
+      ...v,
+      is_current: v.id === doc.current_version_id
+    }))
+  };
+}
+
+export async function getVersionSignedUrl(versionId: string) {
+  const supabase = await createClient();
+  const { data: version } = await supabase
+    .from('crm_document_versions')
+    .select('file_url')
+    .eq('id', versionId)
+    .single();
+
+  if (!version) return { error: 'Version not found' };
+
+  const path = version.file_url.split('/public/crm-documents/')[1];
+  if (!path) return { url: version.file_url };
+
+  const { data } = await supabase.storage
+    .from('crm-documents')
+    .createSignedUrl(path, 3600);
+
+  return { url: data?.signedUrl || version.file_url };
+}
+
+export async function rollbackDocumentVersion(documentId: string, versionId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Unauthorized' };
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single();
+
+  if (!profile || profile.role !== 'admin') {
+    return { error: 'Only admins can rollback documents.' };
+  }
+
+  const { data: version } = await supabase
+    .from('crm_document_versions')
+    .select('file_url, file_name')
+    .eq('id', versionId)
+    .eq('document_id', documentId)
+    .single();
+
+  if (!version) return { error: 'Version not found' };
+
+  const { error } = await supabase
+    .from('crm_documents')
+    .update({
+      current_version_id: versionId,
+      file_url: version.file_url,
+      file_name: version.file_name,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', documentId);
+
+  if (error) return { error: error.message };
+
+  await recordAuditLog({
+    entity_type: 'crm_document',
+    entity_id: documentId,
+    action: 'UPDATE',
+    changes: { after: { action: 'rollback', version_id: versionId } },
+    performed_by: user.id
+  });
+
+  revalidatePath('/dashboard/crm', 'layout');
+  return { success: true };
+}
+
+export async function approveCustomerDocumentById(documentId: string, expiryDate: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Unauthorized' };
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single();
+
+  if (!profile || profile.role !== 'admin') {
+    return { error: 'Only admins can approve documents.' };
+  }
+
+  if (!expiryDate) {
+    return { error: 'An expiry date is required when approving a document.' };
+  }
+
+  const { data: doc } = await supabase
+    .from('crm_documents')
+    .select('account_id, label')
+    .eq('id', documentId)
+    .single();
+
+  if (!doc) return { error: 'Document not found.' };
+
+  const { error } = await supabase
+    .from('crm_documents')
+    .update({
+      status: 'approved',
+      approved_at: new Date().toISOString(),
+      expiry_date: expiryDate,
+      uploaded_by: user.id,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', documentId)
+    .is('archived_at', null);
+
+  if (error) return { error: error.message };
+
+  await recordAuditLog({
+    entity_type: 'crm_document',
+    entity_id: documentId,
+    action: 'UPDATE',
+    changes: { after: { status: 'approved', expiry_date: expiryDate } },
+    performed_by: user.id
+  });
+
+  await createNotification({
+    type: 'crm',
+    title: 'Customer Document Approved',
+    message: doc.label
+      ? `Custom document "${doc.label}" was approved.`
+      : `A customer document was approved.`,
+    link: `/dashboard/crm/${doc.account_id}`,
+    created_by: user.id
+  });
+
+  revalidatePath('/dashboard/crm', 'layout');
+  return { success: true };
+}
+
+export async function uploadCustomCustomerDocument(customerId: string, label: string, formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Unauthorized' };
+
+  const file = formData.get('file') as File;
+  if (!file) return { error: 'No file provided' };
+  const notes = (formData.get('notes') as string)?.trim() || null;
+
+  const labelSlug = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/_+$/, '').slice(0, 40);
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${labelSlug}_${Date.now()}.${fileExt}`;
+  const filePath = `customers/${customerId}/custom/${fileName}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('crm-documents')
+    .upload(filePath, file, { contentType: file.type, upsert: false });
+
+  if (uploadError) return { error: uploadError.message };
+
+  const { data: { publicUrl } } = supabase.storage
+    .from('crm-documents')
+    .getPublicUrl(filePath);
+
+  const { data: newDoc, error: insertError } = await supabase
+    .from('crm_documents')
+    .insert({
+      account_id: customerId,
+      doc_type: 'custom',
+      label: label.trim(),
+      status: 'submitted',
+      submitted_at: new Date().toISOString(),
+      uploaded_by: user.id,
+      updated_at: new Date().toISOString()
+    })
+    .select('id')
+    .single();
+
+  if (insertError || !newDoc) return { error: insertError?.message || 'Failed to create document' };
+
+  const { data: version, error: versionError } = await supabase
+    .from('crm_document_versions')
+    .insert({
+      document_id: newDoc.id,
+      version_number: 1,
+      file_url: publicUrl,
+      file_name: file.name,
+      file_size: file.size,
+      file_type: file.type,
+      uploaded_by: user.id,
+      notes
+    })
+    .select('id')
+    .single();
+
+  if (versionError) return { error: versionError.message };
+
+  await supabase
+    .from('crm_documents')
+    .update({
+      current_version_id: version.id,
+      file_url: publicUrl,
+      file_name: file.name,
+      version_number: 1,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', newDoc.id);
+
+  await recordAuditLog({
+    entity_type: 'crm_document',
+    entity_id: customerId,
+    action: 'UPDATE',
+    changes: { after: { doc_type: 'custom', label: label.trim(), status: 'submitted' } },
+    performed_by: user.id
+  });
+
+  await createNotification({
+    type: 'crm',
+    title: 'Customer Document Added',
+    message: `A custom document "${label.trim()}" was uploaded for a customer.`,
     link: `/dashboard/crm/${customerId}`,
     created_by: user.id
   });
