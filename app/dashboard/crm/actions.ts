@@ -620,3 +620,106 @@ export async function convertOpportunityToProject(opportunityId: string) {
   revalidatePath('/dashboard/projects');
   redirect(`/dashboard/projects/${project.id}`);
 }
+
+export async function uploadCustomerDocument(customerId: string, docType: string, formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Unauthorized' };
+
+  const file = formData.get('file') as File;
+  if (!file) return { error: 'No file provided' };
+
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${docType}_${Date.now()}.${fileExt}`;
+  const filePath = `customers/${customerId}/${docType}/${fileName}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('crm-documents')
+    .upload(filePath, file, { contentType: file.type, upsert: false });
+
+  if (uploadError) return { error: uploadError.message };
+
+  const { data: { publicUrl } } = supabase.storage
+    .from('crm-documents')
+    .getPublicUrl(filePath);
+
+  const { error: dbError } = await supabase
+    .from('crm_documents')
+    .upsert({
+      account_id: customerId,
+      doc_type: docType,
+      file_url: publicUrl,
+      file_name: file.name,
+      status: 'submitted',
+      submitted_at: new Date().toISOString(),
+      uploaded_by: user.id,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'account_id,doc_type' });
+
+  if (dbError) return { error: dbError.message };
+
+  await recordAuditLog({
+    entity_type: 'crm_document',
+    entity_id: customerId,
+    action: 'UPDATE',
+    changes: { after: { doc_type: docType, status: 'submitted' } },
+    performed_by: user.id
+  });
+
+  await createNotification({
+    type: 'crm',
+    title: 'Customer Document Added',
+    message: `A document was uploaded for a customer.`,
+    link: `/dashboard/crm/${customerId}`,
+    created_by: user.id
+  });
+
+  revalidatePath(`/dashboard/crm/${customerId}`);
+  return { success: true };
+}
+
+export async function approveCustomerDocument(customerId: string, docType: string, expiryDate: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Unauthorized' };
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single();
+
+  if (!profile || profile.role !== 'admin') {
+    return { error: 'Only admins can approve documents.' };
+  }
+
+  if (!expiryDate) {
+    return { error: 'An expiry date is required when approving a document.' };
+  }
+
+  const { error } = await supabase
+    .from('crm_documents')
+    .update({
+      status: 'approved',
+      approved_at: new Date().toISOString(),
+      expiry_date: expiryDate,
+      uploaded_by: user.id,
+      updated_at: new Date().toISOString()
+    })
+    .eq('account_id', customerId)
+    .eq('doc_type', docType)
+    .is('archived_at', null);
+
+  if (error) return { error: error.message };
+
+  await recordAuditLog({
+    entity_type: 'crm_document',
+    entity_id: customerId,
+    action: 'UPDATE',
+    changes: { after: { doc_type: docType, status: 'approved', expiry_date: expiryDate } },
+    performed_by: user.id
+  });
+
+  revalidatePath(`/dashboard/crm/${customerId}`);
+  return { success: true };
+}

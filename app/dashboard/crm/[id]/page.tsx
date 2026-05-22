@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { ArrowLeft, CheckCircle2, FileText, Plus, XCircle } from 'lucide-react';
 import { Suspense } from 'react';
 import { CustomerProfileDetails } from '@/components/dashboard/crm/customer-profile-details';
+import { CustomerDocuments } from '@/components/dashboard/crm/customer-documents';
 import { updateCustomerStatus } from '../actions';
 
 export const unstable_instant = {
@@ -34,7 +35,7 @@ async function CustomerDetailContent({
   const tab = searchParams.tab || 'profile';
   const supabase = await createClient();
 
-  const [{ data: customer, error }, { data: contacts }, { data: opportunities }, { data: userProfile }] = await Promise.all([
+  const [{ data: customer, error }, { data: contacts }, { data: opportunities }, { data: documents }, { data: userProfile }] = await Promise.all([
     supabase.from('crm_accounts').select('*').eq('id', params.id).is('deleted_at', null).single(),
     supabase
       .from('crm_contacts')
@@ -49,6 +50,11 @@ async function CustomerDetailContent({
       .eq('account_id', params.id)
       .is('deleted_at', null)
       .order('created_at', { ascending: false }),
+    supabase
+      .from('crm_documents')
+      .select('*')
+      .eq('account_id', params.id)
+      .is('archived_at', null),
     supabase.auth.getUser().then(async ({ data: { user: authUser } }) => {
       if (!authUser) return { data: null };
       return supabase.from('profiles').select('role').eq('id', authUser.id).single();
@@ -60,9 +66,23 @@ async function CustomerDetailContent({
   const userRole = userProfile?.role || '';
   const canManage = ['admin', 'commercial_manager'].includes(userRole);
 
+  const documentsWithUrls = await Promise.all((documents || []).map(async (doc: any) => {
+    if (doc.file_url) {
+      const path = doc.file_url.split('/public/crm-documents/')[1];
+      if (path) {
+        const { data } = await supabase.storage
+          .from('crm-documents')
+          .createSignedUrl(path, 3600);
+        return { ...doc, file_url: data?.signedUrl || doc.file_url };
+      }
+    }
+    return doc;
+  }));
+
   const tabs = [
     { id: 'profile', label: 'Profile' },
     { id: 'projects', label: 'Customer Projects' },
+    { id: 'documents', label: 'Documents' },
   ];
 
   return (
@@ -157,6 +177,10 @@ async function CustomerDetailContent({
 
       <div className="py-4">
         {tab === 'profile' && <CustomerProfileDetails customer={customer} contacts={contacts || []} />}
+
+        {tab === 'documents' && (
+          <CustomerDocuments customerId={customer.id} documents={documentsWithUrls || []} userRole={userRole} />
+        )}
 
         {tab === 'projects' && (
           <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm animate-in fade-in duration-300">
