@@ -223,7 +223,6 @@ export async function createVendor(prevState: any, formData: FormData) {
       payment_terms,
       notes,
       currency,
-      contact_fax,
       secondary_contacts,
       secondary_banking,
       created_by: user.id,
