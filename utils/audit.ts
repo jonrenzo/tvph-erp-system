@@ -1,6 +1,6 @@
 import { createClient } from '@/utils/supabase/server';
 
-export type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'LOGIN' | 'LOGOUT' | 'PASSWORD_RESET';
+export type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'LOGIN' | 'LOGOUT' | 'PASSWORD_RESET' | 'PASSWORD_CHANGE';
 
 export interface AuditLogOptions {
   entity_type: string;

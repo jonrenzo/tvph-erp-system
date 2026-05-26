@@ -15,7 +15,9 @@ import {
   User,
   Mail,
   FolderGit2,
-  FileDown
+  FileDown,
+  MapPin,
+  Pencil
 } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
@@ -72,6 +74,20 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
     .from("service_invoices")
     .select("id, amount, status, invoice_number")
     .eq("po_id", po.id);
+
+  // Fetch line items
+  const { data: lineItems } = await supabase
+    .from("po_line_items")
+    .select("*")
+    .eq("po_id", po.id)
+    .order("line_no");
+
+  // Fetch site details
+  const { data: siteDetails } = await supabase
+    .from("po_site_details")
+    .select("*")
+    .eq("po_id", po.id)
+    .order("sn");
 
   const invoiceIds = invoices?.map((i) => i.id) || [];
 
@@ -149,13 +165,13 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
             </form>
           )}
           <a
-            href={`/api/purchase-orders/${po.id}/download`}
+            href={`/api/purchase-orders/${po.id}/pdf`}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 bg-white dark:bg-[#0a0a0a] border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 px-4 py-2 rounded-xl text-sm font-medium transition-all"
+            className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm active:scale-95"
           >
             <FileDown className="h-4 w-4" />
-            View PDF
+            Download PDF
           </a>
           <button className="bg-white dark:bg-[#0a0a0a] border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 px-4 py-2 rounded-xl text-sm font-medium transition-all">
             Edit
@@ -345,6 +361,103 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
               </div>
             </div>
           </div>
+
+          {/* Line Items Table */}
+          {lineItems && lineItems.length > 0 && (
+            <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+              <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-[#0a0a0a]/50 flex items-center justify-between">
+                <h2 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                  <CircleDollarSign className="h-5 w-5 text-primary" /> Line Items
+                </h2>
+                <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs px-2 py-0.5 rounded-full font-bold">
+                  {lineItems.length}
+                </span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="text-[10px] text-slate-500 uppercase bg-slate-50/50 dark:bg-slate-800/20 border-b border-slate-200 dark:border-slate-800">
+                    <tr>
+                      <th className="px-4 py-3 font-semibold w-12">#</th>
+                      <th className="px-4 py-3 font-semibold w-24">Item Code</th>
+                      <th className="px-4 py-3 font-semibold">Description</th>
+                      <th className="px-4 py-3 font-semibold w-16 text-right">Qty</th>
+                      <th className="px-4 py-3 font-semibold w-16">UoM</th>
+                      <th className="px-4 py-3 font-semibold w-28 text-right">Unit Price</th>
+                      <th className="px-4 py-3 font-semibold w-28 text-right">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {lineItems.map((li: any) => (
+                      <tr key={li.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors">
+                        <td className="px-4 py-3 text-slate-400 font-mono text-xs">{li.line_no}</td>
+                        <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{li.item_code || '—'}</td>
+                        <td className="px-4 py-3 text-slate-900 dark:text-white font-medium">{li.description}</td>
+                        <td className="px-4 py-3 text-right text-slate-900 dark:text-white">{Number(li.qty).toLocaleString()}</td>
+                        <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{li.uom}</td>
+                        <td className="px-4 py-3 text-right text-slate-900 dark:text-white">₱{Number(li.unit_price).toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-slate-900 dark:text-white">₱{Number(li.amount).toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/20">
+                      <td colSpan={6} className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">
+                        Total
+                      </td>
+                      <td className="px-4 py-3 text-right font-bold text-slate-900 dark:text-white">
+                        ₱{lineItems.reduce((sum: number, li: any) => sum + Number(li.amount), 0).toLocaleString()}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Site Details Table */}
+          {siteDetails && siteDetails.length > 0 && (
+            <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+              <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-[#0a0a0a]/50 flex items-center gap-2">
+                <MapPin className="h-5 w-5 text-primary" />
+                <h2 className="font-semibold text-slate-900 dark:text-white">Sites &amp; Details</h2>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="text-[10px] text-slate-500 uppercase bg-slate-50/50 dark:bg-slate-800/20 border-b border-slate-200 dark:border-slate-800">
+                    <tr>
+                      <th className="px-4 py-3 font-semibold w-12">S/N</th>
+                      <th className="px-4 py-3 font-semibold">Region</th>
+                      <th className="px-4 py-3 font-semibold">Area / City</th>
+                      <th className="px-4 py-3 font-semibold w-28 text-right">No. of Nodes</th>
+                      <th className="px-4 py-3 font-semibold w-36 text-right">Cable Length (KM)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {siteDetails.map((site: any) => (
+                      <tr key={site.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors">
+                        <td className="px-4 py-3 text-slate-400 font-mono text-xs">{site.sn}</td>
+                        <td className="px-4 py-3 text-slate-900 dark:text-white">{site.region}</td>
+                        <td className="px-4 py-3 text-slate-900 dark:text-white">{site.area_city}</td>
+                        <td className="px-4 py-3 text-right text-slate-900 dark:text-white">{Number(site.no_of_nodes).toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right text-slate-900 dark:text-white">{Number(site.cable_length_km).toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/20">
+                      <td colSpan={3} className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Total</td>
+                      <td className="px-4 py-3 text-right font-bold text-slate-900 dark:text-white">
+                        {siteDetails.reduce((sum: number, s: any) => sum + Number(s.no_of_nodes), 0).toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-right font-bold text-slate-900 dark:text-white">
+                        {siteDetails.reduce((sum: number, s: any) => sum + Number(s.cable_length_km), 0).toLocaleString()}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Linked Invoices Section Placeholder */}
           <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">

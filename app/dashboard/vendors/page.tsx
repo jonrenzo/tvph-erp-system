@@ -1,9 +1,10 @@
 import Link from 'next/link';
 import { createClient } from '@/utils/supabase/server';
-import { Plus, Search, Building2, ChevronRight } from 'lucide-react';
+import { Plus, Search, Building2 } from 'lucide-react';
 import { Suspense } from 'react';
 import { SearchInput } from '@/components/ui/search-input';
 import { StatusSelect } from '@/components/ui/status-select';
+import { VendorsTableBody } from '@/components/dashboard/vendors/vendors-table-body';
 
 export const unstable_instant = {
   prefetch: 'static',

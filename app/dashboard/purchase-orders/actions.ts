@@ -13,13 +13,40 @@ export async function createPurchaseOrder(prevState: any, formData: FormData) {
 
   const vendor_id = formData.get('vendor_id') as string;
   const description = formData.get('description') as string;
-  const amount = formData.get('amount') as string;
   const issued_date = formData.get('issued_date') as string;
   const due_date = formData.get('due_date') as string;
   const project_id = formData.get('project_id') as string;
+  const dp_amount = parseFloat(formData.get('dp_amount') as string) || 0;
 
-  if (!vendor_id || !amount || !issued_date) {
-    return { error: 'Vendor, amount, and issued date are required.' };
+  // Parse line items and site details from serialized JSON
+  let lineItems: { item_code: string; description: string; qty: number; uom: string; unit_price: number }[] = [];
+  let siteDetails: { region: string; area_city: string; no_of_nodes: number; cable_length_km: number }[] = [];
+
+  try {
+    const rawLineItems = formData.get('line_items') as string;
+    if (rawLineItems) lineItems = JSON.parse(rawLineItems);
+  } catch {
+    return { error: 'Invalid line items data.' };
+  }
+
+  try {
+    const rawSites = formData.get('site_details') as string;
+    if (rawSites) siteDetails = JSON.parse(rawSites);
+  } catch {
+    return { error: 'Invalid site details data.' };
+  }
+
+  // Compute total from line items (or fallback to form amount)
+  const totalAmount = lineItems.length > 0
+    ? lineItems.reduce((sum, li) => sum + (Number(li.qty) || 0) * (Number(li.unit_price) || 0), 0)
+    : parseFloat(formData.get('amount') as string) || 0;
+
+  if (!vendor_id || !issued_date) {
+    return { error: 'Vendor and issued date are required.' };
+  }
+
+  if (totalAmount <= 0) {
+    return { error: 'Total amount must be greater than zero. Add at least one line item with a price.' };
   }
 
   // NDA Gate — vendor must have an approved Signed NDA before any PO can be created
@@ -61,7 +88,8 @@ export async function createPurchaseOrder(prevState: any, formData: FormData) {
     vendor_id,
     project_id: project_id || null,
     description,
-    amount: parseFloat(amount),
+    amount: totalAmount,
+    dp_amount,
     issued_date,
     due_date: due_date || null,
     status: 'draft',
@@ -75,12 +103,51 @@ export async function createPurchaseOrder(prevState: any, formData: FormData) {
     return { error: error.message };
   }
 
+  // Insert line items
+  if (lineItems.length > 0) {
+    const { error: liError } = await supabase.from('po_line_items').insert(
+      lineItems.map((li, i) => ({
+        po_id: newPO.id,
+        line_no: i + 1,
+        item_code: li.item_code || '',
+        description: li.description || '',
+        qty: Number(li.qty) || 1,
+        uom: li.uom || 'LOT',
+        unit_price: Number(li.unit_price) || 0,
+        amount: (Number(li.qty) || 0) * (Number(li.unit_price) || 0),
+      }))
+    );
+    if (liError) {
+      console.error('Error inserting line items:', liError);
+    }
+  }
+
+  // Insert site details (filter out empty rows)
+  const validSites = siteDetails.filter(
+    (s) => s.region || s.area_city || s.no_of_nodes > 0 || s.cable_length_km > 0
+  );
+  if (validSites.length > 0) {
+    const { error: siteError } = await supabase.from('po_site_details').insert(
+      validSites.map((s, i) => ({
+        po_id: newPO.id,
+        sn: i + 1,
+        region: s.region || '',
+        area_city: s.area_city || '',
+        no_of_nodes: Number(s.no_of_nodes) || 0,
+        cable_length_km: Number(s.cable_length_km) || 0,
+      }))
+    );
+    if (siteError) {
+      console.error('Error inserting site details:', siteError);
+    }
+  }
+
   // Audit log
   await recordAuditLog({
     entity_type: 'purchase_order',
     entity_id: newPO.id,
     action: 'CREATE',
-    changes: { after: { vendor_id, amount, status: 'draft', currency } },
+    changes: { after: { vendor_id, amount: totalAmount, status: 'draft', currency, line_items_count: lineItems.length, sites_count: validSites.length } },
     performed_by: user.id
   });
 
@@ -149,5 +216,38 @@ export async function assignProjectToPO(poId: string, projectId: string | null) 
   });
 
   revalidatePath(`/dashboard/purchase-orders/${poId}`);
+  return { success: true };
+}
+
+export async function deletePurchaseOrder(poId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Unauthorized.' };
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single();
+
+  if (profile?.role !== 'admin') {
+    return { error: 'Forbidden. Only administrators can delete purchase orders.' };
+  }
+
+  const { error } = await supabase
+    .from('purchase_orders')
+    .delete()
+    .eq('id', poId);
+
+  if (error) return { error: error.message };
+
+  await recordAuditLog({
+    entity_type: 'purchase_order',
+    entity_id: poId,
+    action: 'DELETE',
+    performed_by: user.id
+  });
+
+  revalidatePath('/dashboard/purchase-orders');
   return { success: true };
 }

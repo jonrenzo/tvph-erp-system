@@ -15,6 +15,8 @@ interface Message {
 export function AIChatBubble() {
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isDismissed, setIsDismissed] = useState(false);
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -55,6 +57,11 @@ export function AIChatBubble() {
 
   const handleToggleClick = () => {
     if (!moved.current) setIsOpen((o) => !o);
+  };
+
+  const handleDismiss = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsDismissed(true);
   };
 
   useEffect(() => {
@@ -126,6 +133,8 @@ export function AIChatBubble() {
       setIsLoading(false);
     }
   };
+
+  if (isDismissed) return null;
 
   return (
     <div
@@ -245,9 +254,21 @@ export function AIChatBubble() {
       <button
         onMouseDown={handleDragStart}
         onClick={handleToggleClick}
-        className="h-14 w-14 rounded-full bg-primary flex items-center justify-center text-white shadow-2xl shadow-primary/30 hover:scale-110 active:scale-95 transition-all group relative cursor-grab active:cursor-grabbing select-none"
+        className="group relative cursor-grab active:cursor-grabbing select-none"
       >
-        {isOpen ? <X className="h-6 w-6" /> : <MessageSquare className="h-6 w-6" />}
+        <img
+          src="/clippy-waiting.gif"
+          alt="Chat assistant"
+          className="h-20 w-auto drop-shadow-2xl hover:scale-110 active:scale-95 transition-all"
+        />
+        <div
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={handleDismiss}
+          className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-slate-700 dark:bg-slate-600 flex items-center justify-center text-white shadow-md hover:bg-red-500 transition-colors opacity-0 group-hover:opacity-100 cursor-pointer"
+          title="Dismiss chat"
+        >
+          <X className="h-3 w-3" />
+        </div>
       </button>
     </div>
   );

@@ -1,13 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { User, Mail, Lock, Shield, Save, Camera, CheckCircle2 } from "lucide-react";
-import { updateProfile, requestPasswordReset, updateAvatar } from "@/app/dashboard/profile/actions";
+import { User, Mail, Lock, Shield, Save, Camera, CheckCircle2, Eye, EyeOff } from "lucide-react";
+import { updateProfile, changePassword, requestPasswordReset, updateAvatar } from "@/app/dashboard/profile/actions";
 
 export function ProfileForm({ profile, userEmail }: { profile: any, userEmail: string }) {
   const [isSaving, setIsSaving] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
   const handleUpdate = async (formData: FormData) => {
@@ -39,6 +43,38 @@ export function ProfileForm({ profile, userEmail }: { profile: any, userEmail: s
       setMessage({ type: 'success', text: 'Avatar updated successfully!' });
     } else {
       setMessage({ type: 'error', text: result.error || 'Failed to upload avatar.' });
+    }
+  };
+
+  const handlePasswordChange = async (formData: FormData) => {
+    setMessage(null);
+    const currentPassword = formData.get('current_password') as string;
+    const newPassword = formData.get('new_password') as string;
+    const confirmPassword = formData.get('confirm_password') as string;
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setMessage({ type: 'error', text: 'All fields are required.' });
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setMessage({ type: 'error', text: 'New password must be at least 6 characters.' });
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setMessage({ type: 'error', text: 'New passwords do not match.' });
+      return;
+    }
+
+    setIsChangingPassword(true);
+    const result = await changePassword(currentPassword, newPassword);
+    setIsChangingPassword(false);
+
+    if (result.success) {
+      setMessage({ type: 'success', text: 'Password changed successfully!' });
+    } else {
+      setMessage({ type: 'error', text: result.error || 'Failed to change password.' });
     }
   };
 
@@ -144,17 +180,73 @@ export function ProfileForm({ profile, userEmail }: { profile: any, userEmail: s
           <h4 className="font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
             <Lock className="h-5 w-5 text-primary" /> Security
           </h4>
-          <div className="space-y-4 text-center py-4">
-            <p className="text-sm text-slate-500">Need to update your password?</p>
-            <button 
-              onClick={handlePasswordReset}
-              disabled={isResetting}
-              className="px-6 py-2 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all disabled:opacity-50 inline-flex items-center gap-2"
-            >
-              {isResetting && <span className="h-3 w-3 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />}
-              Send Password Reset Email
-            </button>
-          </div>
+
+          <form action={handlePasswordChange} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Current Password</label>
+              <div className="relative">
+                <input
+                  name="current_password"
+                  type={showCurrent ? 'text' : 'password'}
+                  required
+                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:border-primary pr-10"
+                />
+                <button type="button" onClick={() => setShowCurrent(!showCurrent)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  {showCurrent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">New Password</label>
+              <div className="relative">
+                <input
+                  name="new_password"
+                  type={showNew ? 'text' : 'password'}
+                  required
+                  minLength={6}
+                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:border-primary pr-10"
+                />
+                <button type="button" onClick={() => setShowNew(!showNew)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  {showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Confirm New Password</label>
+              <div className="relative">
+                <input
+                  name="confirm_password"
+                  type={showConfirm ? 'text' : 'password'}
+                  required
+                  minLength={6}
+                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:border-primary pr-10"
+                />
+                <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="submit"
+                disabled={isChangingPassword}
+                className="inline-flex items-center gap-2 bg-primary text-white px-6 py-2.5 rounded-xl font-bold shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 text-xs"
+              >
+                {isChangingPassword ? <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Lock className="h-4 w-4" />}
+                Change Password
+              </button>
+              <span className="text-[10px] text-slate-400">or</span>
+              <button
+                type="button"
+                onClick={handlePasswordReset}
+                disabled={isResetting}
+                className="text-xs text-primary font-bold hover:underline inline-flex items-center gap-1"
+              >
+                {isResetting && <span className="h-3 w-3 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />}
+                Send reset link to email
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Building2, Users, CreditCard, ShieldCheck, Save, Shield } from "lucide-react";
+import { Building2, Users, CreditCard, Save, Shield } from "lucide-react";
 import { updateOrganizationSettings, updateFinancialSettings, updateUserRole } from "@/app/dashboard/settings/actions";
 import { AddUserButton } from "@/components/dashboard/hr/add-user-button";
 
@@ -141,6 +141,7 @@ export function SettingsTabs({ initialSettings, team }: { initialSettings: any, 
                                  <option value="admin">Administrator</option>
                                  <option value="finance">Finance</option>
                                  <option value="procurement">Procurement</option>
+                                 <option value="commercial_manager">Commercial Manager</option>
                                  <option value="project_manager">Project Manager</option>
                                  <option value="user">Standard User</option>
                               </select>

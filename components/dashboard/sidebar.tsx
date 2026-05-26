@@ -16,8 +16,6 @@ import {
   Settings,
   Building2,
   ChevronDown,
-  PanelLeftClose,
-  PanelLeftOpen,
 } from "lucide-react";
 
 const MODULE_CONFIG = [
@@ -50,7 +48,24 @@ const MODULE_CONFIG = [
       },
     ],
   },
-  { id: "crm", label: "CRM", icon: Users, href: "/dashboard/crm" },
+  {
+    id: "crm",
+    label: "CRM",
+    icon: Users,
+    subModules: [
+      { id: "crm-customers", label: "Customers", href: "/dashboard/crm" },
+      {
+        id: "crm-new-customer",
+        label: "Add Customer",
+        href: "/dashboard/crm/new",
+      },
+      {
+        id: "crm-new-project",
+        label: "New Customer Project",
+        href: "/dashboard/crm/projects/new",
+      },
+    ],
+  },
   {
     id: "projects",
     label: "Projects",
@@ -229,15 +244,18 @@ export function Sidebar({
             isCollapsed ? "justify-center px-0" : "px-6 gap-2"
           }`}
         >
-          <Image
-            src="/logo.svg"
-            alt="TelcoVantage Logo"
-            width={isCollapsed ? 28 : 25}
-            height={isCollapsed ? 28 : 25}
-            priority
-            draggable={false}
-            className="select-none invert dark:invert-0 shrink-0 transition-all"
-          />
+          <Link href="/dashboard">
+            <Image
+              src="/logo.svg"
+              alt="TelcoVantage Logo"
+              width={isCollapsed ? 28 : 25}
+              height={isCollapsed ? 28 : 25}
+              priority
+              draggable={false}
+              className="select-none invert dark:invert-0 shrink-0 transition-all"
+            />
+          </Link>
+
           {!isCollapsed && (
             <span className="font-plus-jakarta font-bold text-slate-900 dark:text-white text-base tracking-[-0.06em] whitespace-nowrap">
               TelcoVantage Philippines
