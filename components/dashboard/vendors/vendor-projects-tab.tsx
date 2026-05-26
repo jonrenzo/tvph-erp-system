@@ -216,10 +216,16 @@ export function VendorProjectsTab({
                 )}
                 
                 <div className="flex flex-col gap-2 mt-auto text-xs text-slate-400 dark:text-slate-500 font-medium bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800/50">
-                  <span className="flex items-center gap-1.5">
-                    <Clock className="h-3.5 w-3.5" />
-                    Created {new Date(project.created_at).toLocaleDateString()}
-                  </span>
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Clock className="h-3.5 w-3.5" />
+                      Created {new Date(project.created_at).toLocaleDateString()}
+                    </span>
+                    <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-500 bg-amber-50 dark:bg-amber-500/10 px-2 py-0.5 rounded-full">
+                      <Clock className="h-3 w-3" />
+                      Expires on: Dec 31, 2026
+                    </span>
+                  </div>
                   <span className="flex items-center gap-1.5 text-primary">
                     <FolderGit2 className="h-3.5 w-3.5" />
                     {projectPOs.length} Connected PO{projectPOs.length === 1 ? '' : 's'}

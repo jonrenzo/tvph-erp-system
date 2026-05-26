@@ -4,7 +4,7 @@ import { useState, useActionState, useEffect } from "react";
 import { Building2, MapPin, Phone, Mail, CreditCard, Clock, Edit2, Save, X, Plus, Trash2 } from "lucide-react";
 import { updateVendorProfile } from "@/app/dashboard/vendors/actions";
 
-export function VendorProfileDetails({ vendor }: { vendor: any }) {
+export function VendorProfileDetails({ vendor, documents }: { vendor: any, documents?: any[] }) {
   const [isEditing, setIsEditing] = useState(false);
   
   // Need to handle action state for the edit form
@@ -69,6 +69,18 @@ export function VendorProfileDetails({ vendor }: { vendor: any }) {
             <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
               <Building2 className="h-5 w-5 text-primary" /> Company Details
             </h2>
+            <div className="flex items-center gap-2">
+              {(() => {
+                const ndaDoc = documents?.find(d => d.doc_type === 'signed_nda');
+                if (!ndaDoc) {
+                  return <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">NDA: Not Submitted</span>;
+                }
+                if (ndaDoc.status === 'approved') {
+                  return <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800/50">NDA: Approved</span>;
+                }
+                return <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800/50">NDA: Pending</span>;
+              })()}
+            </div>
             <button
               onClick={() => setIsEditing(true)}
               className="p-2 text-slate-500 hover:text-primary hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium"
@@ -109,7 +121,16 @@ export function VendorProfileDetails({ vendor }: { vendor: any }) {
                   {vendor.contact_phone || "-"}
                 </p>
               </div>
-              <div className="col-span-2">
+              <div className="col-span-2 md:col-span-1">
+                <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  Fax
+                </label>
+                <p className="mt-1 text-slate-900 dark:text-slate-300 flex items-center gap-2">
+                  <Phone className="h-3.5 w-3.5 text-slate-400" />
+                  {vendor.contact_fax || "-"}
+                </p>
+              </div>
+              <div className="col-span-2 md:col-span-1">
                 <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   Email Address
                 </label>
@@ -342,6 +363,16 @@ export function VendorProfileDetails({ vendor }: { vendor: any }) {
                 <input
                   name="contact_phone"
                   defaultValue={vendor.contact_phone}
+                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                />
+              </div>
+              <div className="col-span-2 md:col-span-1">
+                <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1 block">
+                  Fax <span className="text-slate-400 normal-case">(Optional)</span>
+                </label>
+                <input
+                  name="contact_fax"
+                  defaultValue={vendor.contact_fax}
                   className="w-full px-4 py-2.5 bg-slate-50 dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                 />
               </div>

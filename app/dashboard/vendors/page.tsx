@@ -5,7 +5,7 @@ import { Suspense } from 'react';
 import { SearchInput } from '@/components/ui/search-input';
 import { StatusSelect } from '@/components/ui/status-select';
 
-export const unstable_instant = { 
+export const unstable_instant = {
   prefetch: 'static',
   samples: [{ searchParams: { q: null, status: null } }]
 };
@@ -19,7 +19,7 @@ export default function VendorsPage(props: { searchParams?: Promise<{ q?: string
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-plus-jakarta tracking-tight">Vendors</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Manage your suppliers and accreditation documents.</p>
         </div>
-        <Link 
+        <Link
           href="/dashboard/vendors/new"
           className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2.5 rounded-xl font-medium transition-all hover:shadow-lg hover:shadow-primary/20 active:scale-95"
         >
@@ -59,17 +59,17 @@ async function VendorsContent({ searchParams: searchParamsPromise }: { searchPar
   return (
     <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
       <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row gap-4 bg-slate-50/50 dark:bg-[#0a0a0a]/50">
-          <SearchInput placeholder="Search vendors..." paramName="q" />
-          
-          <StatusSelect 
-            paramName="status"
-            options={[
-              { value: 'all', label: 'All Statuses' },
-              { value: 'active', label: 'Active' },
-              { value: 'pending', label: 'Pending' },
-              { value: 'inactive', label: 'Inactive' }
-            ]}
-          />
+        <SearchInput placeholder="Search vendors..." paramName="q" />
+
+        <StatusSelect
+          paramName="status"
+          options={[
+            { value: 'all', label: 'All Statuses' },
+            { value: 'active', label: 'Active' },
+            { value: 'pending', label: 'Pending' },
+            { value: 'inactive', label: 'Inactive' }
+          ]}
+        />
       </div>
 
       <div className="overflow-x-auto">
@@ -81,6 +81,7 @@ async function VendorsContent({ searchParams: searchParamsPromise }: { searchPar
               <th className="px-6 py-4 font-semibold">Contact Person</th>
               <th className="px-6 py-4 font-semibold">Accreditation</th>
               <th className="px-6 py-4 font-semibold">Status</th>
+              <th className="px-6 py-4 font-semibold">NDA</th>
               <th className="px-6 py-4 font-semibold text-right">Actions</th>
             </tr>
           </thead>
@@ -132,8 +133,8 @@ async function VendorsContent({ searchParams: searchParamsPromise }: { searchPar
                       const color = pct === 100
                         ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800/50'
                         : pct >= 50
-                        ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800/50'
-                        : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800/50';
+                          ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800/50'
+                          : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800/50';
                       return (
                         <div className="flex items-center gap-2">
                           <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${color}`}>
@@ -141,9 +142,8 @@ async function VendorsContent({ searchParams: searchParamsPromise }: { searchPar
                           </span>
                           <div className="w-16 h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                             <div
-                              className={`h-full rounded-full transition-all ${
-                                pct === 100 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-500' : 'bg-red-500'
-                              }`}
+                              className={`h-full rounded-full transition-all ${pct === 100 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-500' : 'bg-red-500'
+                                }`}
                               style={{ width: `${pct}%` }}
                             />
                           </div>
@@ -152,17 +152,24 @@ async function VendorsContent({ searchParams: searchParamsPromise }: { searchPar
                     })()}
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${
-                      vendor.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800/50' :
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${vendor.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800/50' :
                       vendor.status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800/50' :
-                      'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
-                    }`}>
+                        'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+                      }`}>
                       {vendor.status.charAt(0).toUpperCase() + vendor.status.slice(1)}
                     </span>
                   </td>
+                  <td className="px-6 py-4">
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${vendor.vendor_documents.doc_type === 'signed_nda' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800/50' :
+                      vendor.vendor_documents.status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800/50' :
+                        'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800/50'
+                      }`}>
+                      {vendor.vendor_documents.doc_type === 'signed_nda' ? 'Signed NDA' : vendor.vendor_documents.status === 'pending' ? 'Pending' : 'Approved'}
+                    </span>
+                  </td>
                   <td className="px-6 py-4 text-right">
-                    <Link 
-                      href={`/dashboard/vendors/${vendor.id}`} 
+                    <Link
+                      href={`/dashboard/vendors/${vendor.id}`}
                       className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-slate-400 group-hover:text-primary group-hover:bg-primary/10 transition-colors"
                     >
                       <ChevronRight className="h-5 w-5" />
