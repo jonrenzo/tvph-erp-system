@@ -60,13 +60,13 @@ async function VendorDetailContent({
       .eq('vendor_id', params.id),
     supabase
       .from('purchase_orders')
-      .select('id, po_number, issued_date, amount, status, project_id, currency')
+      .select('id, po_number, issued_date, amount, status, project_id, currency, projects(name)')
       .eq('vendor_id', params.id)
       .is('deleted_at', null)
       .order('created_at', { ascending: false }),
     supabase
       .from('service_invoices')
-      .select('id, invoice_number, amount, status, purchase_orders(po_number)')
+      .select('id, invoice_number, amount, status, purchase_orders(po_number, projects(name))')
       .eq('vendor_id', params.id)
       .is('deleted_at', null)
       .order('invoice_date', { ascending: false }),
@@ -192,7 +192,7 @@ async function VendorDetailContent({
       {/* Tab Content */}
       <div className="py-4">
         {tab === 'profile' && (
-          <VendorProfileDetails vendor={vendor} />
+          <VendorProfileDetails vendor={vendor} documents={documentsWithUrls} />
         )}
 
         {tab === 'projects' && (
@@ -222,13 +222,14 @@ async function VendorDetailContent({
                     <th className="px-6 py-3 font-semibold">Date</th>
                     <th className="px-6 py-3 font-semibold">Amount</th>
                     <th className="px-6 py-3 font-semibold">Status</th>
+                    <th className="px-6 py-3 font-semibold">Project</th>
                     <th className="px-6 py-3 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                   {pos?.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
+                      <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
                         No purchase orders found for this vendor.
                       </td>
                     </tr>
@@ -247,6 +248,7 @@ async function VendorDetailContent({
                             {po.status.toUpperCase()}
                           </span>
                         </td>
+                        <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{po.projects?.name || '-'}</td>
                         <td className="px-6 py-4 text-right">
                           <Link href={`/dashboard/purchase-orders/${po.id}`} className="text-primary hover:underline font-medium">View</Link>
                         </td>
@@ -276,6 +278,7 @@ async function VendorDetailContent({
                   <tr>
                     <th className="px-6 py-3 font-semibold">Invoice #</th>
                     <th className="px-6 py-3 font-semibold">Linked PO</th>
+                    <th className="px-6 py-3 font-semibold">Project</th>
                     <th className="px-6 py-3 font-semibold">Amount</th>
                     <th className="px-6 py-3 font-semibold">Status</th>
                     <th className="px-6 py-3 text-right">Action</th>
@@ -284,7 +287,7 @@ async function VendorDetailContent({
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                   {invoices?.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
+                      <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
                         No invoices found for this vendor.
                       </td>
                     </tr>
@@ -294,6 +297,9 @@ async function VendorDetailContent({
                         <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">{inv.invoice_number}</td>
                         <td className="px-6 py-4 text-slate-600 dark:text-slate-400">
                           {inv.purchase_orders?.po_number || <span className="text-slate-400 italic text-xs">No PO</span>}
+                        </td>
+                        <td className="px-6 py-4 text-slate-600 dark:text-slate-400">
+                          {inv.purchase_orders?.projects?.name || '-'}
                         </td>
                         <td className="px-6 py-4 font-semibold text-slate-900 dark:text-white">{vendor.currency === 'USD' ? '$' : '₱'}{Number(inv.amount).toLocaleString()}</td>
                         <td className="px-6 py-4">

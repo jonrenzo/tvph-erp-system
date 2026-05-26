@@ -162,6 +162,7 @@ export async function createVendor(prevState: any, formData: FormData) {
   const payment_terms = formData.get('payment_terms') as string;
   const notes = formData.get('notes') as string;
   const currency = (formData.get('currency') as string) || 'PHP';
+  const contact_fax = formData.get('contact_fax') as string;
 
   let secondary_contacts = [];
   try {
@@ -195,6 +196,7 @@ export async function createVendor(prevState: any, formData: FormData) {
     payment_terms,
     notes,
     currency,
+    contact_fax,
     secondary_contacts,
     secondary_banking,
     created_by: user.id,
@@ -238,6 +240,7 @@ export async function updateVendorProfile(prevState: any, formData: FormData) {
   const payment_terms = formData.get('payment_terms') as string;
   const notes = formData.get('notes') as string;
   const currency = (formData.get('currency') as string) || 'PHP';
+  const contact_fax = formData.get('contact_fax') as string;
 
   let secondary_contacts = [];
   try {
@@ -267,6 +270,7 @@ export async function updateVendorProfile(prevState: any, formData: FormData) {
       payment_terms,
       notes,
       currency,
+      contact_fax,
       secondary_contacts,
       secondary_banking,
       updated_at: new Date().toISOString()
