@@ -165,20 +165,13 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
             </form>
           )}
           <a
-            href={`/api/purchase-orders/${po.id}/download`}
+            href={`/api/purchase-orders/${po.id}/pdf`}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 bg-white dark:bg-[#0a0a0a] border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 px-4 py-2 rounded-xl text-sm font-medium transition-all"
+            className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm active:scale-95"
           >
             <FileDown className="h-4 w-4" />
-            View PDF
-          </a>
-          <a
-            href={`/api/purchase-orders/${po.id}/download?editable=true`}
-            className="inline-flex items-center gap-2 bg-white dark:bg-[#0a0a0a] border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 px-4 py-2 rounded-xl text-sm font-medium transition-all"
-          >
-            <Pencil className="h-4 w-4" />
-            Editable PDF
+            Download PDF
           </a>
           <button className="bg-white dark:bg-[#0a0a0a] border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 px-4 py-2 rounded-xl text-sm font-medium transition-all">
             Edit

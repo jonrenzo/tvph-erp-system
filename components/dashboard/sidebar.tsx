@@ -244,15 +244,18 @@ export function Sidebar({
             isCollapsed ? "justify-center px-0" : "px-6 gap-2"
           }`}
         >
-          <Image
-            src="/logo.svg"
-            alt="TelcoVantage Logo"
-            width={isCollapsed ? 28 : 25}
-            height={isCollapsed ? 28 : 25}
-            priority
-            draggable={false}
-            className="select-none invert dark:invert-0 shrink-0 transition-all"
-          />
+          <Link href="/dashboard">
+            <Image
+              src="/logo.svg"
+              alt="TelcoVantage Logo"
+              width={isCollapsed ? 28 : 25}
+              height={isCollapsed ? 28 : 25}
+              priority
+              draggable={false}
+              className="select-none invert dark:invert-0 shrink-0 transition-all"
+            />
+          </Link>
+
           {!isCollapsed && (
             <span className="font-plus-jakarta font-bold text-slate-900 dark:text-white text-base tracking-[-0.06em] whitespace-nowrap">
               TelcoVantage Philippines
