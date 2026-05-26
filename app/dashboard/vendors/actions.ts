@@ -1,138 +1,158 @@
-'use server'
+"use server";
 
-import { revalidatePath } from 'next/cache';
-import { createClient } from '@/utils/supabase/server';
-import { redirect } from 'next/navigation';
-import { createNotification } from '@/utils/notifications';
-import { recordAuditLog } from '@/utils/audit';
+import { revalidatePath } from "next/cache";
+import { createClient } from "@/utils/supabase/server";
+import { redirect } from "next/navigation";
+import { createNotification } from "@/utils/notifications";
+import { recordAuditLog } from "@/utils/audit";
 
-export async function approveVendorDocument(vendorId: string, docType: string, expiryDate: string) {
+export async function approveVendorDocument(
+  vendorId: string,
+  docType: string,
+  expiryDate: string,
+) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
 
   // Role check — admin only
   const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
     .single();
 
-  if (!profile || profile.role !== 'admin') {
-    return { error: 'Only admins can approve documents.' };
+  if (!profile || profile.role !== "admin") {
+    return { error: "Only admins can approve documents." };
   }
 
   if (!expiryDate) {
-    return { error: 'An expiry date is required when approving a document.' };
+    return { error: "An expiry date is required when approving a document." };
   }
 
   const { error } = await supabase
-    .from('vendor_documents')
+    .from("vendor_documents")
     .update({
-      status: 'approved',
+      status: "approved",
       approved_at: new Date().toISOString(),
       expiry_date: expiryDate,
       uploaded_by: user.id,
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
     })
-    .eq('vendor_id', vendorId)
-    .eq('doc_type', docType)
-    .is('archived_at', null);
+    .eq("vendor_id", vendorId)
+    .eq("doc_type", docType)
+    .is("archived_at", null);
 
   if (error) return { error: error.message };
 
   await recordAuditLog({
-    entity_type: 'vendor_document',
+    entity_type: "vendor_document",
     entity_id: vendorId,
-    action: 'UPDATE',
-    changes: { after: { doc_type: docType, status: 'approved', expiry_date: expiryDate } },
-    performed_by: user.id
+    action: "UPDATE",
+    changes: {
+      after: { doc_type: docType, status: "approved", expiry_date: expiryDate },
+    },
+    performed_by: user.id,
   });
 
   revalidatePath(`/dashboard/vendors/${vendorId}`);
   return { success: true };
 }
 
-export async function updateVendorStatus(vendorId: string, status: 'active' | 'inactive') {
+export async function updateVendorStatus(
+  vendorId: string,
+  status: "active" | "inactive",
+) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
 
   const { error } = await supabase
-    .from('vendors')
+    .from("vendors")
     .update({ status, updated_at: new Date().toISOString() })
-    .eq('id', vendorId);
+    .eq("id", vendorId);
 
   if (error) return { error: error.message };
 
   await recordAuditLog({
-    entity_type: 'vendor',
+    entity_type: "vendor",
     entity_id: vendorId,
-    action: 'UPDATE',
+    action: "UPDATE",
     changes: { after: { status } },
-    performed_by: user.id
+    performed_by: user.id,
   });
 
   revalidatePath(`/dashboard/vendors/${vendorId}`);
   return { success: true };
 }
 
-export async function uploadDocument(vendorId: string, docType: string, formData: FormData) {
+export async function uploadDocument(
+  vendorId: string,
+  docType: string,
+  formData: FormData,
+) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
 
-  const file = formData.get('file') as File;
-  const expiryDate = formData.get('expiryDate') as string;
-  const notes = formData.get('notes') as string;
+  const file = formData.get("file") as File;
+  const expiryDate = formData.get("expiryDate") as string;
+  const notes = formData.get("notes") as string;
 
-  if (!file) return { error: 'No file provided' };
+  if (!file) return { error: "No file provided" };
 
-  const fileExt = file.name.split('.').pop();
+  const fileExt = file.name.split(".").pop();
   const fileName = `${docType}_${Date.now()}.${fileExt}`;
   const filePath = `vendors/${vendorId}/${docType}/${fileName}`;
 
   const { error: uploadError } = await supabase.storage
-    .from('vendor-documents')
+    .from("vendor-documents")
     .upload(filePath, file, { contentType: file.type, upsert: false });
 
   if (uploadError) return { error: uploadError.message };
 
-  const { data: { publicUrl } } = supabase.storage
-    .from('vendor-documents')
-    .getPublicUrl(filePath);
+  const {
+    data: { publicUrl },
+  } = supabase.storage.from("vendor-documents").getPublicUrl(filePath);
 
-  const { error: dbError } = await supabase
-    .from('vendor_documents')
-    .upsert({
+  const { error: dbError } = await supabase.from("vendor_documents").upsert(
+    {
       vendor_id: vendorId,
       doc_type: docType,
       file_url: publicUrl,
       file_name: file.name,
-      status: 'submitted',
+      status: "submitted",
       expiry_date: expiryDate || null,
       notes: notes || null,
       submitted_at: new Date().toISOString(),
       uploaded_by: user.id,
-      updated_at: new Date().toISOString()
-    }, { onConflict: 'vendor_id,doc_type' });
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "vendor_id,doc_type" },
+  );
 
   if (dbError) return { error: dbError.message };
 
   await recordAuditLog({
-    entity_type: 'vendor_document',
+    entity_type: "vendor_document",
     entity_id: vendorId,
-    action: 'UPDATE',
-    changes: { after: { doc_type: docType, status: 'submitted' } },
-    performed_by: user.id
+    action: "UPDATE",
+    changes: { after: { doc_type: docType, status: "submitted" } },
+    performed_by: user.id,
   });
 
   await createNotification({
-    type: 'vendor',
-    title: '📁 Vendor Document Added',
+    type: "vendor",
+    title: "📁 Vendor Document Added",
     message: `A document was uploaded for a vendor.`,
     link: `/dashboard/vendors/${vendorId}`,
-    created_by: user.id
+    created_by: user.id,
   });
 
   revalidatePath(`/dashboard/vendors/${vendorId}`);
@@ -141,125 +161,58 @@ export async function uploadDocument(vendorId: string, docType: string, formData
 
 export async function createVendor(prevState: any, formData: FormData) {
   const supabase = await createClient();
-  
+
   // Get the current user
-  const { data: { user } } = await supabase.auth.getUser();
-  
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   if (!user) {
-    return { error: 'You must be logged in to create a vendor.' };
+    return { error: "You must be logged in to create a vendor." };
   }
 
-  const name = formData.get('name') as string;
-  const address = formData.get('address') as string;
-  const tin = formData.get('tin') as string;
-  const contact_person = formData.get('contact_person') as string;
-  const contact_email = formData.get('contact_email') as string;
-  const contact_phone = formData.get('contact_phone') as string;
-  const contact_fax = formData.get('contact_fax') as string;
-  const bank_name = formData.get('bank_name') as string;
-  const bank_account_number = formData.get('bank_account_number') as string;
-  const bank_account_name = formData.get('bank_account_name') as string;
-  const payment_terms = formData.get('payment_terms') as string;
-  const notes = formData.get('notes') as string;
-  const currency = (formData.get('currency') as string) || 'PHP';
-  const contact_fax = formData.get('contact_fax') as string;
+  const name = formData.get("name") as string;
+  const address = formData.get("address") as string;
+  const tin = formData.get("tin") as string;
+  const contact_person = formData.get("contact_person") as string;
+  const contact_email = formData.get("contact_email") as string;
+  const contact_phone = formData.get("contact_phone") as string;
+  const contact_fax = formData.get("contact_fax") as string;
+  const bank_name = formData.get("bank_name") as string;
+  const bank_account_number = formData.get("bank_account_number") as string;
+  const bank_account_name = formData.get("bank_account_name") as string;
+  const payment_terms = formData.get("payment_terms") as string;
+  const notes = formData.get("notes") as string;
+  const currency = (formData.get("currency") as string) || "PHP";
 
   let secondary_contacts = [];
   try {
-    secondary_contacts = JSON.parse((formData.get('secondary_contacts') as string) || '[]');
+    secondary_contacts = JSON.parse(
+      (formData.get("secondary_contacts") as string) || "[]",
+    );
   } catch (e) {
-    console.error('Error parsing secondary contacts:', e);
+    console.error("Error parsing secondary contacts:", e);
   }
 
   let secondary_banking = [];
   try {
-    secondary_banking = JSON.parse((formData.get('secondary_banking') as string) || '[]');
+    secondary_banking = JSON.parse(
+      (formData.get("secondary_banking") as string) || "[]",
+    );
   } catch (e) {
-    console.error('Error parsing secondary banking:', e);
+    console.error("Error parsing secondary banking:", e);
   }
 
-  if (!name || name.trim() === '') {
-    return { error: 'Vendor name is required.' };
+  if (!name || name.trim() === "") {
+    return { error: "Vendor name is required." };
   }
 
-  const { data: newVendor, error } = await supabase.from('vendors').insert({
-    name,
-    address,
-    tin,
-    contact_person,
-    contact_email,
-    contact_phone,
-    contact_fax,
-    bank_name,
-    bank_account_number,
-    bank_account_name,
-    payment_terms,
-    notes,
-    currency,
-    contact_fax,
-    secondary_contacts,
-    secondary_banking,
-    created_by: user.id,
-    status: 'pending'
-  }).select('id').single();
-
-  if (error) {
-    console.error('Error creating vendor:', error);
-    return { error: error.message || 'Failed to create vendor.' };
-  }
-
-  // Basic Audit log
-  await recordAuditLog({
-    entity_type: 'vendor',
-    entity_id: newVendor.id,
-    action: 'CREATE',
-    changes: { after: { name, tin, contact_person, status: 'pending' } },
-    performed_by: user.id
-  });
-
-  revalidatePath('/dashboard/vendors');
-  redirect(`/dashboard/vendors/${newVendor.id}`);
-}
-
-export async function updateVendorProfile(prevState: any, formData: FormData) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
-
-  const id = formData.get('id') as string;
-  if (!id) return { error: 'Vendor ID is required.' };
-
-  const address = formData.get('address') as string;
-  const contact_person = formData.get('contact_person') as string;
-  const contact_email = formData.get('contact_email') as string;
-  const contact_phone = formData.get('contact_phone') as string;
-  const contact_fax = formData.get('contact_fax') as string;
-  const bank_name = formData.get('bank_name') as string;
-  const bank_account_number = formData.get('bank_account_number') as string;
-  const bank_account_name = formData.get('bank_account_name') as string;
-  const payment_terms = formData.get('payment_terms') as string;
-  const notes = formData.get('notes') as string;
-  const currency = (formData.get('currency') as string) || 'PHP';
-  const contact_fax = formData.get('contact_fax') as string;
-
-  let secondary_contacts = [];
-  try {
-    secondary_contacts = JSON.parse((formData.get('secondary_contacts') as string) || '[]');
-  } catch (e) {
-    console.error('Error parsing secondary contacts:', e);
-  }
-
-  let secondary_banking = [];
-  try {
-    secondary_banking = JSON.parse((formData.get('secondary_banking') as string) || '[]');
-  } catch (e) {
-    console.error('Error parsing secondary banking:', e);
-  }
-
-  const { error } = await supabase
-    .from('vendors')
-    .update({
+  const { data: newVendor, error } = await supabase
+    .from("vendors")
+    .insert({
+      name,
       address,
+      tin,
       contact_person,
       contact_email,
       contact_phone,
@@ -273,21 +226,102 @@ export async function updateVendorProfile(prevState: any, formData: FormData) {
       contact_fax,
       secondary_contacts,
       secondary_banking,
-      updated_at: new Date().toISOString()
+      created_by: user.id,
+      status: "pending",
     })
-    .eq('id', id);
+    .select("id")
+    .single();
 
   if (error) {
-    console.error('Error updating vendor:', error);
-    return { error: error.message || 'Failed to update vendor.' };
+    console.error("Error creating vendor:", error);
+    return { error: error.message || "Failed to create vendor." };
+  }
+
+  // Basic Audit log
+  await recordAuditLog({
+    entity_type: "vendor",
+    entity_id: newVendor.id,
+    action: "CREATE",
+    changes: { after: { name, tin, contact_person, status: "pending" } },
+    performed_by: user.id,
+  });
+
+  revalidatePath("/dashboard/vendors");
+  redirect(`/dashboard/vendors/${newVendor.id}`);
+}
+
+export async function updateVendorProfile(prevState: any, formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  const id = formData.get("id") as string;
+  if (!id) return { error: "Vendor ID is required." };
+
+  const address = formData.get("address") as string;
+  const contact_person = formData.get("contact_person") as string;
+  const contact_email = formData.get("contact_email") as string;
+  const contact_phone = formData.get("contact_phone") as string;
+  const contact_fax = formData.get("contact_fax") as string;
+  const bank_name = formData.get("bank_name") as string;
+  const bank_account_number = formData.get("bank_account_number") as string;
+  const bank_account_name = formData.get("bank_account_name") as string;
+  const payment_terms = formData.get("payment_terms") as string;
+  const notes = formData.get("notes") as string;
+  const currency = (formData.get("currency") as string) || "PHP";
+
+  let secondary_contacts = [];
+  try {
+    secondary_contacts = JSON.parse(
+      (formData.get("secondary_contacts") as string) || "[]",
+    );
+  } catch (e) {
+    console.error("Error parsing secondary contacts:", e);
+  }
+
+  let secondary_banking = [];
+  try {
+    secondary_banking = JSON.parse(
+      (formData.get("secondary_banking") as string) || "[]",
+    );
+  } catch (e) {
+    console.error("Error parsing secondary banking:", e);
+  }
+
+  const { error } = await supabase
+    .from("vendors")
+    .update({
+      address,
+      contact_person,
+      contact_email,
+      contact_phone,
+      contact_fax,
+      bank_name,
+      bank_account_number,
+      bank_account_name,
+      payment_terms,
+      notes,
+      secondary_contacts,
+      secondary_banking,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+
+  if (error) {
+    console.error("Error updating vendor:", error);
+    return { error: error.message || "Failed to update vendor." };
   }
 
   await recordAuditLog({
-    entity_type: 'vendor',
+    entity_type: "vendor",
     entity_id: id,
-    action: 'UPDATE',
-    changes: { after: { contact_person, secondary_contacts, secondary_banking } },
-    performed_by: user.id
+    action: "UPDATE",
+    changes: {
+      after: { contact_person, secondary_contacts, secondary_banking },
+    },
+    performed_by: user.id,
   });
 
   revalidatePath(`/dashboard/vendors/${id}`);
@@ -296,34 +330,33 @@ export async function updateVendorProfile(prevState: any, formData: FormData) {
 
 export async function deleteVendor(vendorId: string) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized.' };
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized." };
 
   const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
     .single();
 
-  if (profile?.role !== 'admin') {
-    return { error: 'Forbidden. Only administrators can delete vendors.' };
+  if (profile?.role !== "admin") {
+    return { error: "Forbidden. Only administrators can delete vendors." };
   }
 
-  const { error } = await supabase
-    .from('vendors')
-    .delete()
-    .eq('id', vendorId);
+  const { error } = await supabase.from("vendors").delete().eq("id", vendorId);
 
   if (error) return { error: error.message };
 
   await recordAuditLog({
-    entity_type: 'vendor',
+    entity_type: "vendor",
     entity_id: vendorId,
-    action: 'DELETE',
-    performed_by: user.id
+    action: "DELETE",
+    performed_by: user.id,
   });
 
-  revalidatePath('/dashboard/vendors');
+  revalidatePath("/dashboard/vendors");
   return { success: true };
 }
 
