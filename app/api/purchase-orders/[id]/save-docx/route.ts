@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
+import { createClient as createAdminClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
+import { fixDocxBorders } from '@/lib/docx/fixBorders'
 
 export async function POST(
   request: NextRequest,
@@ -9,6 +11,10 @@ export async function POST(
   try {
     const { id } = await params
     const supabase = await createClient()
+    const supabaseAdmin = createAdminClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
 
     // 1. Get the authenticated user
     const {
@@ -22,11 +28,14 @@ export async function POST(
 
     // 2. Read the file buffer from request body
     const arrayBuffer = await request.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
+    const rawBuffer = Buffer.from(arrayBuffer)
     
-    if (!buffer || buffer.length === 0) {
+    if (!rawBuffer || rawBuffer.length === 0) {
       return NextResponse.json({ error: 'Empty file' }, { status: 400 })
     }
+
+    // 2b. Post-process: strip table borders injected by the Eigenpal editor
+    const buffer = fixDocxBorders(rawBuffer)
 
     // 3. Generate checksum and storage path
     const checksumSha256 = crypto.createHash('sha256').update(buffer).digest('hex')
@@ -34,7 +43,7 @@ export async function POST(
     const storagePath = `purchase_orders/${id}/edited_${timestamp}.docx`
 
     // 4. Upload to Storage
-    const { error: uploadError } = await supabase.storage
+    const { error: uploadError } = await supabaseAdmin.storage
       .from('po-artifacts')
       .upload(storagePath, buffer, {
         contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -46,7 +55,7 @@ export async function POST(
     }
 
     // 5. Delete existing docx artifacts for this PO to keep it clean (optional but good practice)
-    const { data: existingArtifacts } = await supabase
+    const { data: existingArtifacts } = await supabaseAdmin
       .from('purchase_order_artifacts')
       .select('storage_path')
       .eq('po_id', id)
@@ -54,9 +63,9 @@ export async function POST(
 
     if (existingArtifacts && existingArtifacts.length > 0) {
       const pathsToDelete = existingArtifacts.map(a => a.storage_path)
-      await supabase.storage.from('po-artifacts').remove(pathsToDelete)
+      await supabaseAdmin.storage.from('po-artifacts').remove(pathsToDelete)
       
-      await supabase
+      await supabaseAdmin
         .from('purchase_order_artifacts')
         .delete()
         .eq('po_id', id)
@@ -64,7 +73,7 @@ export async function POST(
     }
 
     // 6. Record in database
-    const { error: dbError } = await supabase
+    const { error: dbError } = await supabaseAdmin
       .from('purchase_order_artifacts')
       .insert({
         po_id: id,

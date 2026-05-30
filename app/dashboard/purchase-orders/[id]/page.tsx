@@ -23,6 +23,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { POProjectAssigner } from "@/components/dashboard/purchase-orders/po-project-assigner";
 import { RecentActivity } from "@/components/dashboard/shared/recent-activity";
+import { PODownloadDropdown } from "@/components/dashboard/purchase-orders/po-download-dropdown";
 
 export const unstable_instant = { 
   prefetch: 'static',
@@ -164,24 +165,7 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
               </button>
             </form>
           )}
-          <a
-            href={`/api/purchase-orders/${po.id}/docx`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm active:scale-95 border border-slate-200 dark:border-slate-700"
-          >
-            <FileDown className="h-4 w-4" />
-            Download DOCX
-          </a>
-          <a
-            href={`/api/purchase-orders/${po.id}/pdf`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm active:scale-95"
-          >
-            <FileDown className="h-4 w-4" />
-            Download PDF
-          </a>
+          <PODownloadDropdown poId={po.id} />
           <Link
             href={`/dashboard/purchase-orders/${po.id}/editor`}
             className="inline-flex items-center gap-2 bg-white dark:bg-[#0a0a0a] border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm active:scale-95"

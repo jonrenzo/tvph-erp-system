@@ -28,137 +28,88 @@ function escapeXml(str: string): string {
 }
 
 /**
- * Replace all occurrences of a placeholder in raw OOXML.
- *
- * Problem: Word often splits a placeholder like {po_number} across multiple
- * <w:r> runs (e.g. "{po_" in run 1, "number}" in run 2) due to spellcheck
- * or autocorrect. We handle this with two passes:
- *
- *   Pass 1 — Naive replace: catches placeholders already in a single run.
- *   Pass 2 — XML-stripped replace: strips all XML tags from the text, finds
- *             the placeholder in the plain-text view, then replaces the
- *             corresponding span of runs in the original XML.
+ * Replaces placeholders in-place within the XML, handling cases where Word split
+ * the placeholder across multiple <w:r> runs.
+ * It puts the replacement text into the first run and blanks out the subsequent runs.
+ * This preserves all surrounding XML structure and formatting.
  */
-function replacePlaceholders(
-  xml: string,
-  vars: Record<string, string>,
-): string {
-  // Pass 1: direct replacement (handles single-run placeholders)
-  let result = xml;
-  for (const [ph, val] of Object.entries(vars)) {
-    result = result.split(ph).join(escapeXml(val));
-  }
-  return result;
-}
-
-/**
- * Collapses placeholders that Word split across <w:r> runs within a <w:p>,
- * then applies replacePlaceholders.  We work paragraph by paragraph so we
- * never accidentally merge runs from different paragraphs.
- */
-function applySubstitutions(xml: string, vars: Record<string, string>): string {
-  // First try a simple pass — works for most cases where Word didn't split
-  let result = replacePlaceholders(xml, vars);
-
-  // Second pass: for any placeholder still present (i.e. split across runs),
-  // collapse its runs inside each <w:p> block and retry.
-  const remaining = Object.entries(vars).filter(([ph]) => result.includes(ph));
-  if (remaining.length === 0) return result;
-
-  result = result.replace(/(<w:p[ >][\s\S]*?<\/w:p>)/g, (para) => {
-    // Check if this paragraph even contains part of a remaining placeholder
-    const strippedText = para.replace(/<[^>]+>/g, "");
-    const hasPhPart = remaining.some(([ph]) => {
-      // Check if any contiguous substring of ph appears in the stripped text
-      for (let len = 2; len <= ph.length; len++) {
-        if (strippedText.includes(ph.slice(0, len))) return true;
-      }
-      return false;
-    });
-    if (!hasPhPart) return para;
-
-    // Collect all <w:t> text nodes, build a map of char-index → xml-position
-    // so we can splice in the replacement value later.
-    interface RunSpan {
-      xmlStart: number;
-      xmlEnd: number;
-      text: string;
-    }
-    const spans: RunSpan[] = [];
-    const wtPattern = /(<w:t[^>]*>)([\s\S]*?)(<\/w:t>)/g;
-    let m: RegExpExecArray | null;
-    // eslint-disable-next-line no-cond-assign
-    while ((m = wtPattern.exec(para)) !== null) {
-      spans.push({
-        xmlStart: m.index + m[1].length, // start of text content
-        xmlEnd: m.index + m[1].length + m[2].length,
-        text: m[2],
-      });
-    }
-
-    if (spans.length === 0) return para;
-
-    const fullText = spans.map((s) => s.text).join("");
-
-    // For each remaining placeholder, check if it appears in fullText
-    // (possibly spanning multiple spans).
+function replaceInPlace(xml: string, vars: Record<string, string>): string {
+  // Process paragraph by paragraph
+  return xml.replace(/(<w:p[ >][\s\S]*?<\/w:p>)/g, (para) => {
     let modified = para;
-    let offset = 0; // track XML offset changes from prior replacements
-
-    for (const [ph, val] of remaining) {
-      const idx = fullText.indexOf(ph);
-      if (idx === -1) continue;
-
-      // Map fullText character positions to XML positions
-      let charCount = 0;
-      let xmlReplaceStart = -1;
-      let xmlReplaceEnd = -1;
-      const phEnd = idx + ph.length;
-
-      for (const span of spans) {
-        const spanStart = charCount;
-        const spanEnd = charCount + span.text.length;
-
-        if (xmlReplaceStart === -1 && spanEnd > idx) {
-          // Start of replacement: the offset within this span where ph begins
-          const innerOffset = idx - spanStart;
-          xmlReplaceStart = span.xmlStart + offset + innerOffset;
+    
+    for (const [ph, val] of Object.entries(vars)) {
+      let searchOffset = 0;
+      while (true) {
+        const spans: { xmlStart: number; xmlEnd: number; text: string }[] = [];
+        const wtPattern = /(<w:t[^>]*>)([\s\S]*?)(<\/w:t>)/g;
+        let m: RegExpExecArray | null;
+        while ((m = wtPattern.exec(modified)) !== null) {
+          spans.push({
+            xmlStart: m.index + m[1].length,
+            xmlEnd: m.index + m[1].length + m[2].length,
+            text: m[2],
+          });
         }
 
-        if (xmlReplaceEnd === -1 && spanEnd >= phEnd) {
-          const innerOffset = phEnd - spanStart;
-          xmlReplaceEnd = span.xmlStart + offset + innerOffset;
-          break;
+        let charCount = 0;
+        const spansWithChars: { xmlStart: number; xmlEnd: number; text: string; charStart: number }[] = spans.map(s => {
+          const res = { ...s, charStart: charCount };
+          charCount += s.text.length;
+          return res;
+        });
+
+        const fullText = spansWithChars.map((s) => s.text).join("");
+        const idx = fullText.indexOf(ph, searchOffset);
+        
+        if (idx === -1) break;
+
+        const phEnd = idx + ph.length;
+        const affectedSpans: typeof spansWithChars = [];
+
+        for (const span of spansWithChars) {
+          const spanStart = span.charStart;
+          const spanEnd = span.charStart + span.text.length;
+
+          if (spanEnd > idx && spanStart < phEnd) {
+             affectedSpans.push(span);
+          }
         }
 
-        charCount += span.text.length;
+        if (affectedSpans.length === 0) break;
+
+        // If replacing with the same value and it's already collapsed into one span, just skip to next
+        if (affectedSpans.length === 1 && val === ph) {
+           searchOffset = idx + ph.length;
+           continue;
+        }
+
+        const escapedVal = escapeXml(val);
+        const combinedText = affectedSpans.map(s => s.text).join("");
+        
+        const localIdx = idx - affectedSpans[0].charStart;
+        
+        const newCombinedText = combinedText.substring(0, localIdx) + escapedVal + combinedText.substring(localIdx + ph.length);
+        
+        let newXml = modified;
+        for (let i = affectedSpans.length - 1; i >= 0; i--) {
+           const span = affectedSpans[i];
+           const replacement = i === 0 ? newCombinedText : "";
+           newXml = newXml.slice(0, span.xmlStart) + replacement + newXml.slice(span.xmlEnd);
+        }
+        
+        modified = newXml;
+        searchOffset = 0; // reset after modification
       }
-
-      if (xmlReplaceStart === -1 || xmlReplaceEnd === -1) continue;
-
-      const escapedVal = escapeXml(val);
-      modified =
-        modified.slice(0, xmlReplaceStart) +
-        escapedVal +
-        modified.slice(xmlReplaceEnd);
-      // Adjust offset for subsequent replacements in the same paragraph
-      offset += escapedVal.length - (xmlReplaceEnd - xmlReplaceStart);
     }
-
     return modified;
   });
-
-  return result;
 }
 
 /**
- * Replace a {#loopName}...{/loopName} block with one copy of the enclosed
- * table row(s) per item, substituting per-item placeholders.
- *
- * Works entirely at the XML string level — no OOXML model parsing —
- * so the row's formatting (w:trPr, w:tcPr, w:rPr) is preserved exactly.
+ * Expand a loop by duplicating the row, substituting values, and preserving formatting.
  */
-function replaceLoop<T>(
+function expandLoop<T>(
   xml: string,
   loopName: string,
   items: T[],
@@ -167,30 +118,36 @@ function replaceLoop<T>(
   const openTag = `{#${loopName}}`;
   const closeTag = `{/${loopName}}`;
 
-  const startIdx = xml.indexOf(openTag);
-  const endIdx = xml.indexOf(closeTag);
-  if (startIdx === -1 || endIdx === -1) return xml;
+  let processedXml = replaceInPlace(xml, {
+     [openTag]: openTag,
+     [closeTag]: closeTag
+  });
 
-  // Expand to encompass the full <w:tr> rows that contain the tags
+  const startIdx = processedXml.indexOf(openTag);
+  const endIdx = processedXml.indexOf(closeTag);
+  if (startIdx === -1 || endIdx === -1) return processedXml;
+
   const TR_OPEN = "<w:tr ";
   const TR_CLOSE = "</w:tr>";
 
-  const rowStartIdx = xml.lastIndexOf(TR_OPEN, startIdx);
-  const rowEndIdx = xml.indexOf(TR_CLOSE, endIdx) + TR_CLOSE.length;
-  if (rowStartIdx === -1 || rowEndIdx < TR_CLOSE.length) return xml;
+  const rowStartIdx = processedXml.lastIndexOf(TR_OPEN, startIdx);
+  let rowEndIdx = processedXml.indexOf(TR_CLOSE, endIdx);
+  if (rowEndIdx !== -1) rowEndIdx += TR_CLOSE.length;
+  else return processedXml;
 
-  // Template row: strip the loop tags themselves (content formatting stays)
-  let templateRow = xml.slice(rowStartIdx, rowEndIdx);
-  templateRow = templateRow.split(openTag).join("").split(closeTag).join("");
+  if (rowStartIdx === -1 || rowEndIdx < TR_CLOSE.length) return processedXml;
+
+  let templateRow = processedXml.slice(rowStartIdx, rowEndIdx);
+  templateRow = replaceInPlace(templateRow, {
+     [openTag]: "",
+     [closeTag]: ""
+  });
 
   const replacementRows = items
-    .map((item) => {
-      const vars = mapFn(item);
-      return applySubstitutions(templateRow, vars);
-    })
+    .map((item) => replaceInPlace(templateRow, mapFn(item)))
     .join("");
 
-  return xml.slice(0, rowStartIdx) + replacementRows + xml.slice(rowEndIdx);
+  return processedXml.slice(0, rowStartIdx) + replacementRows + processedXml.slice(rowEndIdx);
 }
 
 export async function generatePurchaseOrderDocx(poId: string): Promise<Buffer> {
@@ -207,11 +164,9 @@ export async function generatePurchaseOrderDocx(poId: string): Promise<Buffer> {
     throw new Error("Template file not found at " + templatePath);
   }
 
-  // ── Load as raw ZIP — never let docxtemplater touch the OOXML ──
   const zip = new PizZip(fs.readFileSync(templatePath));
   let xml = zip.file("word/document.xml")!.asText();
 
-  // ── Scalar substitutions ──
   const vars: Record<string, string> = {
     "{po_number}": poData.po_number,
     "{issued_date}": poData.po_date,
@@ -232,10 +187,9 @@ export async function generatePurchaseOrderDocx(poId: string): Promise<Buffer> {
     "{date_prepared}": poData.date_prepared,
     "{project_name}": poData.project_name,
   };
-  xml = applySubstitutions(xml, vars);
+  xml = replaceInPlace(xml, vars);
 
-  // ── Loop: line items ──
-  xml = replaceLoop(xml, "line_items", poData.line_items, (item) => ({
+  xml = expandLoop(xml, "line_items", poData.line_items, (item) => ({
     "{line_no}": String(item.line_no),
     "{item_code}": item.item_code ?? "",
     "{description}": item.description,
@@ -245,8 +199,7 @@ export async function generatePurchaseOrderDocx(poId: string): Promise<Buffer> {
     "{amount}": formatCurrency(poData.currency, item.amount),
   }));
 
-  // ── Loop: site details ──
-  xml = replaceLoop(xml, "site_details", poData.site_details, (site) => ({
+  xml = expandLoop(xml, "site_details", poData.site_details, (site) => ({
     "{sn}": String(site.sn),
     "{region}": site.region,
     "{area_city}": site.area_city,
@@ -254,7 +207,6 @@ export async function generatePurchaseOrderDocx(poId: string): Promise<Buffer> {
     "{estimated_strand_km}": formatNumber(site.estimated_strand_km),
   }));
 
-  // ── Write XML back; all other ZIP entries (styles, fonts, media) untouched ──
   zip.file("word/document.xml", xml);
 
   return zip.generate({ type: "nodebuffer", compression: "DEFLATE" });

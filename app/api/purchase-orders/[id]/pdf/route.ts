@@ -26,7 +26,7 @@ export async function GET(
         'Content-Length': String(buffer.byteLength),
       },
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('PO PDF generation error:', error)
     return new Response(
       JSON.stringify({ error: 'Failed to generate PDF' }),
