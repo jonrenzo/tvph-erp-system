@@ -138,38 +138,4 @@ body {
     background-size: 256px 256px;
 }
 
-/* SuperDoc Layout Overrides */
-.superdoc__right-sidebar, 
-.right-sidebar, 
-.floating-comments,
-.superdoc__comments-layer,
-[class*="sidebar"],
-[class*="comment-pane"] {
-    display: none !important;
-    width: 0 !important;
-    min-width: 0 !important;
-    position: absolute !important;
-    visibility: hidden !important;
-}
 
-/* Protect SuperDoc Tables from Tailwind Preflight */
-.superdoc table {
-    border-collapse: separate !important;
-    text-indent: initial !important;
-}
-.superdoc th, .superdoc td {
-    border: revert !important;
-    padding: revert !important;
-}
-
-/* Force document pages to center if they aren't already */
-.sd-pdf-viewer-document__wrapper {
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-}
-
-.sd-pdf-viewer-page {
-    margin-left: auto !important;
-    margin-right: auto !important;
-}

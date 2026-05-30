@@ -2,14 +2,41 @@ import { redirect } from 'next/navigation'
 import { DocxEditor } from '@/components/docx/DocxEditor'
 import { createClient } from '@/utils/supabase/server'
 import { headers } from 'next/headers'
+import { Suspense } from 'react'
 
-// Force Turbopack rebuild
-export default async function PurchaseOrderEditorPage({
+export const unstable_instant = {
+  prefetch: 'static',
+  samples: [{ params: { id: '0' } }],
+}
+
+function EditorSkeleton() {
+  return (
+    <div className="w-full max-w-[1400px] mx-auto p-4 space-y-4 animate-pulse">
+      <div className="h-8 w-48 bg-muted rounded" />
+      <div className="h-4 w-96 bg-muted rounded" />
+      <div className="h-[600px] bg-muted rounded" />
+    </div>
+  )
+}
+
+export default function PurchaseOrderEditorPage({
   params,
 }: {
   params: Promise<{ id: string }>
 }) {
-  const { id } = await params
+  return (
+    <Suspense fallback={<EditorSkeleton />}>
+      <EditorContent paramsPromise={params} />
+    </Suspense>
+  )
+}
+
+async function EditorContent({
+  paramsPromise,
+}: {
+  paramsPromise: Promise<{ id: string }>
+}) {
+  const { id } = await paramsPromise
   const supabase = await createClient()
 
   const {
@@ -20,7 +47,6 @@ export default async function PurchaseOrderEditorPage({
     redirect('/login')
   }
 
-  // Verify the PO exists
   const { data: po } = await supabase
     .from('purchase_orders')
     .select('id')
@@ -31,22 +57,16 @@ export default async function PurchaseOrderEditorPage({
     redirect('/dashboard/purchase-orders')
   }
 
-  // Fetch the DOCX arraybuffer from our internal API route
-  // We need to pass cookies so the API route can authenticate
   const headersList = await headers()
   const cookieHeader = headersList.get('cookie') || ''
-  
-  // Construct the absolute URL
+
   const protocol = process.env.NODE_ENV === 'development' ? 'http' : 'https'
   const host = headersList.get('host') || 'localhost:3000'
   const apiUrl = `${protocol}://${host}/api/purchase-orders/${id}/docx`
 
   const response = await fetch(apiUrl, {
-    headers: {
-      cookie: cookieHeader
-    },
-    // Don't cache this request as the document might have been edited
-    cache: 'no-store'
+    headers: { cookie: cookieHeader },
+    cache: 'no-store',
   })
 
   if (!response.ok) {
@@ -63,7 +83,7 @@ export default async function PurchaseOrderEditorPage({
           Make manual adjustments to the generated Purchase Order document before finalizing.
         </p>
       </div>
-      
+
       <DocxEditor initialBuffer={arrayBuffer} poId={id} />
     </div>
   )

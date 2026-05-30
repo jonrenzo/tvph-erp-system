@@ -2,6 +2,8 @@
 
 import { useRouter } from 'next/navigation'
 import { Building2 } from 'lucide-react'
+import { isCustomerProfileComplete, getCustomerMissingFields } from '@/utils/completeness'
+import { Tooltip } from '@/components/ui/tooltip'
 
 export function CustomersTableBody({ customers, error }: { customers: any[] | null; error: any }) {
   const router = useRouter()
@@ -36,7 +38,16 @@ export function CustomersTableBody({ customers, error }: { customers: any[] | nu
               className="cursor-pointer group hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-colors"
             >
               <td className="px-6 py-4">
-                <div className="font-semibold text-slate-900 dark:text-white">{customer.company_name}</div>
+                <Tooltip content={
+                  isCustomerProfileComplete(customer, customer.crm_contacts)
+                    ? "Profile complete"
+                    : <>Missing: <span className="font-normal">{getCustomerMissingFields(customer, customer.crm_contacts).join(", ")}</span></>
+                }>
+                  <div className="flex items-center gap-2">
+                    <span className={`inline-block h-2.5 w-2.5 rounded-full flex-shrink-0 ${isCustomerProfileComplete(customer, customer.crm_contacts) ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                    <span className="font-semibold text-slate-900 dark:text-white">{customer.company_name}</span>
+                  </div>
+                </Tooltip>
                 <div className="text-slate-500 dark:text-slate-400 text-xs mt-0.5 truncate max-w-xs">
                   {customer.registered_address || 'No registered address'}
                 </div>

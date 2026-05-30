@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/utils/supabase/server';
 import { recordAuditLog } from '@/utils/audit';
 import { createNotification } from '@/utils/notifications';
+import { parseFile, buildColumnMap } from '@/utils/import-export';
 
 type ActionState = { error?: string; success?: string } | null;
 
@@ -1146,4 +1147,186 @@ export async function approveCustomerDocument(customerId: string, docType: strin
 
   revalidatePath(`/dashboard/crm/${customerId}`);
   return { success: true };
+}
+
+const VALID_CRM_ACCOUNT_FIELDS = new Set([
+  "company_name", "registered_address", "tin", "status",
+  "company_type", "primary_site_location", "industry_note", "notes",
+]);
+
+export async function importCustomers(formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Unauthorized' };
+
+  const file = formData.get('file') as File;
+  if (!file) return { error: 'No file provided' };
+
+  const buffer = await file.arrayBuffer();
+  let rows: Record<string, string>[];
+  try {
+    rows = parseFile(buffer);
+  } catch {
+    return { error: 'Failed to parse file. Please ensure it is a valid CSV or Excel file.' };
+  }
+
+  if (rows.length === 0) {
+    return { error: 'The file appears to be empty.' };
+  }
+
+  const fileHeaders = Object.keys(rows[0]);
+  const columnMap = buildColumnMap(fileHeaders);
+  const unmappedColumns = fileHeaders.filter((h) => !columnMap[h]);
+
+  let created = 0;
+  let updated = 0;
+  let contactsCreated = 0;
+  const errors: { row: number; reason: string }[] = [];
+
+  const accountContactMap = new Map<string, { row: Record<string, string>; rowIndex: number }[]>();
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const companyName = (row['Company Name'] || row['company_name'] || row['Company'] || '').trim().toLowerCase();
+    const tin = (row['TIN'] || row['tin'] || '').trim().toLowerCase();
+    const key = companyName || tin || `row_${i}`;
+    const existing = accountContactMap.get(key) || [];
+    existing.push({ row, rowIndex: i });
+    accountContactMap.set(key, existing);
+  }
+
+  for (const [, contactRows] of accountContactMap) {
+    try {
+      const firstRow = contactRows[0].row;
+      const accountData: Record<string, any> = {};
+      for (const [fileCol, dbField] of Object.entries(columnMap)) {
+        if (VALID_CRM_ACCOUNT_FIELDS.has(dbField)) {
+          accountData[dbField] = firstRow[fileCol]?.trim() || null;
+        }
+      }
+
+      const companyName = accountData.company_name;
+      if (!companyName) {
+        for (const cr of contactRows) {
+          errors.push({ row: cr.rowIndex + 2, reason: 'Missing company name.' });
+        }
+        continue;
+      }
+
+      const validStatuses = ['pending', 'active', 'inactive'];
+      if (accountData.status && !validStatuses.includes(accountData.status.toLowerCase())) {
+        accountData.status = 'pending';
+      }
+      const effectiveStatus = accountData.status || 'pending';
+      accountData.company_type =
+        effectiveStatus === 'active' ? 'active_customer'
+        : effectiveStatus === 'inactive' ? 'inactive_customer'
+        : 'prospect';
+
+      const { data: existingAccount } = await supabase
+        .from('crm_accounts')
+        .select('id')
+        .or(`company_name.ilike.${companyName.replace(/'/g, "''")}${accountData.tin ? `,tin.ilike.${accountData.tin.replace(/'/g, "''")}` : ''}`)
+        .is('deleted_at', null)
+        .maybeSingle();
+
+      let accountId: string;
+
+      if (existingAccount) {
+        accountId = existingAccount.id;
+        const updateFields: Record<string, any> = { updated_at: new Date().toISOString() };
+        for (const [k, v] of Object.entries(accountData)) {
+          if (k !== 'company_name') updateFields[k] = v;
+        }
+        const { error: updateErr } = await supabase
+          .from('crm_accounts')
+          .update(updateFields)
+          .eq('id', accountId);
+        if (updateErr) {
+          for (const cr of contactRows) errors.push({ row: cr.rowIndex + 2, reason: updateErr.message });
+          continue;
+        }
+        updated++;
+      } else {
+        const { data: newAccount, error: insertErr } = await supabase
+          .from('crm_accounts')
+          .insert({ ...accountData, status: effectiveStatus, created_by: user.id })
+          .select('id')
+          .single();
+        if (insertErr || !newAccount) {
+          for (const cr of contactRows) errors.push({ row: cr.rowIndex + 2, reason: insertErr?.message || 'Failed to create account' });
+          continue;
+        }
+        accountId = newAccount.id;
+        created++;
+      }
+
+      let firstContact = true;
+      for (const cr of contactRows) {
+        try {
+          const contactData: Record<string, any> = {};
+          for (const [fileCol, dbField] of Object.entries(columnMap)) {
+            if (['full_name', 'job_title', 'email', 'phone', 'fax'].includes(dbField)) {
+              contactData[dbField] = cr.row[fileCol]?.trim() || null;
+            }
+          }
+
+          if (!contactData.full_name && !contactData.email && !contactData.phone) {
+            errors.push({ row: cr.rowIndex + 2, reason: 'Contact has no name, email, or phone.' });
+            continue;
+          }
+
+          if (contactData.email) {
+            const { data: existingContact } = await supabase
+              .from('crm_contacts')
+              .select('id')
+              .eq('account_id', accountId)
+              .eq('email', contactData.email)
+              .is('deleted_at', null)
+              .maybeSingle();
+
+            if (existingContact) {
+              const { error: updateContactErr } = await supabase
+                .from('crm_contacts')
+                .update({ ...contactData, is_primary: firstContact, updated_at: new Date().toISOString(), deleted_at: null })
+                .eq('id', existingContact.id);
+              if (updateContactErr) {
+                errors.push({ row: cr.rowIndex + 2, reason: updateContactErr.message });
+              }
+              contactsCreated++;
+              firstContact = false;
+              continue;
+            }
+          }
+
+          const { error: insertContactErr } = await supabase
+            .from('crm_contacts')
+            .insert({ ...contactData, account_id: accountId, is_primary: firstContact, created_by: user.id });
+          if (insertContactErr) {
+            errors.push({ row: cr.rowIndex + 2, reason: insertContactErr.message });
+          } else {
+            contactsCreated++;
+          }
+          firstContact = false;
+        } catch (err: any) {
+          errors.push({ row: cr.rowIndex + 2, reason: err.message || 'Unexpected error' });
+        }
+      }
+    } catch (err: any) {
+      for (const cr of contactRows) {
+        errors.push({ row: cr.rowIndex + 2, reason: err.message || 'Unexpected error' });
+      }
+    }
+  }
+
+  await recordAuditLog({
+    entity_type: 'crm_account',
+    entity_id: 'bulk',
+    action: 'CREATE',
+    changes: { after: { import_summary: { accounts_created: created, accounts_updated: updated, contacts_created: contactsCreated, errors: errors.length } } },
+    performed_by: user.id,
+  });
+
+  revalidatePath('/dashboard/crm');
+  return { created, updated, contactsCreated, errors, columnMapping: columnMap, unmappedColumns, totalRows: rows.length };
 }

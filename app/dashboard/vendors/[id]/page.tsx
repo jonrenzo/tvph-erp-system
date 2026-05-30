@@ -7,6 +7,8 @@ import { VendorProfileDetails } from '@/components/dashboard/vendors/vendor-prof
 import { VendorProjectsTab } from '@/components/dashboard/vendors/vendor-projects-tab';
 import { Suspense } from 'react';
 import { RecentActivity } from '@/components/dashboard/shared/recent-activity';
+import { isVendorProfileComplete, getVendorMissingFields } from '@/utils/completeness';
+import { Tooltip } from '@/components/ui/tooltip';
 
 export const unstable_instant = { 
   prefetch: 'static',
@@ -129,9 +131,18 @@ async function VendorDetailContent({
           </Link>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-plus-jakarta tracking-tight">
-                {vendor.name}
-              </h1>
+              <Tooltip content={
+                isVendorProfileComplete(vendor)
+                  ? "Profile complete"
+                  : <>Missing: <span className="font-normal">{getVendorMissingFields(vendor).join(", ")}</span></>
+              }>
+                <span className="flex items-center gap-2">
+                  <span className={`inline-block h-3 w-3 rounded-full flex-shrink-0 ${isVendorProfileComplete(vendor) ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                  <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-plus-jakarta tracking-tight">
+                    {vendor.name}
+                  </h1>
+                </span>
+              </Tooltip>
               <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${
                 vendor.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800/50' :
                 vendor.status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800/50' :

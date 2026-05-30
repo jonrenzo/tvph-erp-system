@@ -5,6 +5,8 @@ import { createClient } from '@/utils/supabase/server';
 import { SearchInput } from '@/components/ui/search-input';
 import { StatusSelect } from '@/components/ui/status-select';
 import { CustomersTableBody } from '@/components/dashboard/crm/customers-table-body';
+import { ImportExportButtons } from '@/components/dashboard/import-export-buttons';
+import { importCustomers } from '@/app/dashboard/crm/actions';
 
 export const unstable_instant = {
   prefetch: 'static',
@@ -25,6 +27,11 @@ export default function CrmPage(props: { searchParams?: Promise<{ q?: string; st
         </div>
 
         <div className="flex items-center gap-2">
+          <ImportExportButtons
+            title="Customers"
+            exportBaseUrl="/api/export/crm"
+            importAction={importCustomers}
+          />
           <Link
             href="/dashboard/crm/projects/new"
             className="inline-flex items-center gap-2 bg-white dark:bg-[#0a0a0a] border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 px-4 py-2.5 rounded-xl font-medium transition-all hover:bg-slate-50 dark:hover:bg-slate-900"

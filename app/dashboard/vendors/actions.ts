@@ -5,6 +5,7 @@ import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { createNotification } from "@/utils/notifications";
 import { recordAuditLog } from "@/utils/audit";
+import { parseFile, buildColumnMap } from "@/utils/import-export";
 
 export async function approveVendorDocument(
   vendorId: string,
@@ -357,6 +358,188 @@ export async function deleteVendor(vendorId: string) {
 
   revalidatePath("/dashboard/vendors");
   return { success: true };
+}
+
+const VALID_VENDOR_FIELDS = new Set([
+  "name", "address", "tin", "contact_person", "contact_email",
+  "contact_phone", "contact_fax", "bank_name", "bank_account_number",
+  "bank_account_name", "payment_terms", "currency", "notes", "status",
+]);
+
+function extractSecondaryContact(
+  row: Record<string, string>,
+  columnMap: Record<string, string>,
+): Record<string, string> | null {
+  const nameCol = Object.entries(columnMap).find(([, v]) => v === "_sc_name")?.[0];
+  const emailCol = Object.entries(columnMap).find(([, v]) => v === "_sc_email")?.[0];
+  const phoneCol = Object.entries(columnMap).find(([, v]) => v === "_sc_phone")?.[0];
+
+  const name = nameCol ? row[nameCol]?.trim() : "";
+  const email = emailCol ? row[emailCol]?.trim() : "";
+  const phone = phoneCol ? row[phoneCol]?.trim() : "";
+
+  if (!name && !email && !phone) return null;
+  return {
+    contact_name: name || "",
+    contact_email: email || "",
+    contact_phone: phone || "",
+  };
+}
+
+function extractSecondaryBanking(
+  row: Record<string, string>,
+  columnMap: Record<string, string>,
+): Record<string, string> | null {
+  const nameCol = Object.entries(columnMap).find(([, v]) => v === "_sb_bank_name")?.[0];
+  const acctNoCol = Object.entries(columnMap).find(([, v]) => v === "_sb_account_number")?.[0];
+  const acctNameCol = Object.entries(columnMap).find(([, v]) => v === "_sb_account_name")?.[0];
+
+  const name = nameCol ? row[nameCol]?.trim() : "";
+  const acctNo = acctNoCol ? row[acctNoCol]?.trim() : "";
+  const acctName = acctNameCol ? row[acctNameCol]?.trim() : "";
+
+  if (!name && !acctNo && !acctName) return null;
+  return {
+    bank_name: name || "",
+    account_number: acctNo || "",
+    account_name: acctName || "",
+  };
+}
+
+export async function importVendors(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  const file = formData.get("file") as File;
+  if (!file) return { error: "No file provided" };
+
+  const buffer = await file.arrayBuffer();
+  let rows: Record<string, string>[];
+  try {
+    rows = parseFile(buffer);
+  } catch {
+    return { error: "Failed to parse file. Please ensure it is a valid CSV or Excel file." };
+  }
+
+  if (rows.length === 0) {
+    return { error: "The file appears to be empty." };
+  }
+
+  const fileHeaders = Object.keys(rows[0]);
+  const columnMap = buildColumnMap(fileHeaders);
+  const unmappedColumns = fileHeaders.filter((h) => !columnMap[h]);
+
+  const validStatuses = ["pending", "active", "inactive"];
+
+  const vendorGroups = new Map<string, { row: Record<string, string>; rowIndex: number }[]>();
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const name = (row["Vendor Name"] || row["name"] || row["Name"] || "").trim().toLowerCase();
+    const tin = (row["TIN"] || row["tin"] || "").trim().toLowerCase();
+    const key = name || tin || `row_${i}`;
+    const group = vendorGroups.get(key) || [];
+    group.push({ row, rowIndex: i });
+    vendorGroups.set(key, group);
+  }
+
+  let created = 0;
+  let updated = 0;
+  const errors: { row: number; reason: string }[] = [];
+
+  for (const [, group] of vendorGroups) {
+    const firstRow = group[0].row;
+
+    try {
+      const mainFields: Record<string, any> = {};
+      for (const [fileCol, dbField] of Object.entries(columnMap)) {
+        if (VALID_VENDOR_FIELDS.has(dbField)) {
+          mainFields[dbField] = firstRow[fileCol]?.trim() || null;
+        }
+      }
+
+      if (!mainFields.name) {
+        for (const g of group) errors.push({ row: g.rowIndex + 2, reason: "Missing vendor name." });
+        continue;
+      }
+
+      if (mainFields.status && !validStatuses.includes(mainFields.status.toLowerCase())) {
+        mainFields.status = "pending";
+      }
+
+      const secondaryContacts: Record<string, string>[] = [];
+      const secondaryBanking: Record<string, string>[] = [];
+
+      for (const g of group) {
+        const sc = extractSecondaryContact(g.row, columnMap);
+        if (sc) secondaryContacts.push(sc);
+
+        const sb = extractSecondaryBanking(g.row, columnMap);
+        if (sb) secondaryBanking.push(sb);
+      }
+
+      const { data: existing } = await supabase
+        .from("vendors")
+        .select("id, secondary_contacts, secondary_banking")
+        .or(`name.ilike.${mainFields.name.replace(/'/g, "''")}${mainFields.tin ? `,tin.ilike.${mainFields.tin.replace(/'/g, "''")}` : ""}`)
+        .is("deleted_at", null)
+        .maybeSingle();
+
+      if (existing) {
+        const updateFields: Record<string, any> = { updated_at: new Date().toISOString() };
+        for (const [k, v] of Object.entries(mainFields)) {
+          if (k !== "name") updateFields[k] = v;
+        }
+
+        const mergedContacts = [...(existing.secondary_contacts || []), ...secondaryContacts];
+        const mergedBanking = [...(existing.secondary_banking || []), ...secondaryBanking];
+        if (mergedContacts.length) updateFields.secondary_contacts = mergedContacts;
+        if (mergedBanking.length) updateFields.secondary_banking = mergedBanking;
+
+        const { error: updateErr } = await supabase
+          .from("vendors")
+          .update(updateFields)
+          .eq("id", existing.id);
+        if (updateErr) {
+          for (const g of group) errors.push({ row: g.rowIndex + 2, reason: updateErr.message });
+          continue;
+        }
+        updated++;
+      } else {
+        const insertData: Record<string, any> = {
+          ...mainFields,
+          status: mainFields.status || "pending",
+          secondary_contacts: secondaryContacts.length ? secondaryContacts : [],
+          secondary_banking: secondaryBanking.length ? secondaryBanking : [],
+          created_by: user.id,
+        };
+        const { error: insertErr } = await supabase
+          .from("vendors")
+          .insert(insertData);
+        if (insertErr) {
+          for (const g of group) errors.push({ row: g.rowIndex + 2, reason: insertErr.message });
+          continue;
+        }
+        created++;
+      }
+    } catch (err: any) {
+      for (const g of group) errors.push({ row: g.rowIndex + 2, reason: err.message || "Unexpected error" });
+    }
+  }
+
+  await recordAuditLog({
+    entity_type: "vendor",
+    entity_id: "bulk",
+    action: "CREATE",
+    changes: { after: { import_summary: { created, updated, errors: errors.length } } },
+    performed_by: user.id,
+  });
+
+  revalidatePath("/dashboard/vendors");
+  return { created, updated, errors, columnMapping: columnMap, unmappedColumns, totalRows: rows.length };
 }
 
 // Project actions have been moved to app/dashboard/projects/actions.ts

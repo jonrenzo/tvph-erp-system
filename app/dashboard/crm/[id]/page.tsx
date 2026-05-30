@@ -4,6 +4,8 @@ import { notFound } from 'next/navigation';
 import { ArrowLeft, CheckCircle2, FileText, Plus, XCircle } from 'lucide-react';
 import { Suspense } from 'react';
 import { CustomerProfileDetails } from '@/components/dashboard/crm/customer-profile-details';
+import { isCustomerProfileComplete, getCustomerMissingFields } from '@/utils/completeness';
+import { Tooltip } from '@/components/ui/tooltip';
 import { CustomerDocuments } from '@/components/dashboard/crm/customer-documents';
 import { updateCustomerStatus } from '../actions';
 
@@ -97,9 +99,18 @@ async function CustomerDetailContent({
           </Link>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-plus-jakarta tracking-tight">
-                {customer.company_name}
-              </h1>
+              <Tooltip content={
+                isCustomerProfileComplete(customer, contacts)
+                  ? "Profile complete"
+                  : <>Missing: <span className="font-normal">{getCustomerMissingFields(customer, contacts).join(", ")}</span></>
+              }>
+                <span className="flex items-center gap-2">
+                  <span className={`inline-block h-3 w-3 rounded-full flex-shrink-0 ${isCustomerProfileComplete(customer, contacts) ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                  <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-plus-jakarta tracking-tight">
+                    {customer.company_name}
+                  </h1>
+                </span>
+              </Tooltip>
               <span
                 className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${
                   customer.status === 'active'
