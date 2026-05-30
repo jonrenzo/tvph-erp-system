@@ -1,6 +1,6 @@
 # TelcoVantage ERP System
 
-![TelcoVantage ERP](screenshot.png)
+![TelcoVantage ERP](/screenshot.png)
 
 > **The Intelligent Command Surface for TelcoVantage Philippines.**
 

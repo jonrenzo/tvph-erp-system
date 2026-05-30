@@ -42,3 +42,12 @@ next-env.d.ts
 
 # scratch files
 scratch/
+
+# supabase local CLI metadata
+supabase/.temp/
+
+# AI agent compiled artifacts
+.agents/
+
+# opencode AI workspace metadata
+.opencode/
