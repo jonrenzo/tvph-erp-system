@@ -2,6 +2,7 @@
 
 import { X, Download, ExternalLink, Loader2, FileText } from "lucide-react";
 import { useState, useEffect } from "react";
+import Image from "next/image";
 
 interface DocumentPreviewProps {
   document: {
@@ -127,12 +128,16 @@ export function DocumentPreview({ document: doc, onClose }: DocumentPreviewProps
           )}
 
           {isImage ? (
-            <img 
-              src={blobUrl || doc.file_url} 
-              alt={doc.file_name}
-              className="max-w-full max-h-full object-contain p-4 shadow-2xl"
-              onLoad={() => setIsLoading(false)}
-            />
+            <div className="relative w-full h-full p-4">
+              <Image 
+                src={blobUrl || doc.file_url} 
+                alt={doc.file_name}
+                fill
+                className="object-contain shadow-2xl"
+                onLoad={() => setIsLoading(false)}
+                unoptimized
+              />
+            </div>
           ) : blobUrl ? (
             <iframe 
               src={blobUrl}

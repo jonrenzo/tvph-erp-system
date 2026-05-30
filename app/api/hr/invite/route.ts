@@ -29,14 +29,16 @@ export async function POST(req: Request) {
     );
 
     // 3. Create the user directly with password
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+    const { data: authData, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email: email,
       password: password,
       user_metadata: { full_name: fullName, role: role },
       email_confirm: true, // Bypass email verification
     });
 
-    if (authError) throw authError;
+    if (createError) throw createError;
+
+    if (!authData.user) throw new Error("User creation failed: authData.user is null");
 
     // 4. Create the profile
     const { error: profileError } = await supabaseAdmin

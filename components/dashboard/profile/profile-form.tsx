@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { User, Mail, Lock, Shield, Save, Camera, CheckCircle2, Eye, EyeOff } from "lucide-react";
 import { updateProfile, changePassword, requestPasswordReset, updateAvatar } from "@/app/dashboard/profile/actions";
 
@@ -97,11 +98,11 @@ export function ProfileForm({ profile, userEmail }: { profile: any, userEmail: s
       <div className="space-y-6">
         <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-3xl p-8 flex flex-col items-center text-center">
           <div className="relative group">
-            <div className="h-24 w-24 rounded-full bg-primary/10 flex items-center justify-center text-primary text-3xl font-bold ring-4 ring-white dark:ring-slate-800 shadow-xl overflow-hidden">
+            <div className="relative h-24 w-24 rounded-full bg-primary/10 flex items-center justify-center text-primary text-3xl font-bold ring-4 ring-white dark:ring-slate-800 shadow-xl overflow-hidden">
               {isUploading ? (
                 <span className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
               ) : profile?.avatar_url ? (
-                <img src={profile.avatar_url} alt="Avatar" className="h-full w-full object-cover" />
+                <Image src={profile.avatar_url} alt="Avatar" fill className="object-cover" unoptimized />
               ) : (
                 profile?.full_name?.charAt(0) || 'U'
               )}

@@ -3,6 +3,7 @@ import { createClient } from '@/utils/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
 import { fixDocxBorders } from '@/lib/docx/fixBorders'
+import { requireCapability } from '@/lib/auth/permissions'
 
 export async function POST(
   request: NextRequest,
@@ -11,20 +12,17 @@ export async function POST(
   try {
     const { id } = await params
     const supabase = await createClient()
+
+    // 1. Get the authenticated user
+    const { user, error: authError } = await requireCapability('po.write', supabase)
+    if (authError || !user) {
+      return NextResponse.json({ error: authError || 'Unauthorized' }, { status: authError === 'Unauthorized' ? 401 : 403 })
+    }
+
     const supabaseAdmin = createAdminClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
-
-    // 1. Get the authenticated user
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
 
     // 2. Read the file buffer from request body
     const arrayBuffer = await request.arrayBuffer()

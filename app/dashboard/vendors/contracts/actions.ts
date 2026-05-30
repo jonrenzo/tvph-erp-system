@@ -3,11 +3,12 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/utils/supabase/server';
 import { recordAuditLog } from '@/utils/audit';
+import { requireCapability } from '@/lib/auth/permissions';
 
 export async function createContract(prevState: any, formData: FormData) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
+  const { user, error: authError } = await requireCapability('contract.write', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
 
   const vendor_id = formData.get('vendor_id') as string;
   const contract_number = formData.get('contract_number') as string;
@@ -82,6 +83,9 @@ export async function createContract(prevState: any, formData: FormData) {
 
 export async function updateContractStatus(id: string, status: string) {
   const supabase = await createClient();
+  const { user, error: authError } = await requireCapability('contract.write', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
+
   const { error } = await supabase
     .from('vendor_contracts')
     .update({ status, updated_at: new Date().toISOString() })
@@ -94,7 +98,8 @@ export async function updateContractStatus(id: string, status: string) {
     entity_type: 'vendor_contract',
     entity_id: id,
     action: 'UPDATE',
-    changes: { after: { status } }
+    changes: { after: { status } },
+    performed_by: user.id
   });
 
   revalidatePath('/dashboard/vendors/contracts');

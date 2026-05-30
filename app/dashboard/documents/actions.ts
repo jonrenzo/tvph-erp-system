@@ -4,23 +4,14 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/utils/supabase/server';
 import { createNotification } from '@/utils/notifications';
 import { recordAuditLog } from '@/utils/audit';
+import { requireCapability } from '@/lib/auth/permissions';
 
 export async function uploadCompanyDocument(prevState: any, formData: FormData) {
   const supabase = await createClient();
 
   // 1. Auth & Role Check
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized. Please log in.' };
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single();
-
-  if (profile?.role !== 'admin') {
-    return { error: 'Forbidden. Only administrators can upload company documents.' };
-  }
+  const { user, error: authError } = await requireCapability('document.write', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized. Please log in.' };
 
   // 2. Extract form data
   const file = formData.get('file') as File;
@@ -115,18 +106,8 @@ export async function uploadCompanyDocument(prevState: any, formData: FormData) 
 export async function deleteCompanyDocument(docId: string, filePath: string) {
   const supabase = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized.' };
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single();
-
-  if (profile?.role !== 'admin') {
-    return { error: 'Forbidden. Only administrators can delete company documents.' };
-  }
+  const { user, error: authError } = await requireCapability('document.write', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized.' };
 
   // Soft-delete by setting archived_at
   const { error } = await supabase

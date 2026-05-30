@@ -5,11 +5,12 @@ import { createClient } from '@/utils/supabase/server';
 import { redirect } from 'next/navigation';
 import { createNotification } from '@/utils/notifications';
 import { recordAuditLog } from '@/utils/audit';
+import { requireCapability } from '@/lib/auth/permissions';
 
 export async function createInvoice(prevState: any, formData: FormData) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
+  const { user, error: authError } = await requireCapability('invoice.write', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
 
   const vendor_id = formData.get('vendor_id') as string;
   const po_id = formData.get('po_id') as string;
@@ -111,8 +112,8 @@ export async function createInvoice(prevState: any, formData: FormData) {
 
 export async function updateInvoiceStatus(invoiceId: string, status: string) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
+  const { user, error: authError } = await requireCapability('invoice.write', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
 
   const { error } = await supabase
     .from('service_invoices')
@@ -143,8 +144,8 @@ export async function updateInvoiceStatus(invoiceId: string, status: string) {
 
 export async function recordPayment(prevState: any, formData: FormData) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
+  const { user, error: authError } = await requireCapability('invoice.pay', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
 
   const invoice_id = formData.get('invoice_id') as string;
   const amount_paid = formData.get('amount_paid') as string;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useEffect, useActionState } from "react";
+import { useCallback, useRef, useState, useEffect, useActionState } from "react";
 import {
   X,
   UploadCloud,
@@ -54,6 +54,13 @@ export function UploadCompanyDocModal({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
+  const handleClose = useCallback(() => {
+    setSelectedFile(null);
+    setDragActive(false);
+    formRef.current?.reset();
+    onClose();
+  }, [onClose]);
+
   // Lock body scroll when open
   useEffect(() => {
     document.body.style.overflow = isOpen ? "hidden" : "unset";
@@ -68,14 +75,7 @@ export function UploadCompanyDocModal({
       const t = setTimeout(() => handleClose(), 2200);
       return () => clearTimeout(t);
     }
-  }, [state]);
-
-  const handleClose = () => {
-    setSelectedFile(null);
-    setDragActive(false);
-    formRef.current?.reset();
-    onClose();
-  };
+  }, [state, handleClose]);
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();

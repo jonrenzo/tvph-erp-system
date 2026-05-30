@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import Image from "next/image";
 import { MessageSquare, X, Send, Sparkles, User, Bot, Loader2, Maximize2, Minimize2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { useChat } from '@ai-sdk/react';
@@ -260,9 +261,11 @@ export function AIChatBubble() {
         onClick={handleToggleClick}
         className="group relative cursor-grab active:cursor-grabbing select-none"
       >
-        <img
+        <Image
           src="/clippy-waiting.gif"
           alt="Chat assistant"
+          width={80}
+          height={80}
           className="h-20 w-auto drop-shadow-2xl hover:scale-110 active:scale-95 transition-all"
         />
         <div

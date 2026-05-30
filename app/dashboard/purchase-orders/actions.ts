@@ -5,11 +5,12 @@ import { createClient } from '@/utils/supabase/server';
 import { redirect } from 'next/navigation';
 import { createNotification } from '@/utils/notifications';
 import { recordAuditLog } from '@/utils/audit';
+import { requireCapability } from '@/lib/auth/permissions';
 
 export async function createPurchaseOrder(prevState: any, formData: FormData) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
+  const { user, error: authError } = await requireCapability('po.create', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
 
   const vendor_id = formData.get('vendor_id') as string;
   const description = formData.get('description') as string;
@@ -165,8 +166,8 @@ export async function createPurchaseOrder(prevState: any, formData: FormData) {
 
 export async function updatePOStatus(poId: string, status: string) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
+  const { user, error: authError } = await requireCapability('po.status', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
 
   const { error } = await supabase
     .from('purchase_orders')
@@ -197,8 +198,8 @@ export async function updatePOStatus(poId: string, status: string) {
 
 export async function assignProjectToPO(poId: string, projectId: string | null) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
+  const { user, error: authError } = await requireCapability('po.write', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
 
   const { error } = await supabase
     .from('purchase_orders')
@@ -221,18 +222,8 @@ export async function assignProjectToPO(poId: string, projectId: string | null) 
 
 export async function deletePurchaseOrder(poId: string) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized.' };
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single();
-
-  if (profile?.role !== 'admin') {
-    return { error: 'Forbidden. Only administrators can delete purchase orders.' };
-  }
+  const { user, error: authError } = await requireCapability('po.delete', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized.' };
 
   const { error } = await supabase
     .from('purchase_orders')

@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { createNotification } from "@/utils/notifications";
 import { recordAuditLog } from "@/utils/audit";
 import { parseFile, buildColumnMap } from "@/utils/import-export";
+import { requireCapability } from "@/lib/auth/permissions";
 
 export async function approveVendorDocument(
   vendorId: string,
@@ -13,21 +14,8 @@ export async function approveVendorDocument(
   expiryDate: string,
 ) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Unauthorized" };
-
-  // Role check — admin only
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single();
-
-  if (!profile || profile.role !== "admin") {
-    return { error: "Only admins can approve documents." };
-  }
+  const { user, error: authError } = await requireCapability("document.approve", supabase);
+  if (authError || !user) return { error: authError || "Unauthorized" };
 
   if (!expiryDate) {
     return { error: "An expiry date is required when approving a document." };
@@ -67,10 +55,8 @@ export async function updateVendorStatus(
   status: "active" | "inactive",
 ) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Unauthorized" };
+  const { user, error: authError } = await requireCapability("vendor.status", supabase);
+  if (authError || !user) return { error: authError || "Unauthorized" };
 
   const { error } = await supabase
     .from("vendors")
@@ -97,10 +83,8 @@ export async function uploadDocument(
   formData: FormData,
 ) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Unauthorized" };
+  const { user, error: authError } = await requireCapability("vendor.write", supabase);
+  if (authError || !user) return { error: authError || "Unauthorized" };
 
   const file = formData.get("file") as File;
   const expiryDate = formData.get("expiryDate") as string;
@@ -122,8 +106,7 @@ export async function uploadDocument(
     data: { publicUrl },
   } = supabase.storage.from("vendor-documents").getPublicUrl(filePath);
 
-  const { error: dbError } = await supabase.from("vendor_documents").upsert(
-    {
+  const documentPayload = {
       vendor_id: vendorId,
       doc_type: docType,
       file_url: publicUrl,
@@ -134,9 +117,21 @@ export async function uploadDocument(
       submitted_at: new Date().toISOString(),
       uploaded_by: user.id,
       updated_at: new Date().toISOString(),
-    },
-    { onConflict: "vendor_id,doc_type" },
-  );
+    };
+
+  const { data: existingDocument, error: existingError } = await supabase
+    .from("vendor_documents")
+    .select("id")
+    .eq("vendor_id", vendorId)
+    .eq("doc_type", docType)
+    .is("archived_at", null)
+    .maybeSingle();
+
+  if (existingError) return { error: existingError.message };
+
+  const { error: dbError } = existingDocument
+    ? await supabase.from("vendor_documents").update(documentPayload).eq("id", existingDocument.id)
+    : await supabase.from("vendor_documents").insert(documentPayload);
 
   if (dbError) return { error: dbError.message };
 
@@ -163,14 +158,8 @@ export async function uploadDocument(
 export async function createVendor(prevState: any, formData: FormData) {
   const supabase = await createClient();
 
-  // Get the current user
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { error: "You must be logged in to create a vendor." };
-  }
+  const { user, error: authError } = await requireCapability("vendor.write", supabase);
+  if (authError || !user) return { error: authError || "You must be logged in to create a vendor." };
 
   const name = formData.get("name") as string;
   const address = formData.get("address") as string;
@@ -252,10 +241,8 @@ export async function createVendor(prevState: any, formData: FormData) {
 
 export async function updateVendorProfile(prevState: any, formData: FormData) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Unauthorized" };
+  const { user, error: authError } = await requireCapability("vendor.write", supabase);
+  if (authError || !user) return { error: authError || "Unauthorized" };
 
   const id = formData.get("id") as string;
   if (!id) return { error: "Vendor ID is required." };
@@ -330,20 +317,8 @@ export async function updateVendorProfile(prevState: any, formData: FormData) {
 
 export async function deleteVendor(vendorId: string) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Unauthorized." };
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single();
-
-  if (profile?.role !== "admin") {
-    return { error: "Forbidden. Only administrators can delete vendors." };
-  }
+  const { user, error: authError } = await requireCapability("vendor.delete", supabase);
+  if (authError || !user) return { error: authError || "Unauthorized." };
 
   const { error } = await supabase.from("vendors").delete().eq("id", vendorId);
 
@@ -408,10 +383,8 @@ function extractSecondaryBanking(
 
 export async function importVendors(formData: FormData) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Unauthorized" };
+  const { user, error: authError } = await requireCapability("vendor.write", supabase);
+  if (authError || !user) return { error: authError || "Unauthorized" };
 
   const file = formData.get("file") as File;
   if (!file) return { error: "No file provided" };

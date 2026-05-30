@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import {
   Menu,
   Search,
@@ -96,9 +97,9 @@ export function Header({
             onClick={() => setDropdownOpen(!dropdownOpen)}
             className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800/50"
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 dark:bg-primary/20 overflow-hidden ring-1 ring-slate-200 dark:ring-slate-800">
+            <div className="relative flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 dark:bg-primary/20 overflow-hidden ring-1 ring-slate-200 dark:ring-slate-800">
               {avatarUrl ? (
-                <img src={avatarUrl} alt="Avatar" className="h-full w-full object-cover" />
+                <Image src={avatarUrl} alt="Avatar" fill className="object-cover" unoptimized />
               ) : (
                 <User className="h-4 w-4 text-primary" />
               )}

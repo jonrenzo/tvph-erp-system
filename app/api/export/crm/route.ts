@@ -1,17 +1,16 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { generateExportBuffer } from "@/utils/import-export";
+import { requireCapability } from "@/lib/auth/permissions";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const format = searchParams.get("format") === "csv" ? "csv" : "xlsx";
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { error: authError } = await requireCapability("export.crm", supabase);
+  if (authError) {
+    return NextResponse.json({ error: authError }, { status: authError === "Unauthorized" ? 401 : 403 });
   }
 
   const { data: accounts, error } = await supabase

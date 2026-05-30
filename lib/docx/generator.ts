@@ -118,7 +118,7 @@ function expandLoop<T>(
   const openTag = `{#${loopName}}`;
   const closeTag = `{/${loopName}}`;
 
-  let processedXml = replaceInPlace(xml, {
+  const processedXml = replaceInPlace(xml, {
      [openTag]: openTag,
      [closeTag]: closeTag
   });

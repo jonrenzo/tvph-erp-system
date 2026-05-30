@@ -4,11 +4,12 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/utils/supabase/server';
 import { redirect } from 'next/navigation';
 import { recordAuditLog } from '@/utils/audit';
+import { requireCapability } from '@/lib/auth/permissions';
 
 export async function createProject(prevState: any, formData: FormData) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
+  const { user, error: authError } = await requireCapability('project.write', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
 
   const name = formData.get('name') as string;
   const description = formData.get('description') as string;
@@ -45,8 +46,8 @@ export async function createProject(prevState: any, formData: FormData) {
 
 export async function updateProject(prevState: any, formData: FormData) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
+  const { user, error: authError } = await requireCapability('project.write', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
 
   const id = formData.get('id') as string;
   const name = formData.get('name') as string;
@@ -88,8 +89,8 @@ export async function updateProject(prevState: any, formData: FormData) {
 
 export async function linkVendorToProject(projectId: string, vendorId: string) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
+  const { user, error: authError } = await requireCapability('project.write', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
 
   const { error } = await supabase.from('project_vendors').insert({
     project_id: projectId,
@@ -117,8 +118,8 @@ export async function linkVendorToProject(projectId: string, vendorId: string) {
 
 export async function removeVendorFromProject(projectId: string, vendorId: string) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
+  const { user, error: authError } = await requireCapability('project.write', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
 
   // Safety check 1: Open POs for this vendor on this project
   const { data: openPOs } = await supabase
