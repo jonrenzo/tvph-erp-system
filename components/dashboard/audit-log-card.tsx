@@ -64,12 +64,51 @@ export function AuditLogCard() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [offset, setOffset] = useState(0);
-  const [isMinimized, setIsMinimized] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const segment = pathname.split("/")[2];
   const entityTypes = segment ? ROUTE_ENTITY_MAP[segment] : null;
   const isHidden = !segment || segment === "audit-logs" || !entityTypes;
+
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartPos = useRef({ x: 0, y: 0 });
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setIsDragging(true);
+    dragStartPos.current = {
+      x: e.clientX - position.x,
+      y: e.clientY - position.y,
+    };
+  };
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (isDragging) {
+      setPosition({
+        x: e.clientX - dragStartPos.current.x,
+        y: e.clientY - dragStartPos.current.y,
+      });
+    }
+  }, [isDragging]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+  }, []);
+
+  useEffect(() => {
+    if (isDragging) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    } else {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, handleMouseMove, handleMouseUp]);
 
   const buildUrl = useCallback(
     (currentOffset: number) =>
@@ -134,9 +173,15 @@ export function AuditLogCard() {
   const sectionLabel = segment.replace(/-/g, " ");
 
   return (
-    <div className="w-[300px] bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-300">
+    <div 
+      className="w-[300px] bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-300"
+      style={{ transform: `translate(${position.x}px, ${position.y}px)`, zIndex: 100, transition: "none" }}
+    >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-[#0a0a0a]/60">
+      <div 
+        className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-[#0a0a0a]/60 cursor-move select-none"
+        onMouseDown={handleMouseDown}
+      >
         <div className="flex items-center gap-2 h-3">
           <History className="h-3.5 w-3.5 text-primary shrink-0" />
           <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 capitalize">
@@ -145,6 +190,7 @@ export function AuditLogCard() {
         </div>
         <div className="flex items-center gap-1">
           <button
+            onMouseDown={(e) => e.stopPropagation()}
             onClick={() => setIsMinimized(!isMinimized)}
             className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
           >

@@ -2,24 +2,54 @@
 
 import { useState, useRef, useEffect } from "react";
 import { MessageSquare, X, Send, Sparkles, User, Bot, Loader2, Maximize2, Minimize2 } from "lucide-react";
-import Link from "next/link";
 import ReactMarkdown from "react-markdown";
+import { useChat } from '@ai-sdk/react';
+import { DefaultChatTransport } from 'ai';
+import { usePathname } from 'next/navigation';
 
-interface Message {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  timestamp: number;
+type ToolInvocationView = {
+  toolCallId: string;
+  toolName: string;
+  result?: unknown;
+};
+
+function getMessageText(message: { parts?: unknown; content?: string }) {
+  if (!Array.isArray(message.parts)) {
+    return message.content ?? '';
+  }
+
+  return message.parts
+    .map((part) => {
+      if (part && typeof part === 'object' && 'type' in part && part.type === 'text' && 'text' in part) {
+        return String(part.text);
+      }
+      return '';
+    })
+    .join('');
+}
+
+function getToolInvocations(message: { toolInvocations?: unknown }) {
+  return Array.isArray(message.toolInvocations)
+    ? (message.toolInvocations as ToolInvocationView[])
+    : [];
 }
 
 export function AIChatBubble() {
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
-
-  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const pathname = usePathname();
+
+  const { messages, status, sendMessage } = useChat({
+    transport: new DefaultChatTransport({
+      api: '/api/chat',
+      body: () => ({ contextUrl: pathname }),
+    }),
+  });
+
+  const isLoading = status === 'submitted' || status === 'streaming';
+
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Drag state
@@ -69,70 +99,6 @@ export function AIChatBubble() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, isLoading]);
-
-  useEffect(() => {
-    console.log("Messages state updated:", messages);
-  }, [messages]);
-
-  const handleSend = async (text: string = input) => {
-    if (!text.trim() || isLoading) return;
-
-    const userMsg: Message = {
-      id: Date.now().toString(), // eslint-disable-line
-      role: "user",
-      content: text,
-      timestamp: Date.now(), // eslint-disable-line
-    };
-
-    setMessages((prev) => [...prev, userMsg]);
-    setInput("");
-    setIsLoading(true);
-
-    try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: text,
-          history: messages.map(m => ({
-            id: m.id,
-            role: m.role,
-            content: m.content,
-            timestamp: m.timestamp
-          })),
-        }),
-      });
-
-       const data = await response.json();
-       console.log("API Response status:", response.status);
-       console.log("API Response data:", data);
-
-       if (!response.ok) {
-         throw new Error(data.error || `Server error: ${response.status}`);
-       }
-
-       if (data.error) throw new Error(data.error);
-
-       if (!data.message) {
-         console.error("No message in response:", data);
-         throw new Error("Invalid response from server");
-       }
-
-       console.log("Adding message to state:", data.message);
-       setMessages((prev) => [...prev, data.message]);
-    } catch (error: any) {
-      console.error("Chat Error:", error);
-      const errorMsg: Message = {
-        id: "error-" + Date.now(), // eslint-disable-line
-        role: "assistant",
-        content: `❌ **Error:** ${error.message || "Something went wrong. Please try again."}`,
-        timestamp: Date.now(), // eslint-disable-line
-      };
-      setMessages((prev) => [...prev, errorMsg]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   if (isDismissed) return null;
 
@@ -187,7 +153,7 @@ export function AIChatBubble() {
                     {["Who are our top vendors?", "List pending POs", "What's our compliance score?"].map((suggestion) => (
                       <button 
                         key={suggestion}
-                        onClick={() => handleSend(suggestion)}
+                        onClick={() => sendMessage({ text: suggestion })}
                         className="text-[10px] p-2 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-600 dark:text-slate-400 hover:border-primary hover:text-primary transition-all text-left"
                       >
                         &quot;{suggestion}&quot;
@@ -197,7 +163,14 @@ export function AIChatBubble() {
               </div>
             )}
 
-             {messages.map((m) => (
+              {messages.map((message) => {
+                const m = message as typeof message & {
+                  content?: string;
+                  toolInvocations?: ToolInvocationView[];
+                };
+                const toolInvocations = getToolInvocations(m);
+
+                return (
                <div key={m.id} className={`flex gap-3 ${m.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
                  <div className={`h-8 w-8 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
                    m.role === 'user' ? 'bg-white dark:bg-slate-800' : 'bg-primary'
@@ -209,11 +182,37 @@ export function AIChatBubble() {
                      ? 'bg-primary text-white rounded-tr-none shadow-primary/10' 
                      : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 rounded-tl-none shadow-slate-200/50 dark:shadow-none'
                  }`}>
-                   <div className="whitespace-pre-wrap">{m.content || "No content"}</div>
+                    <div className="prose dark:prose-invert prose-sm max-w-none prose-p:leading-relaxed prose-pre:bg-slate-800 prose-pre:text-slate-100 break-words">
+                      <ReactMarkdown 
+                        components={{
+                          a: (props) => <a {...props} target="_blank" className="text-emerald-500 hover:underline break-all" />,
+                          p: (props) => <p {...props} className="mb-2 last:mb-0" />
+                        }}
+                      >
+                        {getMessageText(m)}
+                      </ReactMarkdown>
+                    </div>
+                    {toolInvocations.map(toolInvocation => {
+                      const toolCallId = toolInvocation.toolCallId;
+                      if ('result' in toolInvocation) {
+                        return (
+                          <div key={toolCallId} className="mt-2 text-xs text-slate-500 flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800 p-1.5 rounded-md border border-slate-100 dark:border-slate-700">
+                            <span className="text-emerald-500">✓</span> Executed {toolInvocation.toolName}
+                          </div>
+                        );
+                      } else {
+                        return (
+                          <div key={toolCallId} className="mt-2 text-xs text-slate-500 flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800 p-1.5 rounded-md border border-slate-100 dark:border-slate-700">
+                            <Loader2 className="h-3 w-3 animate-spin text-primary" /> Running {toolInvocation.toolName}...
+                          </div>
+                        );
+                      }
+                    })}
                  </div>
                </div>
-             ))}
-            {isLoading && (
+                );
+              })}
+            {isLoading && messages[messages.length - 1]?.role === 'user' && (
               <div className="flex gap-3">
                  <div className="h-8 w-8 rounded-xl bg-primary flex items-center justify-center shrink-0">
                     <Bot className="h-4 w-4 text-white" />
@@ -228,7 +227,12 @@ export function AIChatBubble() {
 
           {/* Input */}
           <form 
-            onSubmit={(e) => { e.preventDefault(); handleSend(); }}
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!input.trim() || isLoading) return;
+              sendMessage({ text: input });
+              setInput('');
+            }}
             className="p-4 bg-white dark:bg-[#071F15] border-t border-slate-100 dark:border-slate-800"
           >
             <div className="relative flex items-center">

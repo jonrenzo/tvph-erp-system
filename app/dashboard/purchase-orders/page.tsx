@@ -5,14 +5,15 @@ import { Suspense } from 'react';
 import { SearchInput } from '@/components/ui/search-input';
 import { StatusSelect } from '@/components/ui/status-select';
 import { PurchaseOrdersTableBody } from '@/components/dashboard/purchase-orders/purchase-orders-table-body';
+import { ExportDropdown } from '@/components/dashboard/export-dropdown';
 
 export const unstable_instant = { 
   prefetch: 'static',
-  samples: [{ searchParams: { q: null, status: null } }]
+  samples: [{ searchParams: { q: null, status: null, vendor: null, project: null } }]
 };
 
 export default function PurchaseOrdersPage(props: { 
-  searchParams?: Promise<{ q?: string; status?: string }> 
+  searchParams?: Promise<{ q?: string; status?: string; vendor?: string; project?: string }> 
 }) {
   return (
     <Suspense fallback={<PurchaseOrdersSkeleton />}>
@@ -26,6 +27,24 @@ async function PurchaseOrdersContent({ searchParams: searchParamsPromise }: { se
   const supabase = await createClient();
   const q = searchParams?.q || '';
   const statusFilter = searchParams?.status || 'all';
+  const vendorFilter = searchParams?.vendor || 'all';
+  const projectFilter = searchParams?.project || 'all';
+
+  // Fetch projects and vendors for filters
+  const [projectsResponse, vendorsResponse] = await Promise.all([
+    supabase.from('projects').select('id, name').is('deleted_at', null).order('name'),
+    supabase.from('vendors').select('id, name').is('deleted_at', null).order('name')
+  ]);
+
+  const projectsOptions = [
+    { value: 'all', label: 'All Projects' },
+    ...(projectsResponse.data?.map(p => ({ value: p.id, label: p.name })) || [])
+  ];
+
+  const vendorsOptions = [
+    { value: 'all', label: 'All Vendors' },
+    ...(vendorsResponse.data?.map(v => ({ value: v.id, label: v.name })) || [])
+  ];
 
   // Join with vendors to get vendor name
   let query = supabase
@@ -48,6 +67,12 @@ async function PurchaseOrdersContent({ searchParams: searchParamsPromise }: { se
   if (statusFilter !== 'all') {
     query = query.eq('status', statusFilter);
   }
+  if (vendorFilter !== 'all') {
+    query = query.eq('vendor_id', vendorFilter);
+  }
+  if (projectFilter !== 'all') {
+    query = query.eq('project_id', projectFilter);
+  }
 
   const { data: pos, error } = await query;
 
@@ -60,7 +85,7 @@ async function PurchaseOrdersContent({ searchParams: searchParamsPromise }: { se
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Track and manage vendor purchase orders and payments.</p>
         </div>
         <div className="flex items-center gap-2">
-
+          <ExportDropdown exportBaseUrl="/api/export/purchase-orders" />
           <Link 
             href="/dashboard/purchase-orders/new"
             className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2.5 rounded-xl font-medium transition-all hover:shadow-lg hover:shadow-primary/20 active:scale-95"
@@ -97,8 +122,10 @@ async function PurchaseOrdersContent({ searchParams: searchParamsPromise }: { se
 
       {/* Filters and List */}
       <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-        <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row gap-4 bg-slate-50/50 dark:bg-[#0a0a0a]/50">
-          <SearchInput placeholder="Search POs..." paramName="q" />
+        <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row gap-4 bg-slate-50/50 dark:bg-[#0a0a0a]/50 flex-wrap">
+          <div className="flex-1 min-w-[200px]">
+            <SearchInput placeholder="Search POs..." paramName="q" />
+          </div>
           
           <StatusSelect 
             paramName="status"
@@ -111,6 +138,16 @@ async function PurchaseOrdersContent({ searchParams: searchParamsPromise }: { se
               { value: 'overpaid', label: 'Overpaid' },
               { value: 'cancelled', label: 'Cancelled' }
             ]}
+          />
+
+          <StatusSelect
+            paramName="vendor"
+            options={vendorsOptions}
+          />
+
+          <StatusSelect
+            paramName="project"
+            options={projectsOptions}
           />
         </div>
 
