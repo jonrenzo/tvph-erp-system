@@ -1,5 +1,16 @@
 # TelcoVantage ERP System
 
+<div align="center">
+  <img src="https://img.shields.io/badge/Next.js-16.2-black?style=for-the-badge&logo=next.js&logoColor=white" alt="Next.js" />
+  <img src="https://img.shields.io/badge/React-19.2-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React" />
+  <img src="https://img.shields.io/badge/TypeScript-5.0-007ACC?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Tailwind_CSS-4.0-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind CSS" />
+  <img src="https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" alt="Supabase" />
+  <img src="https://img.shields.io/badge/Google_Gemini-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="Gemini AI" />
+</div>
+
+<br/>
+
 ![TelcoVantage ERP](/public/screenshot.png)
 
 > **The Intelligent Command Surface for TelcoVantage Philippines.**
@@ -8,7 +19,20 @@ A state-of-the-art Enterprise Resource Planning (ERP) system designed to moderni
 
 ---
 
-## Core Features
+## 📑 Table of Contents
+
+- [Core Features](#core-features)
+- [Technology Stack](#technology-stack)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+- [Architecture](#architecture)
+- [Troubleshooting & FAQ](#troubleshooting--faq)
+- [License](#license)
+
+---
+
+## 🚀 Core Features
 
 ### Command Center
 Real-time operational pulse with high-level metrics on **Current Liability**, **Active POs**, **Pending Vendors**, and **Expiring Documents**. Featuring a unified audit log and daily operational summaries.
@@ -56,30 +80,13 @@ Comprehensive activity tracking across all entities (CREATE/UPDATE/DELETE) with:
 - Dedicated audit log page with filters by action and entity type.
 - Contextual audit log card on relevant pages with infinite scroll.
 
-### Real-time Notifications
-In-app notification system via Supabase Realtime subscriptions:
-- 6 notification types (PO, invoice, payment, document, vendor, HR).
-- Notification bell dropdown with mark-all-read and delete.
-- 30-day auto-cleanup of old notifications.
-
-### Global Search
-Cmd+K search modal with keyboard navigation, searching across vendors, POs, invoices, projects, payments, and documents.
-
-### System Control Panel
-Settings page with 3 tabs:
-- **Organization**: Company name, address, contact info.
-- **Team Management**: User role management (admin/finance/procurement/project_manager/user) with HR invite via Supabase Admin API.
-- **Financials**: VAT rate, payment terms, currency defaults.
-
-### User Profiles
-Profile management with name, avatar upload, and password reset.
-
-### Theme Toggle
-Dark/light mode via `next-themes` with class-based switching, default dark mode, and system preference detection.
+### Global Search & Real-time Notifications
+- **Cmd+K Search Modal**: Keyboard navigation, searching across vendors, POs, invoices, projects, payments, and documents.
+- **Supabase Realtime**: 6 notification types with a notification bell dropdown, mark-all-read, and 30-day auto-cleanup.
 
 ---
 
-## Technology Stack
+## 💻 Technology Stack
 
 - **Frontend**: Next.js 16.2.4 (App Router, `cacheComponents`), React 19.2.4, Tailwind CSS 4, Lucide Icons, Framer Motion.
 - **Backend-as-a-Service**: Supabase (Auth, PostgreSQL, Realtime, Storage, RLS).
@@ -93,11 +100,10 @@ Dark/light mode via `next-themes` with class-based switching, default dark mode,
 ### Coming Soon
 - **Scheduled Tasks**: Daily cron jobs for compliance expiry checks and overdue invoice reminders.
 - **Email Notifications**: Transactional emails via Resend for document expiry alerts and invoice reminders.
-- **Automated Expiry Warnings**: Proactive notification logic with email fallback.
 
 ---
 
-## Getting Started
+## 🛠️ Getting Started
 
 ### Prerequisites
 - Node.js 20+
@@ -118,7 +124,7 @@ Dark/light mode via `next-themes` with class-based switching, default dark mode,
    ```
 
 3. **Environment Setup**:
-   Create a `.env.local` file with the following:
+   Create a `.env.local` file with the following keys:
    ```env
    NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
@@ -141,7 +147,7 @@ Dark/light mode via `next-themes` with class-based switching, default dark mode,
 
 ---
 
-## Architecture
+## 🏗️ Architecture
 
 - **Server-First**: Heavy use of React Server Components (RSC) and Server Actions for performance and security.
 - **AI Tooling**: Tools defined in `lib/chat/tools.ts` (8 tools) allow Gemini to securely interact with the database via defined API boundaries with role-based access checks.
@@ -152,6 +158,22 @@ Dark/light mode via `next-themes` with class-based switching, default dark mode,
 
 ---
 
-## License
+## 🐛 Troubleshooting & FAQ
+
+**Q: I'm getting Supabase connection errors on startup.**  
+**A:** Ensure that `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in your `.env.local` are exactly as provided in your Supabase dashboard. Missing or incorrectly formatted keys are the most common cause.
+
+**Q: The initial database migration is failing.**  
+**A:** If `supabase/migrations/20250514_initial_schema.sql` fails to execute, make sure you are running it in the SQL Editor of a *fresh* Supabase project. If there are conflicting tables, you may need to reset your database to avoid conflicts.
+
+**Q: AI features are throwing rate limit or timeout errors.**  
+**A:** The Google Gemini API (`gemini-2.5-flash`) may impose rate limits on the free tier. If you see timeouts, check your API usage quota in Google AI Studio. Also ensure `GOOGLE_GENERATIVE_AI_API_KEY` is correctly set.
+
+**Q: My Next.js build is caching old data, styles, or module resolution is failing.**  
+**A:** Next.js uses an aggressive caching strategy. If you don't see your code changes, try stopping the development server, deleting the `.next` directory (`rm -rf .next`), and restarting with `npm run dev`.
+
+---
+
+## 📄 License
 
 Internal Project for TelcoVantage Philippines. All Rights Reserved.
