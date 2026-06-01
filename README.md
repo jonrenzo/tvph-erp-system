@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="/public/banner.png" alt="TelcoVantage ERP Banner" />
+</div>
+
 # TelcoVantage ERP System
 
 <div align="center">
