@@ -1175,7 +1175,8 @@ export async function importCustomers(formData: FormData) {
   }
 
   const fileHeaders = Object.keys(rows[0]);
-  const columnMap = buildColumnMap(fileHeaders);
+  const customMappingStr = formData.get("columnMapping") as string | null;
+  const columnMap = customMappingStr ? JSON.parse(customMappingStr) as Record<string, string> : buildColumnMap(fileHeaders);
   const unmappedColumns = fileHeaders.filter((h) => !columnMap[h]);
 
   let created = 0;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useMemo } from "react";
 import {
   Upload,
   FileSpreadsheet,
@@ -10,8 +10,14 @@ import {
   Loader2,
   X,
   ArrowLeft,
+  Sparkles,
+  Columns,
+  Grid,
+  Brain,
 } from "lucide-react";
 import { validateImportFile, ClientParsedResult } from "@/utils/client-import-parser";
+import { buildRichColumnMap, RichColumnMapping, MappingSource } from "@/utils/import-export";
+import { suggestColumnMapping } from "@/app/actions/ai-import";
 
 type ImportResult = {
   created: number;
@@ -28,14 +34,91 @@ type Props = {
   onClose: () => void;
 };
 
+const CUSTOMER_OPTIONS = [
+  { value: "company_name", label: "Company Name (Required)" },
+  { value: "registered_address", label: "Registered Address" },
+  { value: "tin", label: "TIN / Tax ID" },
+  { value: "status", label: "Status" },
+  { value: "primary_site_location", label: "Primary Site Location" },
+  { value: "industry_note", label: "Industry Note" },
+  { value: "notes", label: "Notes" },
+  { value: "full_name", label: "Contact Full Name" },
+  { value: "job_title", label: "Contact Job Title" },
+  { value: "email", label: "Contact Email" },
+  { value: "phone", label: "Contact Phone" },
+  { value: "fax", label: "Contact Fax" },
+];
+
+const VENDOR_OPTIONS = [
+  { value: "name", label: "Vendor Name (Required)" },
+  { value: "address", label: "Address" },
+  { value: "tin", label: "TIN / Tax ID" },
+  { value: "contact_person", label: "Contact Person" },
+  { value: "contact_email", label: "Contact Email" },
+  { value: "contact_phone", label: "Contact Phone" },
+  { value: "contact_fax", label: "Contact Fax" },
+  { value: "bank_name", label: "Bank Name" },
+  { value: "bank_account_number", label: "Bank Account Number" },
+  { value: "bank_account_name", label: "Bank Account Name" },
+  { value: "payment_terms", label: "Payment Terms" },
+  { value: "currency", label: "Currency" },
+  { value: "notes", label: "Notes" },
+  { value: "status", label: "Status" },
+  { value: "_sc_name", label: "Secondary Contact Name" },
+  { value: "_sc_email", label: "Secondary Contact Email" },
+  { value: "_sc_phone", label: "Secondary Contact Phone" },
+  { value: "_sb_bank_name", label: "Secondary Bank Name" },
+  { value: "_sb_account_number", label: "Secondary Bank Account Number" },
+  { value: "_sb_account_name", label: "Secondary Bank Account Name" },
+];
+
 export function ImportModal({ title, action, onClose }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
+  const [fileBuffer, setFileBuffer] = useState<ArrayBuffer | null>(null);
   const [state, setState] = useState<"idle" | "preview" | "uploading" | "result">("idle");
-  const [parsedData, setParsedData] = useState<ClientParsedResult | null>(null);
+  const [richMapping, setRichMapping] = useState<RichColumnMapping | null>(null);
+  const [isMappingAiLoading, setIsMappingAiLoading] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+
+  // Dynamic client parsed validation results computed instantly as mappings change
+  const parsedData = useMemo(() => {
+    if (!fileBuffer) return null;
+    const simpleMapping: Record<string, string> = {};
+    if (richMapping) {
+      for (const [col, val] of Object.entries(richMapping)) {
+        if (val.field) {
+          simpleMapping[col] = val.field;
+        }
+      }
+    }
+    return validateImportFile(fileBuffer, title as "Customers" | "Vendors", simpleMapping);
+  }, [fileBuffer, richMapping, title]);
+
+  const triggerAiMapping = useCallback(async (headers: string[], currentMap: RichColumnMapping) => {
+    setIsMappingAiLoading(true);
+    try {
+      const res = await suggestColumnMapping(headers, title as "Customers" | "Vendors");
+      if (res.mappings && Object.keys(res.mappings).length > 0) {
+        setRichMapping((prev) => {
+          if (!prev) return null;
+          const updated = { ...prev };
+          for (const [col, targetField] of Object.entries(res.mappings)) {
+            if (updated[col] && (updated[col].field === null || updated[col].source === "unmapped")) {
+              updated[col] = { field: targetField as string, source: "ai" };
+            }
+          }
+          return updated;
+        });
+      }
+    } catch (err) {
+      console.error("AI Mapping failed:", err);
+    } finally {
+      setIsMappingAiLoading(false);
+    }
+  }, [title]);
 
   const handleFile = useCallback(async (f: File) => {
     const ext = f.name.split(".").pop()?.toLowerCase();
@@ -49,15 +132,29 @@ export function ImportModal({ title, action, onClose }: Props) {
 
     try {
       const buffer = await f.arrayBuffer();
+      setFileBuffer(buffer);
+
       const parsed = validateImportFile(buffer, title as "Customers" | "Vendors");
-      setParsedData(parsed);
+      const fileHeaders = parsed.rows.length > 0 ? Object.keys(parsed.rows[0]) : [];
+      const richMap = buildRichColumnMap(fileHeaders);
+      setRichMapping(richMap);
       setState("preview");
+
+      // Auto-trigger Gemini AI mapping fallback for unmapped columns
+      const unmapped = Object.entries(richMap)
+        .filter(([_, value]) => value.field === null)
+        .map(([key]) => key);
+
+      if (unmapped.length > 0) {
+        triggerAiMapping(unmapped, richMap);
+      }
     } catch (err: any) {
       setError(err.message || "Failed to parse file client-side.");
       setState("idle");
       setFile(null);
+      setFileBuffer(null);
     }
-  }, [title]);
+  }, [title, triggerAiMapping]);
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
@@ -70,12 +167,21 @@ export function ImportModal({ title, action, onClose }: Props) {
   );
 
   const handleImport = async () => {
-    if (!file) return;
+    if (!file || !richMapping) return;
     setState("uploading");
     setError(null);
 
     const fd = new FormData();
     fd.set("file", file);
+
+    // Build plain JSON mapping to pass to Next.js Server Action
+    const simpleMapping: Record<string, string> = {};
+    for (const [col, val] of Object.entries(richMapping)) {
+      if (val.field) {
+        simpleMapping[col] = val.field;
+      }
+    }
+    fd.set("columnMapping", JSON.stringify(simpleMapping));
 
     const res = await action(fd);
     if ("error" in res && res.error) {
@@ -84,6 +190,29 @@ export function ImportModal({ title, action, onClose }: Props) {
     } else {
       setResult(res as ImportResult);
       setState("result");
+    }
+  };
+
+  const handleMappingChange = (header: string, field: string | null) => {
+    setRichMapping((prev) => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        [header]: {
+          field,
+          source: field ? "manual" : "unmapped",
+        },
+      };
+    });
+  };
+
+  const handleTriggerAiManual = () => {
+    if (!richMapping) return;
+    const unmapped = Object.entries(richMapping)
+      .filter(([_, value]) => value.field === null)
+      .map(([key]) => key);
+    if (unmapped.length > 0) {
+      triggerAiMapping(unmapped, richMapping);
     }
   };
 
@@ -101,7 +230,8 @@ export function ImportModal({ title, action, onClose }: Props) {
                 onClick={() => {
                   setState("idle");
                   setFile(null);
-                  setParsedData(null);
+                  setFileBuffer(null);
+                  setRichMapping(null);
                 }}
                 className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors mr-1"
               >
@@ -127,21 +257,27 @@ export function ImportModal({ title, action, onClose }: Props) {
               onReset={() => {
                 setState("idle");
                 setFile(null);
-                setParsedData(null);
+                setFileBuffer(null);
+                setRichMapping(null);
                 setResult(null);
               }}
             />
-          ) : state === "preview" && parsedData ? (
+          ) : state === "preview" && parsedData && richMapping ? (
             <PreviewView
               title={title}
               file={file!}
               parsedData={parsedData}
+              richMapping={richMapping}
+              isMappingAiLoading={isMappingAiLoading}
+              onMappingChange={handleMappingChange}
+              onTriggerAi={handleTriggerAiManual}
               state={state}
               error={error}
               onCancel={() => {
                 setState("idle");
                 setFile(null);
-                setParsedData(null);
+                setFileBuffer(null);
+                setRichMapping(null);
               }}
               onConfirm={handleImport}
             />
@@ -191,7 +327,7 @@ export function ImportModal({ title, action, onClose }: Props) {
                     </p>
                   </div>
                   <button
-                    onClick={() => { setFile(null); setError(null); }}
+                    onClick={() => { setFile(null); setError(null); setFileBuffer(null); }}
                     className="text-xs text-slate-500 hover:text-red-500 transition-colors"
                   >
                     Change
@@ -226,6 +362,10 @@ function PreviewView({
   title,
   file,
   parsedData,
+  richMapping,
+  isMappingAiLoading,
+  onMappingChange,
+  onTriggerAi,
   state,
   error,
   onCancel,
@@ -234,17 +374,30 @@ function PreviewView({
   title: string;
   file: File;
   parsedData: ClientParsedResult;
+  richMapping: RichColumnMapping;
+  isMappingAiLoading: boolean;
+  onMappingChange: (header: string, field: string | null) => void;
+  onTriggerAi: () => void;
   state: string;
   error: string | null;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const [activeTab, setActiveTab] = useState<"mapping" | "data">("mapping");
+  
   const hasErrors = parsedData.errors.length > 0;
   const fileHeaders = parsedData.rows.length > 0 ? Object.keys(parsedData.rows[0]) : [];
   const previewRows = parsedData.rows.slice(0, 10);
 
+  const options = title === "Customers" ? CUSTOMER_OPTIONS : VENDOR_OPTIONS;
+
+  // Calculate unmapped columns count
+  const unmappedCount = Object.values(richMapping).filter((v) => v.field === null).length;
+  const mappedCount = Object.keys(richMapping).length - unmappedCount;
+
   return (
     <div className="space-y-6">
+      {/* File Overview Stats */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 bg-slate-50 dark:bg-[#0a0a0a]/30 border border-slate-200 dark:border-slate-800 rounded-2xl">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
@@ -264,30 +417,62 @@ function PreviewView({
           <div className="flex items-center gap-1.5">
             <span className="font-medium text-slate-500">Mapped:</span>
             <span className="px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/50 rounded font-mono font-semibold">
-              {Object.keys(parsedData.columnMapping).length}
+              {mappedCount}
             </span>
           </div>
-          {parsedData.unmappedColumns.length > 0 && (
+          {unmappedCount > 0 && (
             <div className="flex items-center gap-1.5">
               <span className="font-medium text-slate-500">Unmapped:</span>
               <span className="px-2 py-0.5 bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 border border-amber-100 dark:border-amber-900/50 rounded font-mono font-semibold">
-                {parsedData.unmappedColumns.length}
+                {unmappedCount}
               </span>
             </div>
           )}
         </div>
       </div>
 
+      {/* Tabs */}
+      <div className="flex gap-2 border-b border-slate-200 dark:border-slate-800 pb-px">
+        <button
+          onClick={() => setActiveTab("mapping")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition-all ${
+            activeTab === "mapping"
+              ? "border-primary text-primary"
+              : "border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+          }`}
+        >
+          <Columns className="h-4 w-4" />
+          Column Mapping Review
+          {isMappingAiLoading && (
+            <span className="flex items-center gap-1 bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-400 border border-purple-100 dark:border-purple-900/50 px-1.5 py-0.5 rounded text-[10px] animate-pulse">
+              <Brain className="h-3 w-3 animate-spin" /> AI Analyzing...
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab("data")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition-all ${
+            activeTab === "data"
+              ? "border-primary text-primary"
+              : "border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+          }`}
+        >
+          <Grid className="h-4 w-4" />
+          Row Preview ({Math.min(parsedData.rows.length, 10)} rows)
+        </button>
+      </div>
+
+      {/* Conditional Error/Success Banner */}
       {hasErrors ? (
         <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 rounded-2xl p-4 space-y-3">
           <div className="flex items-center gap-2 text-red-800 dark:text-red-400 font-semibold text-sm">
-            <AlertTriangle className="h-5 w-5 text-red-500 shrink-0 animate-pulse" />
+            <AlertTriangle className="h-5 w-5 text-red-500 shrink-0" />
             Validation Errors Found ({parsedData.errors.length})
           </div>
           <p className="text-xs text-red-700 dark:text-red-400 leading-relaxed">
-            We found errors in your file structure. CSV/Excel import is strictly blocked until all validation errors are resolved. Please update your file and try re-uploading.
+            We found errors in your file structure or mapped fields. Import is blocked until all errors are resolved. Update your column mapping below or correct your spreadsheet.
           </p>
-          <div className="max-h-36 overflow-y-auto space-y-1.5 pl-2 border-t border-red-200 dark:border-red-900/50 pt-3">
+          <div className="max-h-32 overflow-y-auto space-y-1.5 pl-2 border-t border-red-200 dark:border-red-900/50 pt-3">
             {parsedData.errors.map((err, i) => (
               <div key={i} className="text-xs text-red-700 dark:text-red-400 flex items-start gap-1 font-mono">
                 <span className="font-bold text-red-800 dark:text-red-300 shrink-0">Row {err.row}:</span>
@@ -304,63 +489,149 @@ function PreviewView({
               Format Validation Passed
             </h4>
             <p className="text-xs text-emerald-700 dark:text-emerald-400 leading-relaxed">
-              All records have passed local requirements. Review the preview below and confirm the import.
+              All records have passed local requirements. Confirm the mappings and final data preview below.
             </p>
           </div>
         </div>
       )}
 
-      <div className="space-y-2">
-        <div className="flex justify-between items-center px-1">
-          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-            Row Preview (showing first 10 rows)
-          </h3>
-        </div>
-        <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm bg-white dark:bg-[#0a0a0a]/20 max-h-[300px] overflow-y-auto">
-          <table className="min-w-full text-xs text-left">
-            <thead className="bg-slate-50 dark:bg-[#071f15]/50 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10">
-              <tr>
-                <th className="px-4 py-3 font-semibold text-slate-500 font-mono w-16 text-center border-r border-slate-200 dark:border-slate-800">Row</th>
-                {fileHeaders.map((header) => {
-                  const dbField = parsedData.columnMapping[header];
+      {/* Tab Contents */}
+      {activeTab === "mapping" ? (
+        <div className="space-y-3">
+          <div className="flex justify-between items-center px-1">
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+              Map the column headers of your uploaded spreadsheet to the matching database fields. Unmapped columns will be skipped.
+            </p>
+            {unmappedCount > 0 && !isMappingAiLoading && (
+              <button
+                onClick={onTriggerAi}
+                className="flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 dark:hover:bg-purple-950/60 border border-purple-100 dark:border-purple-900/50 transition-colors shadow-sm cursor-pointer shrink-0"
+              >
+                <Sparkles className="h-3.5 w-3.5 animate-pulse" />
+                Fills with AI
+              </button>
+            )}
+          </div>
+
+          <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm bg-white dark:bg-[#0a0a0a]/20 max-h-[350px] overflow-y-auto">
+            <table className="min-w-full text-xs text-left">
+              <thead className="bg-slate-50 dark:bg-[#071f15]/50 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10">
+                <tr>
+                  <th className="px-4 py-3 font-semibold text-slate-500 min-w-[200px]">Spreadsheet Column</th>
+                  <th className="px-2 py-3 font-semibold text-slate-500 text-center w-8"></th>
+                  <th className="px-4 py-3 font-semibold text-slate-500 min-w-[250px]">Database Field</th>
+                  <th className="px-4 py-3 font-semibold text-slate-500 w-36 text-center">Match Source</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                {Object.entries(richMapping).map(([header, mapping]) => {
+                  const isIgnored = mapping.field === null;
                   return (
-                    <th key={header} className="px-4 py-3 font-semibold min-w-[150px] border-r last:border-r-0 border-slate-200 dark:border-slate-800">
-                      <div className="text-slate-800 dark:text-slate-200">{header}</div>
-                      {dbField ? (
-                        <span className="inline-block mt-1 text-[9px] bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-100 dark:border-emerald-900/50 font-mono font-semibold">
-                          → {dbField}
+                    <tr key={header} className="hover:bg-slate-50 dark:hover:bg-slate-800/10">
+                      <td className="px-4 py-3.5 font-medium text-slate-900 dark:text-white">
+                        <div className="flex items-center gap-2">
+                          <FileSpreadsheet className="h-4 w-4 text-emerald-500 shrink-0" />
+                          <span className="font-mono bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 font-semibold shadow-xs">
+                            {header}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-2 py-3.5 text-center text-slate-400 font-bold font-mono">
+                        →
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <select
+                          value={mapping.field || ""}
+                          onChange={(e) => onMappingChange(header, e.target.value || null)}
+                          className="w-full max-w-[280px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-1.5 text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-slate-800 dark:text-slate-100 shadow-xs cursor-pointer font-medium"
+                        >
+                          <option value="" className="text-slate-400">Ignore Column (Skip)</option>
+                          {options.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-4 py-3.5 text-center">
+                        <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${
+                          mapping.source === "exact"
+                            ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border-emerald-100 dark:border-emerald-900/50"
+                            : mapping.source === "fuzzy"
+                            ? "bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border-amber-100 dark:border-amber-900/50"
+                            : mapping.source === "ai"
+                            ? "bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-400 border-purple-100 dark:border-purple-900/50"
+                            : mapping.source === "manual"
+                            ? "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 border-blue-100 dark:border-blue-900/50"
+                            : "bg-slate-50 dark:bg-slate-900 text-slate-500 border-slate-200 dark:border-slate-800"
+                        }`}>
+                          {mapping.source === "exact" && "🟢 Exact Match"}
+                          {mapping.source === "fuzzy" && "🟡 Fuzzy Match"}
+                          {mapping.source === "ai" && "🟣 AI Suggestion"}
+                          {mapping.source === "manual" && "🔵 Custom"}
+                          {mapping.source === "unmapped" && "⚪ Ignored"}
                         </span>
-                      ) : (
-                        <span className="inline-block mt-1 text-[9px] bg-slate-100 text-slate-500 dark:bg-slate-800/40 dark:text-slate-400 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700/50 font-mono">
-                          Ignored
-                        </span>
-                      )}
-                    </th>
+                      </td>
+                    </tr>
                   );
                 })}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800 font-mono">
-              {previewRows.map((row, idx) => (
-                <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/10">
-                  <td className="px-4 py-3 text-slate-400 text-center font-bold border-r border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/10 w-16">
-                    {idx + 2}
-                  </td>
-                  {fileHeaders.map((header) => (
-                    <td key={header} className="px-4 py-3 text-slate-700 dark:text-slate-300 whitespace-nowrap max-w-[220px] truncate border-r last:border-r-0 border-slate-200 dark:border-slate-800">
-                      {row[header] !== undefined && row[header] !== null && String(row[header]).trim() !== "" ? (
-                        String(row[header])
-                      ) : (
-                        <span className="text-slate-400/60 dark:text-slate-600 italic">empty</span>
-                      )}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="space-y-2">
+          <div className="flex justify-between items-center px-1">
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+              Data Preview (showing first 10 rows)
+            </h3>
+          </div>
+          <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm bg-white dark:bg-[#0a0a0a]/20 max-h-[300px] overflow-y-auto">
+            <table className="min-w-full text-xs text-left">
+              <thead className="bg-slate-50 dark:bg-[#071f15]/50 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10">
+                <tr>
+                  <th className="px-4 py-3 font-semibold text-slate-500 font-mono w-16 text-center border-r border-slate-200 dark:border-slate-800">Row</th>
+                  {fileHeaders.map((header) => {
+                    const dbField = richMapping[header]?.field;
+                    return (
+                      <th key={header} className="px-4 py-3 font-semibold min-w-[150px] border-r last:border-r-0 border-slate-200 dark:border-slate-800">
+                        <div className="text-slate-800 dark:text-slate-200">{header}</div>
+                        {dbField ? (
+                          <span className="inline-block mt-1 text-[9px] bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-100 dark:border-emerald-900/50 font-mono font-semibold">
+                            → {dbField}
+                          </span>
+                        ) : (
+                          <span className="inline-block mt-1 text-[9px] bg-slate-100 text-slate-500 dark:bg-slate-800/40 dark:text-slate-400 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700/50 font-mono">
+                            Ignored
+                          </span>
+                        )}
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-800 font-mono">
+                {previewRows.map((row, idx) => (
+                  <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/10">
+                    <td className="px-4 py-3 text-slate-400 text-center font-bold border-r border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/10 w-16">
+                      {idx + 2}
+                    </td>
+                    {fileHeaders.map((header) => (
+                      <td key={header} className="px-4 py-3 text-slate-700 dark:text-slate-300 whitespace-nowrap max-w-[220px] truncate border-r last:border-r-0 border-slate-200 dark:border-slate-800">
+                        {row[header] !== undefined && row[header] !== null && String(row[header]).trim() !== "" ? (
+                          String(row[header])
+                        ) : (
+                          <span className="text-slate-400/60 dark:text-slate-600 italic">empty</span>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
@@ -369,6 +640,7 @@ function PreviewView({
         </div>
       )}
 
+      {/* Action Footer */}
       <div className="flex gap-3 pt-2 border-t border-slate-200 dark:border-slate-800">
         <button
           onClick={onCancel}
@@ -379,7 +651,7 @@ function PreviewView({
         <button
           onClick={onConfirm}
           disabled={hasErrors || state === "uploading"}
-          className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm shadow-lg shadow-primary/20 active:scale-95"
+          className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm shadow-lg shadow-primary/20 active:scale-95 cursor-pointer"
         >
           {state === "uploading" ? (
             <>
@@ -417,12 +689,12 @@ function ResultView({
       {result.columnMapping && Object.keys(result.columnMapping).length > 0 && (
         <div className="bg-slate-50 dark:bg-slate-800/30 rounded-xl p-3 border border-slate-200 dark:border-slate-800/50">
           <p className="text-xs font-semibold uppercase text-slate-500 mb-2">
-            Detected Column Mapping
+            Imported Column Mapping
           </p>
           <div className="space-y-1">
             {Object.entries(result.columnMapping).map(([fileCol, dbField]) => (
               <div key={fileCol} className="flex items-center gap-2 text-xs">
-                <span className="text-slate-700 dark:text-slate-300 font-mono bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700/50 shadow-sm">
+                <span className="text-slate-700 dark:text-slate-300 font-mono bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700/50 shadow-sm font-semibold">
                   {fileCol}
                 </span>
                 <span className="text-slate-400">→</span>
@@ -440,7 +712,7 @@ function ResultView({
             <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
               Unmapped columns
             </p>
-            <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5 font-mono">
+            <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5 font-mono leading-relaxed">
               {result.unmappedColumns.join(", ")}
             </p>
           </div>

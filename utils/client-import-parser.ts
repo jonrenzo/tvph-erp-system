@@ -23,9 +23,19 @@ const VALID_VENDOR_FIELDS = new Set([
   "bank_account_name", "payment_terms", "currency", "notes", "status",
 ]);
 
+const getValueByDbField = (
+  row: Record<string, string>,
+  colMap: Record<string, string>,
+  targetField: string
+): string => {
+  const fileCol = Object.keys(colMap).find((key) => colMap[key] === targetField);
+  return fileCol ? String(row[fileCol] ?? "").trim() : "";
+};
+
 export function validateImportFile(
   buffer: ArrayBuffer,
-  type: "Customers" | "Vendors"
+  type: "Customers" | "Vendors",
+  customMapping?: Record<string, string>
 ): ClientParsedResult {
   const rows = parseFile(buffer);
   
@@ -39,7 +49,7 @@ export function validateImportFile(
   }
 
   const fileHeaders = Object.keys(rows[0]);
-  const columnMap = buildColumnMap(fileHeaders);
+  const columnMap = customMapping ?? buildColumnMap(fileHeaders);
   const unmappedColumns = fileHeaders.filter((h) => !columnMap[h]);
   const errors: ValidationError[] = [];
 
@@ -48,13 +58,8 @@ export function validateImportFile(
     const rowIndex = i + 2; // Row index matching spreadsheet row (1-based + 1 for header)
 
     if (type === "Customers") {
-      // Find company name in row
-      const companyName = String(
-        row["Company Name"] ?? 
-        row["company_name"] ?? 
-        row["Company"] ?? 
-        ""
-      ).trim();
+      // Find company name in row using the mapped column
+      const companyName = getValueByDbField(row, columnMap, "company_name");
 
       if (!companyName) {
         errors.push({ row: rowIndex, reason: "Missing company name." });
@@ -62,13 +67,13 @@ export function validateImportFile(
       }
 
       // Check contact details (requires at least one of full_name, email, or phone)
-      const contactName = String(row["Contact Full Name"] ?? row["full_name"] ?? row["Contact Name"] ?? "").trim();
-      const contactEmail = String(row["Contact Email"] ?? row["email"] ?? row["email_address"] ?? "").trim();
-      const contactPhone = String(row["Contact Phone"] ?? row["phone"] ?? row["telephone"] ?? row["contact_number"] ?? "").trim();
+      const contactName = getValueByDbField(row, columnMap, "full_name");
+      const contactEmail = getValueByDbField(row, columnMap, "email");
+      const contactPhone = getValueByDbField(row, columnMap, "phone");
 
-      // If any contact headers were mapped or populated, we check if they are all empty
+      // If any contact headers were mapped, we check if they are all empty
       const hasAnyContactHeader = fileHeaders.some(h => 
-        ["full_name", "contact_email", "contact_phone"].includes(columnMap[h])
+        ["full_name", "email", "phone"].includes(columnMap[h])
       );
 
       if (hasAnyContactHeader && !contactName && !contactEmail && !contactPhone) {
@@ -76,12 +81,7 @@ export function validateImportFile(
       }
 
     } else if (type === "Vendors") {
-      const name = String(
-        row["Vendor Name"] ?? 
-        row["name"] ?? 
-        row["Name"] ?? 
-        ""
-      ).trim();
+      const name = getValueByDbField(row, columnMap, "name");
 
       if (!name) {
         errors.push({ row: rowIndex, reason: "Missing vendor name." });

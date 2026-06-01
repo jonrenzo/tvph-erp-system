@@ -1,4 +1,16 @@
 import * as XLSX from "xlsx";
+import { stringSimilarity } from "./string-similarity";
+
+export type MappingSource = "exact" | "fuzzy" | "ai" | "manual" | "unmapped";
+
+export type RichColumnMapping = Record<
+  string,
+  {
+    field: string | null;
+    source: MappingSource;
+  }
+>;
+
 
 export const VENDOR_HEADERS: { header: string; field: string }[] = [
   { header: "Vendor Name", field: "name" },
@@ -111,6 +123,40 @@ export function buildColumnMap(fileHeaders: string[]): Record<string, string> {
       map[header] = field;
     }
   }
+  return map;
+}
+
+export function buildRichColumnMap(fileHeaders: string[]): RichColumnMapping {
+  const map: RichColumnMapping = {};
+  const aliasKeys = Object.keys(HEADER_ALIASES);
+
+  for (const header of fileHeaders) {
+    // 1. Exact Match
+    const exactField = normalizeHeader(header);
+    if (exactField) {
+      map[header] = { field: exactField, source: "exact" };
+      continue;
+    }
+
+    // 2. Fuzzy Match
+    let bestMatchKey = "";
+    let highestScore = 0;
+
+    for (const alias of aliasKeys) {
+      const score = stringSimilarity(header, alias);
+      if (score > highestScore) {
+        highestScore = score;
+        bestMatchKey = alias;
+      }
+    }
+
+    if (highestScore >= 0.8) {
+      map[header] = { field: HEADER_ALIASES[bestMatchKey], source: "fuzzy" };
+    } else {
+      map[header] = { field: null, source: "unmapped" };
+    }
+  }
+
   return map;
 }
 
