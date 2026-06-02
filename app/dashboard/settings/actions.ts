@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/utils/supabase/server';
+import { createClient as createAdminClient } from '@supabase/supabase-js';
 import { recordAuditLog } from '@/utils/audit';
 import { requireCapability } from '@/lib/auth/permissions';
 
@@ -94,6 +95,130 @@ export async function updateUserRole(userId: string, role: string) {
     action: 'UPDATE',
     changes: { after: { role } },
     performed_by: user.id
+  });
+
+  revalidatePath('/dashboard/settings');
+  return { success: true };
+}
+
+export async function forcePasswordReset(userId: string) {
+  const supabase = await createClient();
+  const { user, error: authError } = await requireCapability('user.manage', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
+
+  const supabaseAdmin = createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
+  const { data: authUser, error: fetchError } = await supabaseAdmin.auth.admin.getUserById(userId);
+  if (fetchError || !authUser?.user) return { error: fetchError?.message || 'User not found' };
+
+  const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+    userId,
+    { user_metadata: { ...authUser.user.user_metadata, must_change_password: true } }
+  );
+
+  if (updateError) return { error: updateError.message };
+
+  await recordAuditLog({
+    entity_type: 'user',
+    entity_id: userId,
+    action: 'UPDATE',
+    changes: { force_password_reset: true },
+    performed_by: user.id,
+  });
+
+  revalidatePath('/dashboard/settings');
+  return { success: true };
+}
+
+export async function clearMustChangePassword(userId: string) {
+  const supabase = await createClient();
+  const { user, error: authError } = await requireCapability('user.manage', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
+
+  const supabaseAdmin = createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
+  const { data: authUser, error: fetchError } = await supabaseAdmin.auth.admin.getUserById(userId);
+  if (fetchError || !authUser?.user) return { error: fetchError?.message || 'User not found' };
+
+  const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+    userId,
+    { user_metadata: { ...authUser.user.user_metadata, must_change_password: false } }
+  );
+
+  if (updateError) return { error: updateError.message };
+
+  await recordAuditLog({
+    entity_type: 'user',
+    entity_id: userId,
+    action: 'UPDATE',
+    changes: { clear_password_reset: true },
+    performed_by: user.id,
+  });
+
+  revalidatePath('/dashboard/settings');
+  return { success: true };
+}
+
+export async function removeTeamMember(userId: string) {
+  const supabase = await createClient();
+  const { user, error: authError } = await requireCapability('user.manage', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
+
+  const supabaseAdmin = createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
+  const { data: targetProfile } = await supabaseAdmin
+    .from('profiles')
+    .select('role')
+    .eq('id', userId)
+    .single();
+
+  if (!targetProfile) return { error: 'User not found' };
+
+  // Last admin guard
+  const { count: adminCount } = await supabaseAdmin
+    .from('profiles')
+    .select('*', { count: 'exact', head: true })
+    .eq('role', 'admin');
+
+  if (targetProfile.role === 'admin' && adminCount !== null && adminCount <= 1) {
+    return { error: 'Cannot remove the last admin. Promote another user to admin first.' };
+  }
+
+  // Nullify all FK references pointing to this user
+  await Promise.all([
+    supabaseAdmin.from('vendors').update({ created_by: null }).eq('created_by', userId),
+    supabaseAdmin.from('vendor_documents').update({ uploaded_by: null }).eq('uploaded_by', userId),
+    supabaseAdmin.from('tvph_documents').update({ uploaded_by: null }).eq('uploaded_by', userId),
+    supabaseAdmin.from('purchase_orders').update({ created_by: null }).eq('created_by', userId),
+    supabaseAdmin.from('service_invoices').update({ created_by: null }).eq('created_by', userId),
+    supabaseAdmin.from('payments').update({ overridden_by: null }).eq('overridden_by', userId),
+    supabaseAdmin.from('payments').update({ recorded_by: null }).eq('recorded_by', userId),
+    supabaseAdmin.from('audit_logs').update({ performed_by: null }).eq('performed_by', userId),
+    supabaseAdmin.from('projects').update({ created_by: null }).eq('created_by', userId),
+    supabaseAdmin.from('vendor_contracts').update({ created_by: null }).eq('created_by', userId),
+    supabaseAdmin.from('notifications').update({ created_by: null }).eq('created_by', userId),
+  ]);
+
+  // Delete the user from Supabase Auth (cascades to profiles via FK)
+  const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(userId);
+
+  if (deleteError) return { error: deleteError.message };
+
+  await recordAuditLog({
+    entity_type: 'user',
+    entity_id: userId,
+    action: 'DELETE',
+    changes: { removed: true },
+    performed_by: user.id,
   });
 
   revalidatePath('/dashboard/settings');

@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { Building2, Users, CreditCard, Save, Shield, Paintbrush } from "lucide-react";
-import { updateOrganizationSettings, updateFinancialSettings, updateUserRole } from "@/app/dashboard/settings/actions";
+import { updateOrganizationSettings, updateFinancialSettings, updateUserRole, forcePasswordReset, clearMustChangePassword } from "@/app/dashboard/settings/actions";
 import { AddUserButton } from "@/components/dashboard/hr/add-user-button";
+import { RemoveTeamMemberButton } from "@/components/dashboard/settings/remove-team-member-button";
 import { AppearanceSettings } from "@/components/dashboard/settings/appearance-settings";
 
 export function SettingsTabs({ initialSettings, team }: { initialSettings: any, team: any[] }) {
@@ -151,9 +152,24 @@ export function SettingsTabs({ initialSettings, team }: { initialSettings: any, 
                            <td className="px-8 py-4 text-slate-500 text-xs">
                               {new Date(user.created_at).toLocaleDateString()}
                            </td>
-                           <td className="px-8 py-4 text-right">
-                              <button className="text-red-500 hover:underline text-xs font-bold">Revoke Access</button>
-                           </td>
+                            <td className="px-8 py-4 text-right">
+                               <div className="flex items-center justify-end gap-2">
+                                  <button
+                                    onClick={async () => { await forcePasswordReset(user.id); }}
+                                    className="text-amber-500 hover:text-amber-400 text-xs font-bold"
+                                  >
+                                    Force Reset
+                                  </button>
+                                  <button
+                                    onClick={async () => { await clearMustChangePassword(user.id); }}
+                                    className="text-blue-500 hover:text-blue-400 text-xs font-bold"
+                                  >
+                                    Clear Reset
+                                  </button>
+                                   <span className="text-slate-300 dark:text-slate-600 text-xs">|</span>
+                                  <RemoveTeamMemberButton userId={user.id} userName={user.full_name} />
+                               </div>
+                            </td>
                         </tr>
                       ))}
                    </tbody>

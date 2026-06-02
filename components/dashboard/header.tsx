@@ -17,6 +17,7 @@ import { logout } from "@/app/login/actions";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { NotificationBell } from "@/components/dashboard/notification-bell";
 import { GlobalSearch } from "@/components/dashboard/global-search";
+import { ClockWidget } from "@/components/dashboard/clock";
 
 interface HeaderProps {
   userEmail: string;
@@ -88,6 +89,7 @@ export function Header({
 
       {/* Right Section */}
       <div className="flex items-center gap-3">
+        <ClockWidget />
         <ThemeToggle />
 
         <NotificationBell />

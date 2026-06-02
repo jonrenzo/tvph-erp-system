@@ -32,7 +32,7 @@ export async function POST(req: Request) {
     const { data: authData, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email: email,
       password: password,
-      user_metadata: { full_name: fullName, role: role },
+      user_metadata: { full_name: fullName, role: role, must_change_password: true },
       email_confirm: true, // Bypass email verification
     });
 

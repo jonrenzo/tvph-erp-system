@@ -60,5 +60,16 @@ export async function updateProxySession(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
+  // If user must change password, redirect to reset page (unless already there)
+  if (
+    user &&
+    user.user_metadata?.must_change_password === true &&
+    !request.nextUrl.pathname.startsWith('/auth/reset-password')
+  ) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/auth/reset-password'
+    return NextResponse.redirect(url)
+  }
+
   return supabaseResponse
 }
