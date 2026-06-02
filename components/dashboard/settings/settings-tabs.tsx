@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Building2, Users, CreditCard, Save, Shield } from "lucide-react";
+import { Building2, Users, CreditCard, Save, Shield, Paintbrush } from "lucide-react";
 import { updateOrganizationSettings, updateFinancialSettings, updateUserRole } from "@/app/dashboard/settings/actions";
 import { AddUserButton } from "@/components/dashboard/hr/add-user-button";
+import { AppearanceSettings } from "@/components/dashboard/settings/appearance-settings";
 
 export function SettingsTabs({ initialSettings, team }: { initialSettings: any, team: any[] }) {
   const [activeTab, setActiveTab] = useState("organization");
@@ -13,6 +14,7 @@ export function SettingsTabs({ initialSettings, team }: { initialSettings: any, 
     { id: "organization", label: "Organization", icon: Building2 },
     { id: "team", label: "Team Management", icon: Users },
     { id: "financials", label: "Financials", icon: CreditCard },
+    { id: "appearance", label: "Appearance", icon: Paintbrush },
   ];
 
   return (
@@ -229,6 +231,11 @@ export function SettingsTabs({ initialSettings, team }: { initialSettings: any, 
                </button>
             </div>
           </form>
+        )}
+
+        {/* Appearance Tab */}
+        {activeTab === "appearance" && (
+          <AppearanceSettings />
         )}
       </div>
     </div>

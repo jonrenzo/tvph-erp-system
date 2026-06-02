@@ -23,6 +23,7 @@ export const metadata: Metadata = {
 };
 
 import { ThemeProvider } from "@/components/theme-provider";
+import { AccentProvider } from "@/components/accent-provider";
 
 export default function RootLayout({
   children,
@@ -41,8 +42,11 @@ export default function RootLayout({
           defaultTheme="dark"
           enableSystem
           disableTransitionOnChange
+          themes={["light", "dark", "midnight"]}
         >
-          {children}
+          <AccentProvider>
+            {children}
+          </AccentProvider>
         </ThemeProvider>
       </body>
     </html>
