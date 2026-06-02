@@ -2,11 +2,12 @@
 
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
-import { MessageSquare, X, Send, Sparkles, User, Bot, Loader2, Maximize2, Minimize2 } from "lucide-react";
+import { MessageSquare, X, Send, Sparkles, User, Bot, Loader2, Maximize2, Minimize2, Paperclip } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { usePathname } from 'next/navigation';
+import { uploadChatFile, type UploadedFileInfo } from "@/app/actions/chat-upload";
 
 type ToolInvocationView = {
   toolCallId: string;
@@ -41,6 +42,11 @@ export function AIChatBubble() {
   const [isDismissed, setIsDismissed] = useState(false);
   const [input, setInput] = useState("");
   const pathname = usePathname();
+
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFileInfo[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { messages, status, sendMessage } = useChat({
     transport: new DefaultChatTransport({
@@ -93,6 +99,47 @@ export function AIChatBubble() {
   const handleDismiss = (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsDismissed(true);
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadError(null);
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const result = await uploadChatFile(formData);
+      if ("error" in result) {
+        setUploadError(result.error);
+      } else {
+        setUploadedFiles((prev) => [...prev, result]);
+      }
+    } catch {
+      setUploadError("Upload failed. Please try again.");
+    }
+    setIsUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removeFile = (fileId: string) => {
+    setUploadedFiles((prev) => prev.filter((f) => f.id !== fileId));
+  };
+
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const textInput = input.trim();
+    if (!textInput && uploadedFiles.length === 0) return;
+
+    const filePrefix =
+      uploadedFiles.length > 0
+        ? uploadedFiles.map((f) => `[Attached file: ${f.name} (ID: ${f.id})]`).join("\n") + "\n\n"
+        : "";
+
+    sendMessage({ text: filePrefix + textInput });
+    setInput("");
+    setUploadedFiles([]);
+    setUploadError(null);
   };
 
   useEffect(() => {
@@ -227,28 +274,52 @@ export function AIChatBubble() {
           </div>
 
           {/* Input */}
-          <form 
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (!input.trim() || isLoading) return;
-              sendMessage({ text: input });
-              setInput('');
-            }}
-            className="p-4 bg-white dark:bg-[#071F15] border-t border-slate-100 dark:border-slate-800"
-          >
-            <div className="relative flex items-center">
+          <form onSubmit={handleFormSubmit} className="p-3 bg-white dark:bg-[#071F15] border-t border-slate-100 dark:border-slate-800">
+            {/* File chips */}
+            {uploadedFiles.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2">
+                {uploadedFiles.map((f) => (
+                  <div key={f.id} className="flex items-center gap-1.5 bg-primary/10 text-primary text-[11px] font-medium px-2.5 py-1.5 rounded-full">
+                    <Paperclip className="h-3 w-3" />
+                    <span className="max-w-[140px] truncate">{f.name}</span>
+                    <button type="button" onClick={() => removeFile(f.id)} className="hover:bg-primary/20 rounded-full p-0.5 -mr-0.5">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {uploadError && (
+              <p className="text-[11px] text-red-500 mb-2">{uploadError}</p>
+            )}
+            <div className="relative flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isLoading || isUploading}
+                className="p-2 text-slate-400 hover:text-primary disabled:opacity-40 transition-colors shrink-0"
+              >
+                <Paperclip className="h-4 w-4" />
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                onChange={handleFileSelect}
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
+                className="hidden"
+              />
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Ask your assistant..."
-                className="w-full pl-4 pr-12 py-3 bg-slate-100 dark:bg-slate-900 border-none rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-slate-500"
+                className="w-full pl-3 pr-10 py-2.5 bg-slate-100 dark:bg-slate-900 border-none rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-slate-500"
               />
               <button 
                 type="submit"
-                disabled={isLoading || !input.trim()}
-                className="absolute right-2 p-1.5 bg-primary text-white rounded-xl shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:scale-100 transition-all"
+                disabled={isLoading || isUploading || (!input.trim() && uploadedFiles.length === 0)}
+                className="absolute right-1.5 p-1.5 bg-primary text-white rounded-xl shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:scale-100 transition-all"
               >
-                <Send className="h-4 w-4" />
+                {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </button>
             </div>
           </form>

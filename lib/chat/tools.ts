@@ -3,6 +3,8 @@ import { tool } from "ai";
 import { z } from "zod";
 import { getCurrentProfile, requireCapability } from "@/lib/auth/permissions";
 import { createClient } from "@/utils/supabase/server";
+import { recordAuditLog } from "@/utils/audit";
+import { createNotification } from "@/utils/notifications";
 
 const poStatusSchema = z.enum([
   "draft",
@@ -222,6 +224,534 @@ export const erpTools = {
           vendor_id: vendor?.id,
         };
       });
+    },
+  }),
+
+  create_vendor: tool({
+    description:
+      "Create a new vendor. REQUIRES user confirmation before executing. Present a summary of all vendor data and ask the user to confirm before calling this tool.",
+    inputSchema: z.object({
+      name: z.string().describe("Vendor company name"),
+      address: z.string().optional().describe("Vendor address"),
+      tin: z.string().optional().describe("Tax Identification Number"),
+      contact_person: z.string().optional().describe("Primary contact person name"),
+      contact_email: z.string().optional().describe("Primary contact email"),
+      contact_phone: z.string().optional().describe("Primary contact phone"),
+    }),
+    execute: async (input) => {
+      const supabase = await createClient();
+      const { user, error: authError } = await requireCapability("vendor.write", supabase);
+      if (authError || !user) return { error: authError || "Unauthorized" };
+
+      const { data: vendor, error } = await supabase
+        .from("vendors")
+        .insert({
+          name: input.name,
+          address: input.address || null,
+          tin: input.tin || null,
+          contact_person: input.contact_person || null,
+          contact_email: input.contact_email || null,
+          contact_phone: input.contact_phone || null,
+          created_by: user.id,
+          status: "pending",
+        })
+        .select("id, name")
+        .single();
+
+      if (error) return { error: error.message };
+
+      await recordAuditLog({
+        entity_type: "vendor",
+        entity_id: vendor.id,
+        action: "CREATE",
+        changes: { after: { name: input.name, tin: input.tin || null, status: "pending" } },
+        performed_by: user.id,
+      });
+
+      await createNotification({
+        type: "vendor",
+        title: "Vendor Created",
+        message: `${input.name} was added as a vendor.`,
+        link: `/dashboard/vendors/${vendor.id}`,
+        created_by: user.id,
+      });
+
+      return {
+        id: vendor.id,
+        name: vendor.name,
+        url: `/dashboard/vendors/${vendor.id}`,
+        message: `Vendor "${input.name}" created successfully.`,
+      };
+    },
+  }),
+
+  update_vendor: tool({
+    description:
+      "Update an existing vendor's details. REQUIRES user confirmation before executing. Present the changes to the user and ask for confirmation before calling this tool.",
+    inputSchema: z.object({
+      vendor_id: z.string().describe("UUID of the vendor to update"),
+      name: z.string().optional().describe("New vendor company name"),
+      address: z.string().optional().describe("New vendor address"),
+      tin: z.string().optional().describe("New Tax Identification Number"),
+      contact_person: z.string().optional().describe("New primary contact person name"),
+      contact_email: z.string().optional().describe("New primary contact email"),
+      contact_phone: z.string().optional().describe("New primary contact phone"),
+      status: z.enum(["active", "inactive", "pending"]).optional().describe("New vendor status"),
+    }),
+    execute: async (input) => {
+      const supabase = await createClient();
+      const { user, error: authError } = await requireCapability("vendor.write", supabase);
+      if (authError || !user) return { error: authError || "Unauthorized" };
+
+      const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      for (const [key, value] of Object.entries(input)) {
+        if (key !== "vendor_id" && value !== undefined) {
+          updates[key] = value;
+        }
+      }
+
+      if (Object.keys(updates).length <= 1) return { error: "No fields to update" };
+
+      const { error } = await supabase.from("vendors").update(updates).eq("id", input.vendor_id);
+      if (error) return { error: error.message };
+
+      await recordAuditLog({
+        entity_type: "vendor",
+        entity_id: input.vendor_id,
+        action: "UPDATE",
+        changes: { after: updates },
+        performed_by: user.id,
+      });
+
+      return { message: "Vendor updated successfully." };
+    },
+  }),
+
+  create_customer: tool({
+    description:
+      "Create a new CRM customer account. REQUIRES user confirmation before executing. Present a full summary of customer details and ask the user to confirm before calling this tool. At least one primary contact is required.",
+    inputSchema: z.object({
+      company_name: z.string().describe("Customer company name"),
+      registered_address: z.string().optional().describe("Customer registered address"),
+      tin: z.string().optional().describe("Tax Identification Number"),
+      contact_full_name: z.string().describe("Primary contact full name"),
+      contact_email: z.string().optional().describe("Primary contact email"),
+      contact_phone: z.string().optional().describe("Primary contact phone"),
+      contact_job_title: z.string().optional().describe("Primary contact job title"),
+      notes: z.string().optional().describe("General notes about the customer"),
+    }),
+    execute: async (input) => {
+      const supabase = await createClient();
+      const { user, error: authError } = await requireCapability("crm.write", supabase);
+      if (authError || !user) return { error: authError || "Unauthorized" };
+
+      const { data: account, error: accountError } = await supabase
+        .from("crm_accounts")
+        .insert({
+          company_name: input.company_name,
+          registered_address: input.registered_address || null,
+          tin: input.tin || null,
+          status: "pending",
+          company_type: "prospect",
+          notes: input.notes || null,
+          created_by: user.id,
+        })
+        .select("id, company_name")
+        .single();
+
+      if (accountError || !account) return { error: accountError?.message || "Failed to create customer" };
+
+      const { error: contactError } = await supabase.from("crm_contacts").insert({
+        account_id: account.id,
+        full_name: input.contact_full_name,
+        email: input.contact_email || null,
+        phone: input.contact_phone || null,
+        job_title: input.contact_job_title || null,
+        is_primary: true,
+        created_by: user.id,
+      });
+
+      if (contactError) {
+        await supabase.from("crm_accounts").update({ deleted_at: new Date().toISOString() }).eq("id", account.id);
+        return { error: contactError.message };
+      }
+
+      await recordAuditLog({
+        entity_type: "crm_account",
+        entity_id: account.id,
+        action: "CREATE",
+        changes: { after: { company_name: input.company_name, tin: input.tin || null } },
+        performed_by: user.id,
+      });
+
+      await createNotification({
+        type: "crm",
+        title: "Customer Added",
+        message: `${input.company_name} was added to customers.`,
+        link: `/dashboard/crm/${account.id}`,
+        created_by: user.id,
+      });
+
+      return {
+        id: account.id,
+        company_name: account.company_name,
+        url: `/dashboard/crm/${account.id}`,
+        message: `Customer "${input.company_name}" created successfully.`,
+      };
+    },
+  }),
+
+  update_customer: tool({
+    description:
+      "Update an existing CRM customer account. REQUIRES user confirmation before executing. Present the changes to the user and ask for confirmation before calling this tool.",
+    inputSchema: z.object({
+      customer_id: z.string().describe("UUID of the customer account to update"),
+      company_name: z.string().optional().describe("New company name"),
+      registered_address: z.string().optional().describe("New registered address"),
+      tin: z.string().optional().describe("New Tax Identification Number"),
+      status: z.enum(["active", "inactive", "pending"]).optional().describe("New customer status"),
+      notes: z.string().optional().describe("New notes"),
+    }),
+    execute: async (input) => {
+      const supabase = await createClient();
+      const { user, error: authError } = await requireCapability("crm.write", supabase);
+      if (authError || !user) return { error: authError || "Unauthorized" };
+
+      const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      for (const [key, value] of Object.entries(input)) {
+        if (key !== "customer_id" && value !== undefined) {
+          updates[key] = value;
+        }
+      }
+
+      if (Object.keys(updates).length <= 1) return { error: "No fields to update" };
+
+      if (updates.status) {
+        const company_type =
+          updates.status === "active" ? "active_customer" : updates.status === "inactive" ? "inactive_customer" : "prospect";
+        updates.company_type = company_type;
+      }
+
+      const { error } = await supabase.from("crm_accounts").update(updates).eq("id", input.customer_id);
+      if (error) return { error: error.message };
+
+      await recordAuditLog({
+        entity_type: "crm_account",
+        entity_id: input.customer_id,
+        action: "UPDATE",
+        changes: { after: updates },
+        performed_by: user.id,
+      });
+
+      return { message: "Customer updated successfully." };
+    },
+  }),
+
+  upload_vendor_document: tool({
+    description:
+      "Upload a document to a vendor's accreditation folder. Use this when a user uploads a file via chat and confirms the destination as a vendor. REQUIRES user confirmation. Call this only after the user has confirmed the vendor and document type.",
+    inputSchema: z.object({
+      vendor_id: z.string().describe("UUID of the vendor to attach the document to"),
+      doc_type: z.string().describe("Document type e.g. 'philgeps_registration', 'sec_registration'"),
+      temp_file_id: z.string().describe("Storage path (id) of the temp file from the user's upload"),
+      file_name: z.string().describe("Original file name"),
+      file_type: z.string().describe("MIME type of the file"),
+      expiry_date: z.string().optional().describe("Document expiry date in ISO format (YYYY-MM-DD)"),
+    }),
+    execute: async (input) => {
+      const supabase = await createClient();
+      const { user, error: authError } = await requireCapability("vendor.write", supabase);
+      if (authError || !user) return { error: authError || "Unauthorized" };
+
+      const { data: signedUrlData } = await supabase.storage
+        .from("chat-uploads")
+        .createSignedUrl(input.temp_file_id, 3600);
+
+      if (!signedUrlData?.signedUrl) return { error: "Failed to access uploaded file. It may have expired." };
+
+      const response = await fetch(signedUrlData.signedUrl);
+      if (!response.ok) return { error: "Failed to download uploaded file." };
+
+      const blob = await response.blob();
+      const file = new File([blob], input.file_name, { type: input.file_type });
+
+      const fileExt = input.file_name.split(".").pop();
+      const fileName = `${input.doc_type}_${Date.now()}.${fileExt}`;
+      const filePath = `vendors/${input.vendor_id}/${input.doc_type}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("vendor-documents")
+        .upload(filePath, file, { contentType: input.file_type, upsert: false });
+
+      if (uploadError) return { error: uploadError.message };
+
+      const { data: { publicUrl } } = supabase.storage.from("vendor-documents").getPublicUrl(filePath);
+
+      const documentPayload = {
+        vendor_id: input.vendor_id,
+        doc_type: input.doc_type,
+        file_url: publicUrl,
+        file_name: input.file_name,
+        status: "submitted",
+        expiry_date: input.expiry_date || null,
+        submitted_at: new Date().toISOString(),
+        uploaded_by: user.id,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { data: existing } = await supabase
+        .from("vendor_documents")
+        .select("id")
+        .eq("vendor_id", input.vendor_id)
+        .eq("doc_type", input.doc_type)
+        .is("archived_at", null)
+        .maybeSingle();
+
+      const { error: dbError } = existing
+        ? await supabase.from("vendor_documents").update(documentPayload).eq("id", existing.id)
+        : await supabase.from("vendor_documents").insert(documentPayload);
+
+      if (dbError) return { error: dbError.message };
+
+      await supabase.storage.from("chat-uploads").remove([input.temp_file_id]);
+
+      await recordAuditLog({
+        entity_type: "vendor_document",
+        entity_id: input.vendor_id,
+        action: "UPDATE",
+        changes: { after: { doc_type: input.doc_type, status: "submitted" } },
+        performed_by: user.id,
+      });
+
+      await createNotification({
+        type: "vendor",
+        title: "Vendor Document Added",
+        message: `A document was uploaded for a vendor.`,
+        link: `/dashboard/vendors/${input.vendor_id}`,
+        created_by: user.id,
+      });
+
+      return { message: `Document "${input.file_name}" uploaded to vendor successfully.` };
+    },
+  }),
+
+  upload_customer_document: tool({
+    description:
+      "Upload a document to a CRM customer account folder. Use when a user uploads a file via chat and confirms the destination as a customer. REQUIRES user confirmation after clarifying which customer and document type.",
+    inputSchema: z.object({
+      customer_id: z.string().describe("UUID of the customer account to attach the document to"),
+      doc_type: z.string().describe("Document type e.g. 'contract', 'proposal', 'statement_of_work'"),
+      temp_file_id: z.string().describe("Storage path (id) of the temp file from the user's upload"),
+      file_name: z.string().describe("Original file name"),
+      file_type: z.string().describe("MIME type of the file"),
+    }),
+    execute: async (input) => {
+      const supabase = await createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return { error: "Unauthorized" };
+
+      const { data: signedUrlData } = await supabase.storage
+        .from("chat-uploads")
+        .createSignedUrl(input.temp_file_id, 3600);
+
+      if (!signedUrlData?.signedUrl) return { error: "Failed to access uploaded file." };
+
+      const response = await fetch(signedUrlData.signedUrl);
+      if (!response.ok) return { error: "Failed to download uploaded file." };
+
+      const blob = await response.blob();
+      const file = new File([blob], input.file_name, { type: input.file_type });
+
+      const fileExt = input.file_name.split(".").pop();
+      const fileName = `${input.doc_type}_${Date.now()}.${fileExt}`;
+      const filePath = `customers/${input.customer_id}/${input.doc_type}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("crm-documents")
+        .upload(filePath, file, { contentType: input.file_type, upsert: false });
+
+      if (uploadError) return { error: uploadError.message };
+
+      const { data: { publicUrl } } = supabase.storage.from("crm-documents").getPublicUrl(filePath);
+
+      const { data: logicalDocs } = await supabase
+        .from("crm_documents")
+        .select("id, version_number")
+        .eq("account_id", input.customer_id)
+        .eq("doc_type", input.doc_type)
+        .is("archived_at", null)
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      const logicalDoc = logicalDocs?.[0] || null;
+
+      if (!logicalDoc) {
+        const { data: newDoc, error: insertError } = await supabase
+          .from("crm_documents")
+          .insert({
+            account_id: input.customer_id,
+            doc_type: input.doc_type,
+            status: "submitted",
+            submitted_at: new Date().toISOString(),
+            uploaded_by: user.id,
+            updated_at: new Date().toISOString(),
+          })
+          .select("id")
+          .single();
+
+        if (insertError || !newDoc) return { error: insertError?.message || "Failed to create document record" };
+
+        const { data: version, error: versionError } = await supabase
+          .from("crm_document_versions")
+          .insert({
+            document_id: newDoc.id,
+            version_number: 1,
+            file_url: publicUrl,
+            file_name: input.file_name,
+            file_size: file.size,
+            file_type: input.file_type,
+            uploaded_by: user.id,
+          })
+          .select("id")
+          .single();
+
+        if (versionError) return { error: versionError.message };
+
+        await supabase.from("crm_documents").update({
+          current_version_id: version.id,
+          file_url: publicUrl,
+          file_name: input.file_name,
+          version_number: 1,
+          updated_at: new Date().toISOString(),
+        }).eq("id", newDoc.id);
+      } else {
+        const nextVersion = (logicalDoc.version_number || 0) + 1;
+
+        const { data: version, error: versionError } = await supabase
+          .from("crm_document_versions")
+          .insert({
+            document_id: logicalDoc.id,
+            version_number: nextVersion,
+            file_url: publicUrl,
+            file_name: input.file_name,
+            file_size: file.size,
+            file_type: input.file_type,
+            uploaded_by: user.id,
+          })
+          .select("id")
+          .single();
+
+        if (versionError) return { error: versionError.message };
+
+        await supabase.from("crm_documents").update({
+          current_version_id: version.id,
+          file_url: publicUrl,
+          file_name: input.file_name,
+          version_number: nextVersion,
+          status: "submitted",
+          submitted_at: new Date().toISOString(),
+          uploaded_by: user.id,
+          updated_at: new Date().toISOString(),
+        }).eq("id", logicalDoc.id);
+      }
+
+      await supabase.storage.from("chat-uploads").remove([input.temp_file_id]);
+
+      await recordAuditLog({
+        entity_type: "crm_document",
+        entity_id: input.customer_id,
+        action: "UPDATE",
+        changes: { after: { doc_type: input.doc_type, status: "submitted" } },
+        performed_by: user.id,
+      });
+
+      await createNotification({
+        type: "crm",
+        title: "Customer Document Added",
+        message: `A document was uploaded for a customer.`,
+        link: `/dashboard/crm/${input.customer_id}`,
+        created_by: user.id,
+      });
+
+      return { message: `Document "${input.file_name}" uploaded to customer successfully.` };
+    },
+  }),
+
+  upload_company_document: tool({
+    description:
+      "Upload a document to the TelcoVantage company document library. Use when a user uploads a file via chat and confirms the destination is the company library. REQUIRES user confirmation.",
+    inputSchema: z.object({
+      doc_type: z.string().describe("Document type e.g. 'legal', 'hr', 'finance', 'template'"),
+      label: z.string().describe("Human-readable label/title for the document"),
+      temp_file_id: z.string().describe("Storage path (id) of the temp file from the user's upload"),
+      file_name: z.string().describe("Original file name"),
+      file_type: z.string().describe("MIME type of the file"),
+      expiry_date: z.string().optional().describe("Document expiry date in ISO format (YYYY-MM-DD)"),
+      notes: z.string().optional().describe("Additional notes about the document"),
+    }),
+    execute: async (input) => {
+      const supabase = await createClient();
+      const { user, error: authError } = await requireCapability("document.write", supabase);
+      if (authError || !user) return { error: authError || "Unauthorized" };
+
+      const { data: signedUrlData } = await supabase.storage
+        .from("chat-uploads")
+        .createSignedUrl(input.temp_file_id, 3600);
+
+      if (!signedUrlData?.signedUrl) return { error: "Failed to access uploaded file." };
+
+      const response = await fetch(signedUrlData.signedUrl);
+      if (!response.ok) return { error: "Failed to download uploaded file." };
+
+      const blob = await response.blob();
+      const file = new File([blob], input.file_name, { type: input.file_type });
+
+      const fileExt = input.file_name.split(".").pop();
+      const safeFileName = `${input.doc_type}_${Date.now()}.${fileExt}`;
+      const filePath = `tvph/${input.doc_type}/${safeFileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("tvph-documents")
+        .upload(filePath, file, { contentType: input.file_type, upsert: false });
+
+      if (uploadError) return { error: uploadError.message };
+
+      const { data: { publicUrl } } = supabase.storage.from("tvph-documents").getPublicUrl(filePath);
+
+      const { error: dbError } = await supabase.from("tvph_documents").insert({
+        doc_type: input.doc_type,
+        label: input.label || null,
+        file_url: publicUrl,
+        file_name: input.file_name,
+        expiry_date: input.expiry_date || null,
+        notes: input.notes || null,
+        uploaded_by: user.id,
+      });
+
+      if (dbError) {
+        await supabase.storage.from("tvph-documents").remove([filePath]);
+        return { error: dbError.message };
+      }
+
+      await supabase.storage.from("chat-uploads").remove([input.temp_file_id]);
+
+      await recordAuditLog({
+        entity_type: "tvph_document",
+        entity_id: user.id,
+        action: "CREATE",
+        changes: { after: { doc_type: input.doc_type, label: input.label, file_name: input.file_name } },
+        performed_by: user.id,
+      });
+
+      await createNotification({
+        type: "document",
+        title: "New Document Uploaded",
+        message: `${input.file_name} was added to the Company Library.`,
+        link: "/dashboard/documents",
+        created_by: user.id,
+      });
+
+      return { message: `Document "${input.file_name}" uploaded to Company Library successfully.` };
     },
   }),
 

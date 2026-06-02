@@ -18,6 +18,11 @@ export async function fetchNotifications() {
   return data;
 }
 
+export async function markAsRead(id: string) {
+  const supabase = await createClient();
+  await supabase.from('notifications').update({ is_read: true }).eq('id', id);
+}
+
 export async function markAllAsRead() {
   const supabase = await createClient();
   const { error } = await supabase

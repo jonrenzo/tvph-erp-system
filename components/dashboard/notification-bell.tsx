@@ -17,6 +17,7 @@ import {
 import { createClient } from "@/utils/supabase/client";
 import {
   fetchNotifications,
+  markAsRead,
   markAllAsRead,
   deleteNotification,
 } from "@/app/dashboard/notifications/actions";
@@ -130,11 +131,18 @@ export function NotificationBell() {
     await deleteNotification(id);
   };
 
-  const handleNotificationClick = (link: string | null) => {
-    if (link) {
-      router.push(link);
-      setIsOpen(false);
+  const handleNotificationClick = async (notif: Notification) => {
+    if (!notif.link) return;
+
+    if (!notif.is_read) {
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === notif.id ? { ...n, is_read: true } : n)),
+      );
+      await markAsRead(notif.id);
     }
+
+    router.push(notif.link);
+    setIsOpen(false);
   };
 
   const formatTimeAgo = (dateString: string) => {
@@ -206,7 +214,7 @@ export function NotificationBell() {
                   return (
                     <div
                       key={notif.id}
-                      onClick={() => handleNotificationClick(notif.link)}
+                      onClick={() => handleNotificationClick(notif)}
                       className={`group relative flex gap-3 p-4 transition-colors ${
                         notif.link
                           ? "cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50"
