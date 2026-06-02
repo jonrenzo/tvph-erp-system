@@ -7,6 +7,7 @@ import { CustomerProfileDetails } from '@/components/dashboard/crm/customer-prof
 import { isCustomerProfileComplete, getCustomerMissingFields } from '@/utils/completeness';
 import { Tooltip } from '@/components/ui/tooltip';
 import { CustomerDocuments } from '@/components/dashboard/crm/customer-documents';
+import GenerateLinkButton from '@/components/dashboard/vendors/generate-link-button';
 import { updateCustomerStatus } from '../actions';
 
 export const unstable_instant = {
@@ -130,6 +131,7 @@ async function CustomerDetailContent({
         </div>
 
         <div className="flex items-center gap-3 md:ml-auto">
+          <GenerateLinkButton entityId={customer.id} entityType="customer" />
           <Link
             href={`/dashboard/crm/projects/new?accountId=${customer.id}`}
             className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm active:scale-95"

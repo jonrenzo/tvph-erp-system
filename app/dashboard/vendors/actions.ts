@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/utils/supabase/server";
+import { createServiceRoleClient } from "@/utils/supabase/service";
 import { redirect } from "next/navigation";
 import { createNotification } from "@/utils/notifications";
 import { recordAuditLog } from "@/utils/audit";
@@ -106,22 +107,9 @@ export async function uploadDocument(
     data: { publicUrl },
   } = supabase.storage.from("vendor-documents").getPublicUrl(filePath);
 
-  const documentPayload = {
-      vendor_id: vendorId,
-      doc_type: docType,
-      file_url: publicUrl,
-      file_name: file.name,
-      status: "submitted",
-      expiry_date: expiryDate || null,
-      notes: notes || null,
-      submitted_at: new Date().toISOString(),
-      uploaded_by: user.id,
-      updated_at: new Date().toISOString(),
-    };
-
   const { data: existingDocument, error: existingError } = await supabase
     .from("vendor_documents")
-    .select("id")
+    .select("id, version_number")
     .eq("vendor_id", vendorId)
     .eq("doc_type", docType)
     .is("archived_at", null)
@@ -129,9 +117,62 @@ export async function uploadDocument(
 
   if (existingError) return { error: existingError.message };
 
-  const { error: dbError } = existingDocument
-    ? await supabase.from("vendor_documents").update(documentPayload).eq("id", existingDocument.id)
-    : await supabase.from("vendor_documents").insert(documentPayload);
+  let docId = "";
+  let versionNumber = 1;
+
+  if (!existingDocument) {
+    const { data: newDoc, error: insertError } = await supabase
+      .from("vendor_documents")
+      .insert({
+        vendor_id: vendorId,
+        doc_type: docType,
+        status: "submitted",
+        submitted_at: new Date().toISOString(),
+        uploaded_by: user.id,
+        updated_at: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
+
+    if (insertError || !newDoc) return { error: insertError?.message || "Failed to create document" };
+    docId = newDoc.id;
+  } else {
+    docId = existingDocument.id;
+    versionNumber = (existingDocument.version_number || 1) + 1;
+  }
+
+  const { data: version, error: versionError } = await supabase
+    .from("vendor_document_versions")
+    .insert({
+      document_id: docId,
+      version_number: versionNumber,
+      file_url: publicUrl,
+      file_name: file.name,
+      uploaded_by: user.id,
+      notes: notes || null,
+    })
+    .select("id")
+    .single();
+
+  if (versionError || !version) {
+    return { error: versionError?.message || "Failed to create document version" };
+  }
+
+  const { error: dbError } = await supabase
+    .from("vendor_documents")
+    .update({
+      current_version_id: version.id,
+      file_url: publicUrl,
+      file_name: file.name,
+      version_number: versionNumber,
+      status: "submitted",
+      expiry_date: expiryDate || null,
+      notes: notes || null,
+      submitted_at: new Date().toISOString(),
+      uploaded_by: user.id,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", docId);
 
   if (dbError) return { error: dbError.message };
 
@@ -139,14 +180,14 @@ export async function uploadDocument(
     entity_type: "vendor_document",
     entity_id: vendorId,
     action: "UPDATE",
-    changes: { after: { doc_type: docType, status: "submitted" } },
+    changes: { after: { doc_type: docType, status: "submitted", version: versionNumber } },
     performed_by: user.id,
   });
 
   await createNotification({
     type: "vendor",
     title: "📁 Vendor Document Added",
-    message: `A document was uploaded for a vendor.`,
+    message: `A new version (v${versionNumber}) of document ${docType} was uploaded for a vendor.`,
     link: `/dashboard/vendors/${vendorId}`,
     created_by: user.id,
   });
@@ -342,16 +383,16 @@ const VALID_VENDOR_FIELDS = new Set([
 ]);
 
 function extractSecondaryContact(
-  row: Record<string, string>,
+  row: Record<string, any>,
   columnMap: Record<string, string>,
 ): Record<string, string> | null {
   const nameCol = Object.entries(columnMap).find(([, v]) => v === "_sc_name")?.[0];
   const emailCol = Object.entries(columnMap).find(([, v]) => v === "_sc_email")?.[0];
   const phoneCol = Object.entries(columnMap).find(([, v]) => v === "_sc_phone")?.[0];
 
-  const name = nameCol ? row[nameCol]?.trim() : "";
-  const email = emailCol ? row[emailCol]?.trim() : "";
-  const phone = phoneCol ? row[phoneCol]?.trim() : "";
+  const name = nameCol && row[nameCol] !== undefined && row[nameCol] !== null ? String(row[nameCol]).trim() : "";
+  const email = emailCol && row[emailCol] !== undefined && row[emailCol] !== null ? String(row[emailCol]).trim() : "";
+  const phone = phoneCol && row[phoneCol] !== undefined && row[phoneCol] !== null ? String(row[phoneCol]).trim() : "";
 
   if (!name && !email && !phone) return null;
   return {
@@ -362,16 +403,16 @@ function extractSecondaryContact(
 }
 
 function extractSecondaryBanking(
-  row: Record<string, string>,
+  row: Record<string, any>,
   columnMap: Record<string, string>,
 ): Record<string, string> | null {
   const nameCol = Object.entries(columnMap).find(([, v]) => v === "_sb_bank_name")?.[0];
   const acctNoCol = Object.entries(columnMap).find(([, v]) => v === "_sb_account_number")?.[0];
   const acctNameCol = Object.entries(columnMap).find(([, v]) => v === "_sb_account_name")?.[0];
 
-  const name = nameCol ? row[nameCol]?.trim() : "";
-  const acctNo = acctNoCol ? row[acctNoCol]?.trim() : "";
-  const acctName = acctNameCol ? row[acctNameCol]?.trim() : "";
+  const name = nameCol && row[nameCol] !== undefined && row[nameCol] !== null ? String(row[nameCol]).trim() : "";
+  const acctNo = acctNoCol && row[acctNoCol] !== undefined && row[acctNoCol] !== null ? String(row[acctNoCol]).trim() : "";
+  const acctName = acctNameCol && row[acctNameCol] !== undefined && row[acctNameCol] !== null ? String(row[acctNameCol]).trim() : "";
 
   if (!name && !acctNo && !acctName) return null;
   return {
@@ -382,9 +423,11 @@ function extractSecondaryBanking(
 }
 
 export async function importVendors(formData: FormData) {
-  const supabase = await createClient();
-  const { user, error: authError } = await requireCapability("vendor.write", supabase);
+  const userClient = await createClient();
+  const { user, error: authError } = await requireCapability("vendor.write", userClient);
   if (authError || !user) return { error: authError || "Unauthorized" };
+
+  const supabase = createServiceRoleClient();
 
   const file = formData.get("file") as File;
   if (!file) return { error: "No file provided" };
@@ -412,8 +455,10 @@ export async function importVendors(formData: FormData) {
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
-    const name = (row["Vendor Name"] || row["name"] || row["Name"] || "").trim().toLowerCase();
-    const tin = (row["TIN"] || row["tin"] || "").trim().toLowerCase();
+    const vendorNameRaw = row["Vendor Name"] || row["name"] || row["Name"] || "";
+    const tinRaw = row["TIN"] || row["tin"] || "";
+    const name = String(vendorNameRaw).trim().toLowerCase();
+    const tin = String(tinRaw).trim().toLowerCase();
     const key = name || tin || `row_${i}`;
     const group = vendorGroups.get(key) || [];
     group.push({ row, rowIndex: i });
@@ -431,7 +476,8 @@ export async function importVendors(formData: FormData) {
       const mainFields: Record<string, any> = {};
       for (const [fileCol, dbField] of Object.entries(columnMap)) {
         if (VALID_VENDOR_FIELDS.has(dbField)) {
-          mainFields[dbField] = firstRow[fileCol]?.trim() || null;
+          const val = firstRow[fileCol];
+          mainFields[dbField] = val !== undefined && val !== null ? String(val).trim() : null;
         }
       }
 

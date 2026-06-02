@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/utils/supabase/server';
+import { createServiceRoleClient } from '@/utils/supabase/service';
 import { recordAuditLog } from '@/utils/audit';
 import { createNotification } from '@/utils/notifications';
 import { parseFile, buildColumnMap } from '@/utils/import-export';
@@ -1155,9 +1156,11 @@ const VALID_CRM_ACCOUNT_FIELDS = new Set([
 ]);
 
 export async function importCustomers(formData: FormData) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const userClient = await createClient();
+  const { data: { user } } = await userClient.auth.getUser();
   if (!user) return { error: 'Unauthorized' };
+
+  const supabase = createServiceRoleClient();
 
   const file = formData.get('file') as File;
   if (!file) return { error: 'No file provided' };
@@ -1188,8 +1191,10 @@ export async function importCustomers(formData: FormData) {
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
-    const companyName = (row['Company Name'] || row['company_name'] || row['Company'] || '').trim().toLowerCase();
-    const tin = (row['TIN'] || row['tin'] || '').trim().toLowerCase();
+    const companyNameRaw = row['Company Name'] || row['company_name'] || row['Company'] || '';
+    const tinRaw = row['TIN'] || row['tin'] || '';
+    const companyName = String(companyNameRaw).trim().toLowerCase();
+    const tin = String(tinRaw).trim().toLowerCase();
     const key = companyName || tin || `row_${i}`;
     const existing = accountContactMap.get(key) || [];
     existing.push({ row, rowIndex: i });
@@ -1202,7 +1207,8 @@ export async function importCustomers(formData: FormData) {
       const accountData: Record<string, any> = {};
       for (const [fileCol, dbField] of Object.entries(columnMap)) {
         if (VALID_CRM_ACCOUNT_FIELDS.has(dbField)) {
-          accountData[dbField] = firstRow[fileCol]?.trim() || null;
+          const val = firstRow[fileCol];
+          accountData[dbField] = val !== undefined && val !== null ? String(val).trim() : null;
         }
       }
 

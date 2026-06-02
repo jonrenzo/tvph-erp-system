@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation';
 import { DocumentList } from '@/components/dashboard/vendors/document-list';
 import { VendorProfileDetails } from '@/components/dashboard/vendors/vendor-profile-details';
 import { VendorProjectsTab } from '@/components/dashboard/vendors/vendor-projects-tab';
+import GenerateLinkButton from '@/components/dashboard/vendors/generate-link-button';
 import { Suspense } from 'react';
 import { RecentActivity } from '@/components/dashboard/shared/recent-activity';
 import { isVendorProfileComplete, getVendorMissingFields } from '@/utils/completeness';
@@ -159,6 +160,7 @@ async function VendorDetailContent({
 
         {/* Action Buttons */}
         <div className="flex items-center gap-3 md:ml-auto">
+          <GenerateLinkButton entityId={vendor.id} entityType="vendor" />
           <form action={async () => {
             'use server';
             const { updateVendorStatus } = await import('../actions');
