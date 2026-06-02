@@ -3,6 +3,7 @@
 import crypto from "crypto";
 import { createClient } from "@/utils/supabase/server";
 import { requireCapability } from "@/lib/auth/permissions";
+import { headers } from "next/headers";
 
 export async function generateMagicLink(
   entityId: string,
@@ -33,8 +34,11 @@ export async function generateMagicLink(
     return { error: error.message };
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  const portalUrl = `${baseUrl}/portal/upload/${token}`;
+  // Dynamically resolve base URL from request headers (auto-handles localhost vs Vercel domains)
+  const headersList = await headers();
+  const host = headersList.get("host") || "localhost:3000";
+  const protocol = host.includes("localhost") ? "http" : "https";
+  const portalUrl = `${protocol}://${host}/portal/upload/${token}`;
 
   return { success: true, portalUrl };
 }
