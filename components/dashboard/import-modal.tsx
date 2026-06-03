@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useCallback, useMemo } from "react";
+import { useRef, useState, useCallback, useMemo, useEffect } from "react";
 import {
   Upload,
   FileSpreadsheet,
@@ -32,6 +32,7 @@ type Props = {
   title: string;
   action: (formData: FormData) => Promise<ImportResult | { error: string }>;
   onClose: () => void;
+  preloadedFile?: File | null;
 };
 
 const CUSTOMER_OPTIONS = [
@@ -72,7 +73,7 @@ const VENDOR_OPTIONS = [
   { value: "_sb_account_name", label: "Secondary Bank Account Name" },
 ];
 
-export function ImportModal({ title, action, onClose }: Props) {
+export function ImportModal({ title, action, onClose, preloadedFile }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [fileBuffer, setFileBuffer] = useState<ArrayBuffer | null>(null);
@@ -82,6 +83,13 @@ export function ImportModal({ title, action, onClose }: Props) {
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+
+  // Auto-load preloaded file (from AI chat trigger) on mount
+  useEffect(() => {
+    if (preloadedFile && state === "idle") {
+      handleFile(preloadedFile);
+    }
+  }, [preloadedFile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Dynamic client parsed validation results computed instantly as mappings change
   const parsedData = useMemo(() => {

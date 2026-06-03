@@ -13,13 +13,15 @@ export async function globalSearch(query: string) {
       documents: [],
       crm_accounts: [],
       crm_opportunities: [],
+      employees: [],
+      assets: [],
     };
   }
 
   const supabase = await createClient();
   const safeQuery = `%${query}%`;
 
-  const [vendorsRes, posRes, invoicesRes, projectsRes, paymentsRes, documentsRes, crmAccountsRes, crmOpportunitiesRes] = await Promise.all([
+  const [vendorsRes, posRes, invoicesRes, projectsRes, paymentsRes, documentsRes, crmAccountsRes, crmOpportunitiesRes, employeesRes, assetsRes] = await Promise.all([
     supabase.from("vendors").select("id, name, tin").ilike("name", safeQuery).limit(5),
     supabase.from("purchase_orders").select("id, po_number, amount").ilike("po_number", safeQuery).limit(5),
     supabase.from("service_invoices").select("id, invoice_number, amount").ilike("invoice_number", safeQuery).limit(5),
@@ -28,6 +30,8 @@ export async function globalSearch(query: string) {
     supabase.from("vendor_documents").select("id, file_name, doc_type, vendor_id").or(`file_name.ilike.${safeQuery},notes.ilike.${safeQuery},ocr_data::text.ilike.${safeQuery}`).limit(5),
     supabase.from("crm_accounts").select("id, company_name, status").ilike("company_name", safeQuery).is("deleted_at", null).limit(5),
     supabase.from("crm_opportunities").select("id, title, stage, estimated_contract_value").ilike("title", safeQuery).is("deleted_at", null).limit(5),
+    supabase.from("profiles").select("id, full_name, department").ilike("full_name", safeQuery).limit(5),
+    supabase.from("assets").select("id, name, asset_tag").or(`name.ilike.${safeQuery},asset_tag.ilike.${safeQuery}`).limit(5),
   ]);
 
   return {
@@ -39,5 +43,7 @@ export async function globalSearch(query: string) {
     documents: documentsRes.data || [],
     crm_accounts: crmAccountsRes.data || [],
     crm_opportunities: crmOpportunitiesRes.data || [],
+    employees: employeesRes.data || [],
+    assets: assetsRes.data || [],
   };
 }

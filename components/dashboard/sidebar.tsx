@@ -72,12 +72,24 @@ const MODULE_CONFIG = [
     icon: FolderOpen,
     href: "/dashboard/projects",
   },
-  { id: "assets", label: "Assets", icon: Package, href: "/dashboard/assets" },
+  {
+    id: "assets",
+    label: "Assets",
+    icon: Package,
+    subModules: [
+      { id: "assets-list", label: "Asset Registry", href: "/dashboard/assets" },
+      { id: "assets-add", label: "Add Asset", href: "/dashboard/assets/new" },
+    ],
+  },
   {
     id: "accounting",
     label: "Accounting",
     icon: BarChart3,
-    href: "/dashboard/accounting",
+    subModules: [
+      { id: "accounting-dash", label: "Financial Dashboard", href: "/dashboard/accounting" },
+      { id: "accounting-ap", label: "AP Aging", href: "/dashboard/accounting/ap-aging" },
+      { id: "accounting-tax", label: "Tax Summary", href: "/dashboard/accounting/tax" },
+    ],
   },
   {
     id: "invoices",
@@ -85,7 +97,15 @@ const MODULE_CONFIG = [
     icon: FileText,
     href: "/dashboard/invoices",
   },
-  { id: "hr", label: "HR", icon: Users, href: "/dashboard/hr" },
+  {
+    id: "hr",
+    label: "HR",
+    icon: Users,
+    subModules: [
+      { id: "hr-directory", label: "Employee Directory", href: "/dashboard/hr" },
+      { id: "hr-add", label: "Add Employee", href: "/dashboard/hr/new" },
+    ],
+  },
   {
     id: "documents",
     label: "Documents",

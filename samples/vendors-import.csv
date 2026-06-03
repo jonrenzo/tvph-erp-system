@@ -1,0 +1,4 @@
+Vendor Name,Address,TIN,Contact Person,Contact Email,Contact Phone,Bank Name,Bank Account Number,Bank Account Name,Payment Terms,Currency,Status
+ABC Supplies,123 Main St,123-456-789,John Doe,john@abc.com,09171234567,BDO Bank,001234567890,ABC Supplies Inc,Net 30,PHP,active
+XYZ Trading,456 Oak Ave,987-654-321,Jane Smith,jane@xyz.com,09189876543,Metrobank,009876543210,XYZ Trading Co,Net 60,PHP,active
+Quick Parts,789 Pine Rd,,Bob Brown,bob@quickparts.com,09151112233,,,,Cash,PHP,pending
