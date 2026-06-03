@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Download, Upload, ChevronDown, FileSpreadsheet } from "lucide-react";
 import { ImportModal } from "@/components/dashboard/import-modal";
+import { useImport } from "@/components/dashboard/import-context";
 
 type Props = {
   title: string;
@@ -13,7 +14,23 @@ type Props = {
 export function ImportExportButtons({ title, exportBaseUrl, importAction }: Props) {
   const [showImport, setShowImport] = useState(false);
   const [showExport, setShowExport] = useState(false);
+  const [preloadedFile, setPreloadedFile] = useState<File | null>(null);
   const exportRef = useRef<HTMLDivElement>(null);
+  const { triggerRequest, clearTrigger } = useImport();
+
+  // Watch for external trigger from AI chat
+  useEffect(() => {
+    if (triggerRequest && triggerRequest.title === title) {
+      setPreloadedFile(triggerRequest.file);
+      setShowImport(true);
+      clearTrigger();
+    }
+  }, [triggerRequest, title, clearTrigger]);
+
+  const handleClose = useCallback(() => {
+    setShowImport(false);
+    setPreloadedFile(null);
+  }, []);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -71,7 +88,8 @@ export function ImportExportButtons({ title, exportBaseUrl, importAction }: Prop
         <ImportModal
           title={title}
           action={importAction}
-          onClose={() => setShowImport(false)}
+          onClose={handleClose}
+          preloadedFile={preloadedFile}
         />
       )}
     </>

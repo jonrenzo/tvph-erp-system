@@ -809,4 +809,40 @@ export const erpTools = {
       }
     },
   }),
+
+  request_import: tool({
+    description:
+      "Signal that the user wants to import an uploaded CSV or Excel file into Vendors or Customers. " +
+      "Call this AFTER the user has confirmed the import type and given explicit approval. " +
+      "The temp_file_id comes from the '[Attached file: ... (ID: ...)]' marker in the user's message. " +
+      "Returns a signed URL the frontend uses to pre-load the file into the import modal.",
+    inputSchema: z.object({
+      import_type: z.enum(["Vendors", "Customers"]).describe("Whether to import as Vendors or Customers"),
+      temp_file_id: z.string().describe("Storage path (ID) of the uploaded file from the [Attached file:] marker"),
+      file_name: z.string().describe("Original filename with extension, e.g. 'data.csv'"),
+    }),
+    execute: async ({ import_type, temp_file_id, file_name }) => {
+      const supabase = await createClient();
+      const { user, error: authError } = await requireCapability(
+        import_type === "Vendors" ? "vendor.write" : "crm.write",
+        supabase,
+      );
+      if (authError || !user) return { error: authError || "Unauthorized" };
+
+      const { data: signedUrlData } = await supabase.storage
+        .from("chat-uploads")
+        .createSignedUrl(temp_file_id, 3600);
+
+      if (!signedUrlData?.signedUrl) {
+        return { error: "Uploaded file not found or has expired. Please re-upload the file." };
+      }
+
+      return {
+        action: "open_import",
+        import_type,
+        download_url: signedUrlData.signedUrl,
+        file_name,
+      };
+    },
+  }),
 };

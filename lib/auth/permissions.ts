@@ -33,7 +33,13 @@ export type Capability =
   | "user.manage"
   | "vendor.delete"
   | "vendor.status"
-  | "vendor.write";
+  | "vendor.write"
+  | "hr.read"
+  | "hr.write"
+  | "accounting.read"
+  | "accounting.write"
+  | "asset.read"
+  | "asset.write";
 
 const CAPABILITY_ROLES = {
   "audit.read": ["admin"],
@@ -56,6 +62,12 @@ const CAPABILITY_ROLES = {
   "vendor.delete": ["admin"],
   "vendor.status": ["admin", "procurement"],
   "vendor.write": ["admin", "procurement"],
+  "hr.read": ["admin", "finance", "procurement", "project_manager", "commercial_manager", "user"],
+  "hr.write": ["admin"],
+  "accounting.read": ["admin", "finance"],
+  "accounting.write": ["admin", "finance"],
+  "asset.read": ["admin", "finance", "procurement", "project_manager", "commercial_manager", "user"],
+  "asset.write": ["admin", "procurement"],
 } as const satisfies Record<Capability, readonly Role[]>;
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;

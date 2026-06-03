@@ -17,7 +17,8 @@ import {
   PlusCircle,
   Settings,
   User as UserIcon,
-  ChevronRight
+  ChevronRight,
+  Package
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useDebounce } from "use-debounce";
@@ -32,6 +33,8 @@ interface SearchResults {
   documents: any[];
   crm_accounts: any[];
   crm_opportunities: any[];
+  employees: any[];
+  assets: any[];
 }
 
 interface QuickAction {
@@ -64,7 +67,7 @@ export function GlobalSearch() {
   const [query, setQuery] = useState("");
   const [debouncedQuery] = useDebounce(query, 300);
   const [results, setResults] = useState<SearchResults>({ 
-    vendors: [], pos: [], invoices: [], projects: [], payments: [], documents: [], crm_accounts: [], crm_opportunities: []
+    vendors: [], pos: [], invoices: [], projects: [], payments: [], documents: [], crm_accounts: [], crm_opportunities: [], employees: [], assets: []
   });
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isPending, startTransition] = useTransition();
@@ -99,6 +102,8 @@ export function GlobalSearch() {
     results.invoices.forEach(inv => items.push({ ...inv, category: 'Invoices', icon: Receipt, path: `/dashboard/invoices/${inv.id}`, displayTitle: inv.invoice_number, displaySub: `₱${Number(inv.amount).toLocaleString()}` }));
     results.payments.forEach(pay => items.push({ ...pay, category: 'Payments', icon: CreditCard, path: `/dashboard/invoices/${pay.invoice_id}`, displayTitle: pay.reference_number, displaySub: `₱${Number(pay.amount_paid).toLocaleString()}` }));
     results.documents.forEach(doc => items.push({ ...doc, category: 'Documents', icon: FileText, path: `/dashboard/vendors/${doc.vendor_id}`, displayTitle: doc.file_name, displaySub: doc.doc_type.replace(/_/g, ' ') }));
+    results.employees.forEach(emp => items.push({ ...emp, category: 'Employees', icon: UserIcon, path: `/dashboard/hr/${emp.id}`, displayTitle: emp.full_name, displaySub: emp.department || 'No department' }));
+    results.assets.forEach(ast => items.push({ ...ast, category: 'Assets', icon: Package, path: `/dashboard/assets/${ast.id}`, displayTitle: ast.name, displaySub: ast.asset_tag }));
     return items;
   }, [filteredActions, results]);
 
@@ -148,7 +153,7 @@ export function GlobalSearch() {
         setSelectedIndex(0);
       });
     } else {
-      setResults({ vendors: [], pos: [], invoices: [], projects: [], payments: [], documents: [], crm_accounts: [], crm_opportunities: [] });
+      setResults({ vendors: [], pos: [], invoices: [], projects: [], payments: [], documents: [], crm_accounts: [], crm_opportunities: [], employees: [], assets: [] });
       setSelectedIndex(0);
     }
   }, [debouncedQuery]);

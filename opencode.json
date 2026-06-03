@@ -5,6 +5,11 @@
       "type": "remote",
       "url": "https://mcp.mem0.ai/mcp",
       "enabled": true
+    },
+    "canva": {
+      "type": "remote",
+      "url": "https://mcp.canva.com/mcp",
+      "enabled": true
     }
   }
 }
