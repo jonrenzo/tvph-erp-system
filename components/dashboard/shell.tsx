@@ -6,8 +6,6 @@ import { Sidebar } from './sidebar'
 import { Header } from './header'
 import { Suspense } from 'react'
 import { usePathname } from 'next/navigation'
-import { ImportProvider } from './import-context'
-
 // Lazy load — AI chat is heavy (AI SDK, markdown renderer) and rarely used on first load
 const AIChatBubble = dynamic(
   () => import('./ai/chat-bubble').then(mod => ({ default: mod.AIChatBubble })),
@@ -37,8 +35,7 @@ export function DashboardShell({
   const isEditorRoute = pathname?.endsWith('/editor') || pathname?.includes('/editor/')
 
   return (
-    <ImportProvider>
-      <div className="flex h-screen bg-slate-50 dark:bg-[#071F15] overflow-hidden text-slate-600 dark:text-slate-300">
+    <div className="flex h-screen bg-slate-50 dark:bg-[#071F15] overflow-hidden text-slate-600 dark:text-slate-300">
         {/* Sidebar */}
         <Sidebar
           userEmail={userEmail}
@@ -75,6 +72,5 @@ export function DashboardShell({
           </div>
         )}
       </div>
-    </ImportProvider>
   )
 }

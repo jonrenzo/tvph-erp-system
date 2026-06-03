@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useCallback, useMemo, useEffect } from "react";
+import { useRef, useState, useCallback, useMemo } from "react";
 import {
   Upload,
   FileSpreadsheet,
@@ -32,7 +32,6 @@ type Props = {
   title: string;
   action: (formData: FormData) => Promise<ImportResult | { error: string }>;
   onClose: () => void;
-  preloadedFile?: File | null;
 };
 
 const CUSTOMER_OPTIONS = [
@@ -44,10 +43,14 @@ const CUSTOMER_OPTIONS = [
   { value: "industry_note", label: "Industry Note" },
   { value: "notes", label: "Notes" },
   { value: "full_name", label: "Contact Full Name" },
+  { value: "contact_person", label: "Contact Person" },
   { value: "job_title", label: "Contact Job Title" },
-  { value: "email", label: "Contact Email" },
-  { value: "phone", label: "Contact Phone" },
-  { value: "fax", label: "Contact Fax" },
+  { value: "email", label: "Contact Email (Alternative)" },
+  { value: "contact_email", label: "Contact Email" },
+  { value: "phone", label: "Contact Phone (Alternative)" },
+  { value: "contact_phone", label: "Contact Phone" },
+  { value: "fax", label: "Contact Fax (Alternative)" },
+  { value: "contact_fax", label: "Contact Fax" },
 ];
 
 const VENDOR_OPTIONS = [
@@ -73,7 +76,7 @@ const VENDOR_OPTIONS = [
   { value: "_sb_account_name", label: "Secondary Bank Account Name" },
 ];
 
-export function ImportModal({ title, action, onClose, preloadedFile }: Props) {
+export function ImportModal({ title, action, onClose }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [fileBuffer, setFileBuffer] = useState<ArrayBuffer | null>(null);
@@ -83,13 +86,6 @@ export function ImportModal({ title, action, onClose, preloadedFile }: Props) {
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
-
-  // Auto-load preloaded file (from AI chat trigger) on mount
-  useEffect(() => {
-    if (preloadedFile && state === "idle") {
-      handleFile(preloadedFile);
-    }
-  }, [preloadedFile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Dynamic client parsed validation results computed instantly as mappings change
   const parsedData = useMemo(() => {

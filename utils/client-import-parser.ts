@@ -66,19 +66,7 @@ export function validateImportFile(
         continue;
       }
 
-      // Check contact details (requires at least one of full_name, email, or phone)
-      const contactName = getValueByDbField(row, columnMap, "full_name");
-      const contactEmail = getValueByDbField(row, columnMap, "email");
-      const contactPhone = getValueByDbField(row, columnMap, "phone");
-
-      // If any contact headers were mapped, we check if they are all empty
-      const hasAnyContactHeader = fileHeaders.some(h => 
-        ["full_name", "email", "phone"].includes(columnMap[h])
-      );
-
-      if (hasAnyContactHeader && !contactName && !contactEmail && !contactPhone) {
-        errors.push({ row: rowIndex, reason: "Contact in row must have at least a name, email, or phone number." });
-      }
+      // Contact details are optional — the server-side import skips empty contacts gracefully
 
     } else if (type === "Vendors") {
       const name = getValueByDbField(row, columnMap, "name");

@@ -8,7 +8,6 @@ import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { usePathname } from 'next/navigation';
 import { uploadChatFile, type UploadedFileInfo } from "@/app/actions/chat-upload";
-import { useImport } from "@/components/dashboard/import-context";
 
 type ToolInvocationView = {
   toolCallId: string;
@@ -57,33 +56,6 @@ export function AIChatBubble() {
   });
 
   const isLoading = status === 'submitted' || status === 'streaming';
-
-  const { triggerImport } = useImport();
-
-  // Detect request_import tool results and trigger the import modal
-  useEffect(() => {
-    for (const message of messages) {
-      const toolInvocations = getToolInvocations(message as any);
-      for (const ti of toolInvocations) {
-        if (ti.toolName === 'request_import' && 'result' in ti) {
-          const result = ti.result as Record<string, unknown>;
-          if (result?.action === 'open_import' && typeof result?.download_url === 'string' && typeof result?.file_name === 'string' && typeof result?.import_type === 'string') {
-            const doImport = async () => {
-              try {
-                const res = await fetch(result.download_url as string);
-                const blob = await res.blob();
-                const file = new File([blob], result.file_name as string, { type: blob.type || 'text/csv' });
-                triggerImport(result.import_type as string, file);
-              } catch {
-                // Silently fail — file may have expired or been removed
-              }
-            };
-            doImport();
-          }
-        }
-      }
-    }
-  }, [messages, triggerImport]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 

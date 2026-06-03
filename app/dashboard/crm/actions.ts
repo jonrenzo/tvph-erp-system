@@ -1273,14 +1273,29 @@ export async function importCustomers(formData: FormData) {
         try {
           const contactData: Record<string, any> = {};
           for (const [fileCol, dbField] of Object.entries(columnMap)) {
-            if (['full_name', 'job_title', 'email', 'phone', 'fax'].includes(dbField)) {
-              contactData[dbField] = cr.row[fileCol]?.trim() || null;
+            const rawVal = cr.row[fileCol];
+            const val = rawVal !== undefined && rawVal !== null && String(rawVal).trim() !== '' ? String(rawVal).trim() : null;
+            if (['full_name', 'contact_person'].includes(dbField)) {
+              contactData.full_name = val;
+            } else if (['email', 'contact_email'].includes(dbField)) {
+              contactData.email = val;
+            } else if (['phone', 'contact_phone'].includes(dbField)) {
+              contactData.phone = val;
+            } else if (['fax', 'contact_fax'].includes(dbField)) {
+              contactData.fax = val;
+            } else if (dbField === 'job_title') {
+              contactData.job_title = val;
             }
           }
 
           if (!contactData.full_name && !contactData.email && !contactData.phone) {
-            errors.push({ row: cr.rowIndex + 2, reason: 'Contact has no name, email, or phone.' });
+            // Skip rows with no contact info instead of failing the entire import
             continue;
+          }
+
+          // DB requires full_name — fall back to email or phone if name is missing
+          if (!contactData.full_name) {
+            contactData.full_name = contactData.email || contactData.phone;
           }
 
           if (contactData.email) {

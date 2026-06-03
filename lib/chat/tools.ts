@@ -5,6 +5,7 @@ import { getCurrentProfile, requireCapability } from "@/lib/auth/permissions";
 import { createClient } from "@/utils/supabase/server";
 import { recordAuditLog } from "@/utils/audit";
 import { createNotification } from "@/utils/notifications";
+import { importVendorsFromFile, importCustomersFromFile } from "@/utils/ai-import-processor";
 
 const poStatusSchema = z.enum([
   "draft",
@@ -810,12 +811,13 @@ export const erpTools = {
     },
   }),
 
-  request_import: tool({
+  import_from_file: tool({
     description:
-      "Signal that the user wants to import an uploaded CSV or Excel file into Vendors or Customers. " +
-      "Call this AFTER the user has confirmed the import type and given explicit approval. " +
+      "Import data from an uploaded CSV or Excel file directly into Vendors or Customers. " +
+      "Call this immediately when the user says 'import this to [Vendors|Customers]'. " +
       "The temp_file_id comes from the '[Attached file: ... (ID: ...)]' marker in the user's message. " +
-      "Returns a signed URL the frontend uses to pre-load the file into the import modal.",
+      "Automatically parses the file, maps columns, and inserts the data. " +
+      "No user confirmation needed — execute immediately.",
     inputSchema: z.object({
       import_type: z.enum(["Vendors", "Customers"]).describe("Whether to import as Vendors or Customers"),
       temp_file_id: z.string().describe("Storage path (ID) of the uploaded file from the [Attached file:] marker"),
@@ -829,6 +831,12 @@ export const erpTools = {
       );
       if (authError || !user) return { error: authError || "Unauthorized" };
 
+      const isExcel = file_name.endsWith(".xlsx") || file_name.endsWith(".xls");
+      const isCsv = file_name.endsWith(".csv");
+      if (!isExcel && !isCsv) {
+        return { error: "Unsupported file format. Only CSV and Excel (.xlsx, .xls) files are supported." };
+      }
+
       const { data: signedUrlData } = await supabase.storage
         .from("chat-uploads")
         .createSignedUrl(temp_file_id, 3600);
@@ -837,11 +845,29 @@ export const erpTools = {
         return { error: "Uploaded file not found or has expired. Please re-upload the file." };
       }
 
+      const response = await fetch(signedUrlData.signedUrl);
+      if (!response.ok) {
+        return { error: "Failed to download uploaded file." };
+      }
+
+      const buffer = await response.arrayBuffer();
+      const result = import_type === "Vendors"
+        ? await importVendorsFromFile(buffer, supabase, user.id)
+        : await importCustomersFromFile(buffer, supabase, user.id);
+
+      if (result.errors.length > 0 && result.created === 0 && result.updated === 0) {
+        return {
+          error: `Import failed with ${result.errors.length} error${result.errors.length > 1 ? "s" : ""}. ${result.errors[0].reason}`,
+          details: result,
+        };
+      }
+
+      await supabase.storage.from("chat-uploads").remove([temp_file_id]);
+
       return {
-        action: "open_import",
+        action: "import_complete",
         import_type,
-        download_url: signedUrlData.signedUrl,
-        file_name,
+        ...result,
       };
     },
   }),
