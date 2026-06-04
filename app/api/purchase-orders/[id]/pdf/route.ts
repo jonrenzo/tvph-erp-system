@@ -1,12 +1,18 @@
 import { NextRequest } from 'next/server'
 import { fetchPoData } from '@/lib/pdf/fetchPoData'
 import { createPoDocument } from '@/lib/pdf/generator'
+import { getCurrentProfile } from '@/lib/auth/permissions'
 
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const { error: authError } = await getCurrentProfile()
+    if (authError) {
+      return new Response('Unauthorized', { status: 401 })
+    }
+
     const { id } = await params
 
     const poData = await fetchPoData(id)

@@ -41,7 +41,9 @@ export function SearchInput({
       } else {
         params.delete(paramName);
       }
-      
+      // Changing the search resets pagination to the first page.
+      params.delete("page");
+
       // Update URL without scrolling to top or full reload
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     });

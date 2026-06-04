@@ -2,10 +2,17 @@ import { createClient } from "@/utils/supabase/server";
 import { FolderGit2, Clock, ExternalLink, Building2, Plus } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
+import { Pagination } from "@/components/ui/pagination";
+import { LIST_PAGE_SIZE, parsePage, pageRange } from "@/components/ui/pagination-utils";
 
-export const unstable_instant = { prefetch: "static" };
+export const unstable_instant = {
+  prefetch: "static",
+  samples: [{ searchParams: { page: null } }],
+};
 
-export default function ProjectsPage() {
+export default function ProjectsPage(props: {
+  searchParams?: Promise<{ page?: string }>;
+}) {
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -27,20 +34,27 @@ export default function ProjectsPage() {
       </div>
 
       <Suspense fallback={<ProjectsSkeleton />}>
-        <ProjectsContent />
+        <ProjectsContent searchParams={props.searchParams} />
       </Suspense>
     </div>
   );
 }
 
-async function ProjectsContent() {
+async function ProjectsContent({
+  searchParams: searchParamsPromise,
+}: {
+  searchParams?: Promise<{ page?: string }>;
+}) {
   const supabase = await createClient();
+  const searchParams = await searchParamsPromise;
+  const page = parsePage(searchParams?.page);
+  const [from, to] = pageRange(page, LIST_PAGE_SIZE);
 
-  const { data: projects } = await supabase
+  const { data: projects, count } = await supabase
     .from("projects")
     .select(
       `
-      *,
+      id, name, status, description, created_at,
       project_vendors (
         vendors (
           id,
@@ -51,9 +65,11 @@ async function ProjectsContent() {
         id
       )
     `,
+      { count: "exact" },
     )
     .is("deleted_at", null)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .range(from, to);
 
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
@@ -93,6 +109,7 @@ async function ProjectsContent() {
   }
 
   return (
+    <>
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       {projects.map((project: any) => (
         <div
@@ -160,6 +177,12 @@ async function ProjectsContent() {
         </div>
       ))}
     </div>
+    {(count ?? 0) > LIST_PAGE_SIZE && (
+      <div className="mt-6 bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">
+        <Pagination page={page} totalCount={count ?? 0} pageSize={LIST_PAGE_SIZE} />
+      </div>
+    )}
+    </>
   );
 }
 

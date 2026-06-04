@@ -548,8 +548,8 @@ export const erpTools = {
     }),
     execute: async (input) => {
       const supabase = await createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return { error: "Unauthorized" };
+      const { user, error: authError } = await requireCapability("crm.write", supabase);
+      if (authError || !user) return { error: authError || "Unauthorized" };
 
       const { data: signedUrlData } = await supabase.storage
         .from("chat-uploads")

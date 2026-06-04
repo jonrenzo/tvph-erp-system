@@ -1,16 +1,23 @@
 import { NextRequest } from 'next/server'
 import { generatePurchaseOrderDocx } from '@/lib/docx/generator'
 import { createClient } from '@/utils/supabase/server'
+import { getCurrentProfile } from '@/lib/auth/permissions'
 
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { id } = await params
-    
-    let buffer: Buffer
     const supabase = await createClient()
+
+    const { error: authError } = await getCurrentProfile(supabase)
+    if (authError) {
+      return new Response('Unauthorized', { status: 401 })
+    }
+
+    const { id } = await params
+
+    let buffer: Buffer
 
     // Check if an edited version exists
     const { data: artifact } = await supabase

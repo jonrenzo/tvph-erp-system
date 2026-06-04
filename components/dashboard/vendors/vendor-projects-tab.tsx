@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { FolderGit2, Plus, ExternalLink, ChevronDown, ChevronUp, Clock, AlertCircle, Unlink, Loader2 } from "lucide-react";
 import { linkVendorToProject, removeVendorFromProject } from "@/app/dashboard/projects/actions";
 import Link from "next/link";
@@ -36,6 +37,7 @@ export function VendorProjectsTab({
 }) {
   const [isLinking, setIsLinking] = useState(false);
   const [selectedProject, setSelectedProject] = useState("");
+  const router = useRouter();
   const [linkError, setLinkError] = useState<string | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [isPendingLink, startLinkTransition] = useTransition();
@@ -64,7 +66,7 @@ export function VendorProjectsTab({
       } else {
         setIsLinking(false);
         setSelectedProject("");
-        window.location.reload();
+        router.refresh();
       }
     });
   };
@@ -77,7 +79,7 @@ export function VendorProjectsTab({
       if (result.error) {
         setRemoveError(result.error);
       } else {
-        window.location.reload();
+        router.refresh();
       }
       setRemovingProjectId(null);
     });

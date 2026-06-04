@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useActionState, useEffect, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   FolderGit2,
   Edit2,
@@ -55,6 +56,7 @@ export function ProjectDetailContent({
   linkedVendors: Vendor[];
   availableVendors: Vendor[];
 }) {
+  const router = useRouter();
   const [isEditing, setIsEditing] = useState(false);
   const [isLinking, setIsLinking] = useState(false);
   const [selectedVendorToLink, setSelectedVendorToLink] = useState("");
@@ -111,7 +113,7 @@ export function ProjectDetailContent({
       } else {
         setIsLinking(false);
         setSelectedVendorToLink("");
-        window.location.reload();
+        router.refresh();
       }
     });
   };
@@ -124,7 +126,7 @@ export function ProjectDetailContent({
       if (result.error) {
         setRemoveError(result.error);
       } else {
-        window.location.reload();
+        router.refresh();
       }
       setRemovingVendorId(null);
     });

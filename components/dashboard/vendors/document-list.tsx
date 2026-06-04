@@ -68,8 +68,6 @@ export function DocumentList({ vendorId, documents, userRole }: { vendorId: stri
       alert(result.error);
     } else {
       router.refresh();
-      // Optional: Force a hard reload if router.refresh is too slow
-      window.location.reload();
     }
     setUploading(null);
   };
@@ -87,7 +85,7 @@ export function DocumentList({ vendorId, documents, userRole }: { vendorId: stri
     } else {
       setApprovingDoc(null);
       setApproveExpiryDate("");
-      window.location.reload();
+      router.refresh();
     }
     setApproving(false);
   };

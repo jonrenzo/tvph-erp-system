@@ -100,7 +100,7 @@ export function CustomerDocuments({ customerId, documents, userRole }: { custome
       alert(result.error);
     } else {
       router.refresh();
-      window.location.reload();
+      router.refresh();
     }
     setUploading(null);
   };
@@ -115,7 +115,7 @@ export function CustomerDocuments({ customerId, documents, userRole }: { custome
       alert(result.error);
     } else {
       router.refresh();
-      window.location.reload();
+      router.refresh();
     }
     setCustomUploading(false);
     setShowAddForm(false);
@@ -131,7 +131,7 @@ export function CustomerDocuments({ customerId, documents, userRole }: { custome
     formData.append('file', file);
     const result = await uploadDocumentVersion(docId, formData);
     if (result.error) alert(result.error);
-    else { router.refresh(); window.location.reload(); }
+    else { router.refresh(); }
     setUploading(null);
   };
 
@@ -148,7 +148,7 @@ export function CustomerDocuments({ customerId, documents, userRole }: { custome
     } else {
       setApprovingDoc(null);
       setApproveExpiryDate("");
-      window.location.reload();
+      router.refresh();
     }
     setApproving(false);
   };
@@ -166,7 +166,7 @@ export function CustomerDocuments({ customerId, documents, userRole }: { custome
     } else {
       setApprovingDoc(null);
       setApproveExpiryDate("");
-      window.location.reload();
+      router.refresh();
     }
     setApproving(false);
   };
@@ -198,7 +198,7 @@ export function CustomerDocuments({ customerId, documents, userRole }: { custome
     if (result.error) {
       alert(result.error);
     } else {
-      window.location.reload();
+      router.refresh();
     }
   };
 

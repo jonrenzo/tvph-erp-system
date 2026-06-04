@@ -2,18 +2,15 @@ import { createClient } from '@/utils/supabase/server';
 import { Lock, CheckCircle2, AlertCircle, Clock, XCircle, Search, Filter, ShieldCheck, Download } from 'lucide-react';
 import Link from 'next/link';
 import { Suspense } from 'react';
+import {
+  REQUIRED_DOCS,
+  TOTAL_REQUIRED_DOCS,
+  getDocStatus,
+  calculateScore,
+  computeComplianceSummary,
+} from '@/lib/reports/compliance';
 
 export const unstable_instant = { prefetch: 'static' };
-
-const REQUIRED_DOCS = [
-  { id: 'signed_nda', label: 'NDA' },
-  { id: 'statement_of_commitment', label: 'Commitment' },
-  { id: 'sec_registration', label: 'SEC' },
-  { id: 'pcab_license', label: 'PCAB' },
-  { id: 'dole_174', label: 'DOLE' },
-  { id: 'audited_financial_statements', label: 'Financials' },
-  { id: 'company_profile', label: 'Profile' },
-];
 
 export default function ComplianceHubPage() {
   return (
@@ -22,7 +19,7 @@ export default function ComplianceHubPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-plus-jakarta tracking-tight flex items-center gap-2">
-            <Lock className="h-6 w-6 text-primary" /> 14-Point Compliance Hub
+            <Lock className="h-6 w-6 text-primary" /> {TOTAL_REQUIRED_DOCS}-Point Compliance Hub
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
             Real-time accreditation tracking for all TelcoVantage vendors.
@@ -65,20 +62,7 @@ async function ComplianceContent() {
     .is('deleted_at', null)
     .order('name');
 
-  const getDocStatus = (vendorDocs: any[], type: string) => {
-    const doc = vendorDocs?.find(d => d.doc_type === type);
-    if (!doc) return 'missing';
-    return doc.status; // submitted, approved, expired
-  };
-
-  const calculateScore = (vendorDocs: any[]) => {
-    const submittedCount = vendorDocs?.filter(d => ['submitted', 'approved'].includes(d.status)).length || 0;
-    return {
-        score: submittedCount,
-        total: REQUIRED_DOCS.length,
-        percentage: Math.round((submittedCount / REQUIRED_DOCS.length) * 100)
-    };
-  };
+  const summary = computeComplianceSummary(vendors as any);
 
   return (
     <>
@@ -87,22 +71,22 @@ async function ComplianceContent() {
          <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
             <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Overall Compliance</h3>
             <div className="mt-2 flex items-baseline gap-2">
-               <span className="text-3xl font-bold text-slate-900 dark:text-white">84%</span>
-               <span className="text-xs text-emerald-600 font-medium">+2.5% this month</span>
+               <span className="text-3xl font-bold text-slate-900 dark:text-white">{summary.overallPercentage}%</span>
+               <span className="text-xs text-slate-500 font-medium">across {summary.totalVendors} vendor{summary.totalVendors === 1 ? '' : 's'}</span>
             </div>
          </div>
          <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
             <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Pending Reviews</h3>
             <div className="mt-2 flex items-baseline gap-2">
-               <span className="text-3xl font-bold text-slate-900 dark:text-white">12</span>
-               <span className="text-xs text-amber-600 font-medium">Needs attention</span>
+               <span className="text-3xl font-bold text-slate-900 dark:text-white">{summary.pendingReviews}</span>
+               <span className="text-xs text-amber-600 font-medium">{summary.pendingReviews === 0 ? 'All clear' : 'Awaiting approval'}</span>
             </div>
          </div>
          <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
             <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Non-Compliant</h3>
             <div className="mt-2 flex items-baseline gap-2">
-               <span className="text-3xl font-bold text-red-600">5</span>
-               <span className="text-xs text-red-500 font-medium">Missing critical docs</span>
+               <span className="text-3xl font-bold text-red-600">{summary.nonCompliant}</span>
+               <span className="text-xs text-red-500 font-medium">Missing or expired docs</span>
             </div>
          </div>
       </div>

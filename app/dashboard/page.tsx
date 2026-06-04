@@ -253,9 +253,12 @@ async function DashboardContent() {
                 </span>{" "}
                 expiring soon.
               </p>
-              <button className="mt-4 w-full py-2 bg-white text-primary rounded-xl text-xs font-bold hover:bg-white/90 transition-all">
+              <Link
+                href="/dashboard/reports"
+                className="mt-4 block w-full py-2 bg-white text-primary rounded-xl text-xs font-bold hover:bg-white/90 transition-all text-center"
+              >
                 Generate Operations Report
-              </button>
+              </Link>
             </div>
             <div className="absolute -right-4 -bottom-4 opacity-10">
               <Building2 className="h-32 w-32" />

@@ -7,6 +7,7 @@ import { createServiceRoleClient } from '@/utils/supabase/service';
 import { recordAuditLog } from '@/utils/audit';
 import { createNotification } from '@/utils/notifications';
 import { parseFile, buildColumnMap } from '@/utils/import-export';
+import { requireCapability } from '@/lib/auth/permissions';
 
 type ActionState = { error?: string; success?: string } | null;
 
@@ -21,30 +22,21 @@ type CustomerContactInput = {
   is_primary?: boolean;
 };
 
-const COMMERCIAL_ROLES = new Set(['admin', 'commercial_manager']);
 const CUSTOMER_STATUSES = new Set(['pending', 'active', 'inactive']);
 
+// Customer records are governed by the `crm.write` capability (admin +
+// commercial_manager). This delegates to the central requireCapability framework
+// so there is a single guard pattern across the codebase. The returned `user` is
+// the authenticated auth user (its `.id` is used for created_by/performed_by).
 async function requireCommercialRole() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { supabase, user: null, error: 'Unauthorized' };
-  }
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('id, role')
-    .eq('id', user.id)
-    .single();
-
-  if (!profile || !COMMERCIAL_ROLES.has(profile.role)) {
-    return { supabase, user: profile, error: 'Only Admin or Commercial Manager can modify customer records.' };
-  }
-
-  return { supabase, user: profile, error: null };
+  const context = await requireCapability('crm.write');
+  return {
+    supabase: context.supabase,
+    user: context.error ? null : context.user,
+    error: context.error
+      ? 'Only Admin or Commercial Manager can modify customer records.'
+      : null,
+  };
 }
 
 function normalizeCustomerContacts(rawContacts: CustomerContactInput[]) {
@@ -624,9 +616,8 @@ export async function convertOpportunityToProject(opportunityId: string) {
 }
 
 export async function uploadCustomerDocument(customerId: string, docType: string, formData: FormData) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
+  const { supabase, user, error: roleError } = await requireCommercialRole();
+  if (roleError || !user) return { error: roleError || 'Unauthorized' };
 
   const file = formData.get('file') as File;
   if (!file) return { error: 'No file provided' };
@@ -758,9 +749,8 @@ export async function uploadCustomerDocument(customerId: string, docType: string
 }
 
 export async function uploadDocumentVersion(documentId: string, formData: FormData) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
+  const { supabase, user, error: roleError } = await requireCommercialRole();
+  if (roleError || !user) return { error: roleError || 'Unauthorized' };
 
   const file = formData.get('file') as File;
   if (!file) return { error: 'No file provided' };
@@ -1017,9 +1007,8 @@ export async function approveCustomerDocumentById(documentId: string, expiryDate
 }
 
 export async function uploadCustomCustomerDocument(customerId: string, label: string, formData: FormData) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
+  const { supabase, user, error: roleError } = await requireCommercialRole();
+  if (roleError || !user) return { error: roleError || 'Unauthorized' };
 
   const file = formData.get('file') as File;
   if (!file) return { error: 'No file provided' };
@@ -1156,9 +1145,10 @@ const VALID_CRM_ACCOUNT_FIELDS = new Set([
 ]);
 
 export async function importCustomers(formData: FormData) {
-  const userClient = await createClient();
-  const { data: { user } } = await userClient.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
+  // Gate on the write capability BEFORE constructing the service-role client,
+  // which bypasses RLS. Without this check any authenticated user could mass-insert.
+  const { user, error: roleError } = await requireCommercialRole();
+  if (roleError || !user) return { error: roleError || 'Unauthorized' };
 
   const supabase = createServiceRoleClient();
 

@@ -1,8 +1,13 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { Download, Upload, ChevronDown, FileSpreadsheet } from "lucide-react";
-import { ImportModal } from "@/components/dashboard/import-modal";
+
+const ImportModal = dynamic(
+  () => import("@/components/dashboard/import-modal").then((m) => m.ImportModal),
+  { ssr: false },
+);
 
 type Props = {
   title: string;

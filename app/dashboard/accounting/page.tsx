@@ -4,6 +4,7 @@ import { DollarSign, TrendingUp, AlertCircle, FileText, ArrowUpRight, ArrowDownR
 import Link from "next/link";
 import { ExpenseChart } from "@/components/dashboard/accounting/expense-chart";
 import { APAgingTable } from "@/components/dashboard/accounting/ap-aging-table";
+import { computeApAging } from "@/lib/reports/apAging";
 
 export const unstable_instant = { prefetch: "static" };
 
@@ -31,72 +32,21 @@ export default function AccountingPage() {
 async function AccountingContent() {
   const supabase = await createClient();
 
-  const [
-    { data: invoices },
-    { data: payments },
-    { data: purchaseOrders }
-  ] = await Promise.all([
-    supabase.from("service_invoices").select("*, vendors(name)"),
-    supabase.from("payments").select("*"),
-    supabase.from("purchase_orders").select("*")
+  const [{ data: invoices }, { data: payments }] = await Promise.all([
+    supabase
+      .from("service_invoices")
+      .select(
+        "amount, status, due_date, invoice_date, vendor_id, vat_amount, ewt_amount, expense_category, vendors(name)",
+      ),
+    supabase.from("payments").select("amount_paid"),
   ]);
 
-  // Aggregate Data
-  let totalExpenses = 0;
-  let totalUnpaid = 0;
-  let totalVAT = 0;
-  let totalEWT = 0;
+  // Aggregate via the shared builder (single source of truth with the AP Aging report).
+  const { rows: apAgingRows, totalUnpaid, totalVAT, totalEWT, expensesByCategory } =
+    computeApAging(invoices as any);
 
-  const expensesByCategory: Record<string, number> = {};
-  const apAging: Record<string, { vendorName: string, current: number, days30: number, days60: number, days90: number, over90: number, total: number }> = {};
-
-  const now = new Date();
-
-  invoices?.forEach(inv => {
-    const amount = Number(inv.amount);
-    
-    // Categorization
-    if (inv.expense_category) {
-      expensesByCategory[inv.expense_category] = (expensesByCategory[inv.expense_category] || 0) + amount;
-    } else {
-      expensesByCategory['uncategorized'] = (expensesByCategory['uncategorized'] || 0) + amount;
-    }
-
-    if (inv.status === 'paid') {
-      totalExpenses += amount;
-    } else {
-      totalUnpaid += amount;
-      
-      // AP Aging
-      const dueDate = new Date(inv.due_date || inv.invoice_date);
-      const diffTime = Math.abs(now.getTime() - dueDate.getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      
-      const vendorId = inv.vendor_id;
-      if (!apAging[vendorId]) {
-        apAging[vendorId] = { vendorName: inv.vendors?.name || 'Unknown', current: 0, days30: 0, days60: 0, days90: 0, over90: 0, total: 0 };
-      }
-      
-      if (dueDate >= now) {
-        apAging[vendorId].current += amount;
-      } else if (diffDays <= 30) {
-        apAging[vendorId].days30 += amount;
-      } else if (diffDays <= 60) {
-        apAging[vendorId].days60 += amount;
-      } else if (diffDays <= 90) {
-        apAging[vendorId].days90 += amount;
-      } else {
-        apAging[vendorId].over90 += amount;
-      }
-      apAging[vendorId].total += amount;
-    }
-
-    // Taxes
-    totalVAT += Number(inv.vat_amount || 0);
-    totalEWT += Number(inv.ewt_amount || 0);
-  });
-
-  const totalPayments = payments?.reduce((acc, curr) => acc + Number(curr.amount_paid), 0) || 0;
+  const totalPayments =
+    payments?.reduce((acc, curr) => acc + Number(curr.amount_paid), 0) || 0;
 
   return (
     <>
@@ -111,7 +61,7 @@ async function AccountingContent() {
         <div className="lg:col-span-2 space-y-8">
           <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
             <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-6">Accounts Payable Aging</h2>
-            <APAgingTable data={Object.values(apAging).filter(v => v.total > 0).sort((a,b) => b.total - a.total)} />
+            <APAgingTable data={apAgingRows} />
           </div>
         </div>
 

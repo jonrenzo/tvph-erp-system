@@ -4,19 +4,22 @@ import { Plus, Building2, ChevronRight } from "lucide-react";
 import { Suspense } from "react";
 import { SearchInput } from "@/components/ui/search-input";
 import { StatusSelect } from "@/components/ui/status-select";
+import { Pagination } from "@/components/ui/pagination";
+import { LIST_PAGE_SIZE, parsePage, pageRange } from "@/components/ui/pagination-utils";
 import { VendorsTableBody } from "@/components/dashboard/vendors/vendors-table-body";
 import { ImportExportButtons } from "@/components/dashboard/import-export-buttons";
 import { importVendors } from "@/app/dashboard/vendors/actions";
 import { isVendorProfileComplete, getVendorMissingFields } from "@/utils/completeness";
 import { Tooltip } from "@/components/ui/tooltip";
+import { TOTAL_REQUIRED_DOCS } from "@/lib/reports/compliance";
 
 export const unstable_instant = {
   prefetch: "static",
-  samples: [{ searchParams: { q: null, status: null } }],
+  samples: [{ searchParams: { q: null, status: null, page: null } }],
 };
 
 export default function VendorsPage(props: {
-  searchParams?: Promise<{ q?: string; status?: string }>;
+  searchParams?: Promise<{ q?: string; status?: string; page?: string }>;
 }) {
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -62,11 +65,14 @@ async function VendorsContent({
   const supabase = await createClient();
   const q = searchParams?.q || "";
   const statusFilter = searchParams?.status || "all";
+  const page = parsePage(searchParams?.page);
+  const [from, to] = pageRange(page, LIST_PAGE_SIZE);
 
   let query = supabase
     .from("vendors")
     .select(
       "id, name, address, tin, contact_person, contact_email, contact_phone, bank_name, payment_terms, status, vendor_documents(doc_type, status)",
+      { count: "exact" },
     )
     .is("deleted_at", null)
     .order("created_at", { ascending: false });
@@ -78,7 +84,7 @@ async function VendorsContent({
     query = query.eq("status", statusFilter);
   }
 
-  const { data: vendors, error } = await query;
+  const { data: vendors, error, count } = await query.range(from, to);
 
   return (
     <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
@@ -172,7 +178,7 @@ async function VendorsContent({
                   </td>
                   <td className="px-6 py-4">
                     {(() => {
-                      const TOTAL = 14;
+                      const TOTAL = TOTAL_REQUIRED_DOCS;
                       const docs: any[] = vendor.vendor_documents || [];
                       const submitted = docs.filter(
                         (d: any) =>
@@ -223,21 +229,35 @@ async function VendorsContent({
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <span
-                      className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${
-                        vendor.vendor_documents.doc_type === "signed_nda"
+                    {(() => {
+                      // vendor_documents is an array — find the NDA doc rather than
+                      // reading fields off the array itself.
+                      const nda = vendor.vendor_documents?.find(
+                        (d: { doc_type: string; status: string }) =>
+                          d.doc_type === "signed_nda",
+                      );
+                      const label = !nda
+                        ? "No NDA"
+                        : nda.status === "approved"
+                          ? "Signed NDA"
+                          : nda.status === "expired"
+                            ? "Expired"
+                            : "Pending";
+                      const tone = !nda
+                        ? "bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700"
+                        : nda.status === "approved"
                           ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800/50"
-                          : vendor.vendor_documents.status === "pending"
-                            ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800/50"
-                            : "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800/50"
-                      }`}
-                    >
-                      {vendor.vendor_documents.doc_type === "signed_nda"
-                        ? "Signed NDA"
-                        : vendor.vendor_documents.status === "pending"
-                          ? "Pending"
-                          : "Approved"}
-                    </span>
+                          : nda.status === "expired"
+                            ? "bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800/50"
+                            : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800/50";
+                      return (
+                        <span
+                          className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${tone}`}
+                        >
+                          {label}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td className="px-6 py-4 text-right">
                     <Link
@@ -253,6 +273,12 @@ async function VendorsContent({
           </tbody>
         </table>
       </div>
+
+      <Pagination
+        page={page}
+        totalCount={count ?? 0}
+        pageSize={LIST_PAGE_SIZE}
+      />
     </div>
   );
 }

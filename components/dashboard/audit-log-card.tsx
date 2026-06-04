@@ -6,12 +6,18 @@ import { History, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import Link from "next/link";
 
 const ROUTE_ENTITY_MAP: Record<string, string[]> = {
-  vendors: ["vendor", "vendor_document"],
+  vendors: ["vendor", "vendor_document", "vendor_contract"],
   "purchase-orders": ["purchase_order"],
   invoices: ["service_invoice"],
-  hr: ["USER_INVITATION"],
+  hr: ["employee", "employee_document", "USER_INVITATION"],
   documents: ["tvph_document"],
   payments: ["payment"],
+  crm: ["crm_account", "crm_opportunity", "crm_activity", "crm_document"],
+  projects: ["project"],
+  assets: ["asset", "asset_maintenance_log"],
+  accounting: ["service_invoice", "payment", "purchase_order"],
+  compliance: ["vendor_document", "tvph_document"],
+  settings: ["system_settings", "profile"],
 };
 
 const ACTION_COLORS: Record<string, string> = {

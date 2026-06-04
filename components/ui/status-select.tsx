@@ -30,6 +30,8 @@ export function StatusSelect({ paramName = "status", options }: StatusSelectProp
       } else {
         params.delete(paramName);
       }
+      // Changing the filter resets pagination to the first page.
+      params.delete("page");
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     });
   };

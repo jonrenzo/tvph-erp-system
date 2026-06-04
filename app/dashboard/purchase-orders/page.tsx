@@ -6,14 +6,16 @@ import { SearchInput } from '@/components/ui/search-input';
 import { StatusSelect } from '@/components/ui/status-select';
 import { PurchaseOrdersTableBody } from '@/components/dashboard/purchase-orders/purchase-orders-table-body';
 import { ExportDropdown } from '@/components/dashboard/export-dropdown';
+import { Pagination } from '@/components/ui/pagination';
+import { LIST_PAGE_SIZE, parsePage, pageRange } from '@/components/ui/pagination-utils';
 
-export const unstable_instant = { 
+export const unstable_instant = {
   prefetch: 'static',
-  samples: [{ searchParams: { q: null, status: null, vendor: null, project: null } }]
+  samples: [{ searchParams: { q: null, status: null, vendor: null, project: null, page: null } }]
 };
 
-export default function PurchaseOrdersPage(props: { 
-  searchParams?: Promise<{ q?: string; status?: string; vendor?: string; project?: string }> 
+export default function PurchaseOrdersPage(props: {
+  searchParams?: Promise<{ q?: string; status?: string; vendor?: string; project?: string; page?: string }>
 }) {
   return (
     <Suspense fallback={<PurchaseOrdersSkeleton />}>
@@ -29,6 +31,8 @@ async function PurchaseOrdersContent({ searchParams: searchParamsPromise }: { se
   const statusFilter = searchParams?.status || 'all';
   const vendorFilter = searchParams?.vendor || 'all';
   const projectFilter = searchParams?.project || 'all';
+  const page = parsePage(searchParams?.page);
+  const [from, to] = pageRange(page, LIST_PAGE_SIZE);
 
   // Fetch projects and vendors for filters
   const [projectsResponse, vendorsResponse] = await Promise.all([
@@ -46,35 +50,47 @@ async function PurchaseOrdersContent({ searchParams: searchParamsPromise }: { se
     ...(vendorsResponse.data?.map(v => ({ value: v.id, label: v.name })) || [])
   ];
 
-  // Join with vendors to get vendor name
-  let query = supabase
-    .from('purchase_orders')
-    .select(`
-      *,
-      vendors (
-        name
-      ),
-      projects (
-        name
+  // Apply the same filters to both the paginated list query and the open-amount
+  // aggregate, so the summary stats reflect ALL matching POs, not just this page.
+  const applyFilters = (builder: any) => {
+    let b = builder;
+    if (q) b = b.ilike('po_number', `%${q}%`);
+    if (statusFilter !== 'all') b = b.eq('status', statusFilter);
+    if (vendorFilter !== 'all') b = b.eq('vendor_id', vendorFilter);
+    if (projectFilter !== 'all') b = b.eq('project_id', projectFilter);
+    return b;
+  };
+
+  const listQuery = applyFilters(
+    supabase
+      .from('purchase_orders')
+      .select(
+        'id, po_number, issued_date, amount, status, vendors(name), projects(name)',
+        { count: 'exact' },
       )
-    `)
-    .is('deleted_at', null)
-    .order('created_at', { ascending: false });
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false }),
+  );
 
-  if (q) {
-    query = query.ilike('po_number', `%${q}%`);
-  }
-  if (statusFilter !== 'all') {
-    query = query.eq('status', statusFilter);
-  }
-  if (vendorFilter !== 'all') {
-    query = query.eq('vendor_id', vendorFilter);
-  }
-  if (projectFilter !== 'all') {
-    query = query.eq('project_id', projectFilter);
-  }
+  // Narrow aggregate (amount only, open POs only) for the "Open Amount" stat.
+  // TODO: replace with a DB-side SUM (rpc/view) if PO volume grows large.
+  const openAmountQuery = applyFilters(
+    supabase
+      .from('purchase_orders')
+      .select('amount')
+      .is('deleted_at', null)
+      .not('status', 'in', '(paid,cancelled)'),
+  );
 
-  const { data: pos, error } = await query;
+  const [{ data: pos, error, count }, { data: openRows }] = await Promise.all([
+    listQuery.range(from, to),
+    openAmountQuery,
+  ]);
+
+  const openAmount = (openRows || []).reduce(
+    (acc: number, curr: any) => acc + Number(curr.amount),
+    0,
+  );
 
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -104,7 +120,7 @@ async function PurchaseOrdersContent({ searchParams: searchParamsPromise }: { se
            </div>
            <div>
               <div className="text-xs text-slate-500 dark:text-slate-400 font-medium uppercase">Total POs</div>
-              <div className="text-lg font-bold text-slate-900 dark:text-white">{pos?.length || 0}</div>
+              <div className="text-lg font-bold text-slate-900 dark:text-white">{count || 0}</div>
            </div>
         </div>
         <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-sm flex items-center gap-4">
@@ -114,7 +130,7 @@ async function PurchaseOrdersContent({ searchParams: searchParamsPromise }: { se
            <div>
               <div className="text-xs text-slate-500 dark:text-slate-400 font-medium uppercase">Open Amount</div>
               <div className="text-lg font-bold text-slate-900 dark:text-white">
-                 ₱{pos?.filter((p: any) => p.status !== 'paid' && p.status !== 'cancelled').reduce((acc: number, curr: any) => acc + Number(curr.amount), 0).toLocaleString()}
+                 ₱{openAmount.toLocaleString()}
               </div>
            </div>
         </div>
@@ -166,6 +182,8 @@ async function PurchaseOrdersContent({ searchParams: searchParamsPromise }: { se
           <PurchaseOrdersTableBody pos={pos} error={error} />
           </table>
         </div>
+
+        <Pagination page={page} totalCount={count ?? 0} pageSize={LIST_PAGE_SIZE} />
       </div>
     </div>
   );

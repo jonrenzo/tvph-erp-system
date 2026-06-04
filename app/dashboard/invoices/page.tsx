@@ -4,14 +4,16 @@ import { Plus, Search, FileText, ChevronRight, CreditCard, Clock } from 'lucide-
 import { Suspense } from 'react';
 import { SearchInput } from '@/components/ui/search-input';
 import { StatusSelect } from '@/components/ui/status-select';
+import { Pagination } from '@/components/ui/pagination';
+import { LIST_PAGE_SIZE, parsePage, pageRange } from '@/components/ui/pagination-utils';
 
-export const unstable_instant = { 
+export const unstable_instant = {
   prefetch: 'static',
-  samples: [{ searchParams: { q: null, status: null } }]
+  samples: [{ searchParams: { q: null, status: null, page: null } }]
 };
 
-export default function InvoicesPage(props: { 
-  searchParams?: Promise<{ q?: string; status?: string }> 
+export default function InvoicesPage(props: {
+  searchParams?: Promise<{ q?: string; status?: string; page?: string }>
 }) {
   return (
     <Suspense fallback={<InvoicesSkeleton />}>
@@ -25,6 +27,8 @@ async function InvoicesContent({ searchParams: searchParamsPromise }: { searchPa
   const supabase = await createClient();
   const q = searchParams?.q || '';
   const statusFilter = searchParams?.status || 'all';
+  const page = parsePage(searchParams?.page);
+  const [from, to] = pageRange(page, LIST_PAGE_SIZE);
 
   let query = supabase
     .from('service_invoices')
@@ -32,7 +36,7 @@ async function InvoicesContent({ searchParams: searchParamsPromise }: { searchPa
       id, invoice_number, invoice_date, amount, due_date, status,
       vendors (name),
       purchase_orders (po_number)
-    `)
+    `, { count: 'exact' })
     .is('deleted_at', null)
     .order('invoice_date', { ascending: false });
 
@@ -43,7 +47,7 @@ async function InvoicesContent({ searchParams: searchParamsPromise }: { searchPa
     query = query.eq('status', statusFilter);
   }
 
-  const { data: invoices, error } = await query;
+  const { data: invoices, error, count } = await query.range(from, to);
 
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -157,6 +161,8 @@ async function InvoicesContent({ searchParams: searchParamsPromise }: { searchPa
             </tbody>
           </table>
         </div>
+
+        <Pagination page={page} totalCount={count ?? 0} pageSize={LIST_PAGE_SIZE} />
       </div>
     </div>
   );

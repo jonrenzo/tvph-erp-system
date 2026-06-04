@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { 
   UserPlus, 
   X, 
@@ -13,6 +14,7 @@ import {
 } from "lucide-react";
 
 export function AddUserButton() {
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -49,7 +51,7 @@ export function AddUserButton() {
         setIsOpen(false);
         setSuccess(false);
         setFormData({ email: "", fullName: "", password: "", role: "user" });
-        window.location.reload(); // Refresh the list
+        router.refresh();
       }, 2000);
     } catch (err: any) {
       setError(err.message);

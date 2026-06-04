@@ -43,7 +43,7 @@ async function VendorDetailContent({
   
   const supabase = await createClient();
 
-  // All queries run in parallel
+  // All queries run in parallel — including allProjects for the vendor-link dropdown
   const [
     { data: vendor, error },
     { data: rawDocuments },
@@ -51,6 +51,7 @@ async function VendorDetailContent({
     { data: invoices },
     { data: projectLinks },
     { data: userProfile },
+    { data: allProjects },
   ] = await Promise.all([
     supabase
       .from('vendors')
@@ -81,17 +82,15 @@ async function VendorDetailContent({
       if (!authUser) return { data: null };
       return supabase.from('profiles').select('role').eq('id', authUser.id).single();
     }),
+    supabase
+      .from('projects')
+      .select('id, name')
+      .is('deleted_at', null)
+      .order('name'),
   ]);
 
   const projects = projectLinks?.map((link: any) => link.projects).filter(Boolean) || [];
   const userRole = userProfile?.role || null;
-
-  // Fetch all projects for the "Link to Project" dropdown
-  const { data: allProjects } = await supabase
-    .from('projects')
-    .select('id, name')
-    .is('deleted_at', null)
-    .order('name');
 
   if (error || !vendor) {
     notFound();
@@ -149,7 +148,7 @@ async function VendorDetailContent({
                 vendor.status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800/50' :
                 'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
               }`}>
-                {vendor.status.charAt(0).toUpperCase() + vendor.status.slice(1)}
+                {(vendor.status || 'unknown').charAt(0).toUpperCase() + (vendor.status || 'unknown').slice(1)}
               </span>
             </div>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-2">
@@ -251,7 +250,7 @@ async function VendorDetailContent({
                       <tr key={po.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/10 transition-colors">
                         <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">{po.po_number}</td>
                         <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{new Date(po.issued_date).toLocaleDateString()}</td>
-                        <td className="px-6 py-4 font-semibold text-slate-900 dark:text-white">{vendor.currency === 'USD' ? '$' : '₱'}{Number(po.amount).toLocaleString()}</td>
+                        <td className="px-6 py-4 font-semibold text-slate-900 dark:text-white">{(vendor.currency || 'PHP') === 'USD' ? '$' : '₱'}{Number(po.amount).toLocaleString()}</td>
                         <td className="px-6 py-4">
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                             po.status === 'paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400' :
@@ -314,7 +313,7 @@ async function VendorDetailContent({
                         <td className="px-6 py-4 text-slate-600 dark:text-slate-400">
                           {inv.purchase_orders?.projects?.name || '-'}
                         </td>
-                        <td className="px-6 py-4 font-semibold text-slate-900 dark:text-white">{vendor.currency === 'USD' ? '$' : '₱'}{Number(inv.amount).toLocaleString()}</td>
+                        <td className="px-6 py-4 font-semibold text-slate-900 dark:text-white">{(vendor.currency || 'PHP') === 'USD' ? '$' : '₱'}{Number(inv.amount).toLocaleString()}</td>
                         <td className="px-6 py-4">
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                             inv.status === 'paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400' :

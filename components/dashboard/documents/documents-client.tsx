@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Search, Filter, FolderOpen, Building2, Upload } from "lucide-react";
+import { Filter, FolderOpen, Building2, Upload, Users2 } from "lucide-react";
 import { CompanyLibrary } from "./company-library";
 import { VendorGrid } from "./vendor-grid";
+import { CustomerGrid } from "./customer-grid";
 import { CompanyFolderView } from "./company-folder-view";
 import { UploadCompanyDocModal } from "./upload-company-doc-modal";
 import { SearchInput } from "@/components/ui/search-input";
@@ -11,17 +12,22 @@ import { SearchInput } from "@/components/ui/search-input";
 interface DocumentsClientProps {
   companyDocs: any[];
   vendors: any[];
+  customers: any[];
   userRole: string;
   searchQuery: string;
 }
 
-export function DocumentsClient({ companyDocs, vendors, userRole, searchQuery }: DocumentsClientProps) {
+export function DocumentsClient({ companyDocs, vendors, customers, userRole, searchQuery }: DocumentsClientProps) {
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const isAdmin = userRole === 'admin';
 
-  const filteredVendors = vendors?.filter(v => 
+  const filteredVendors = vendors?.filter(v =>
     !searchQuery || v.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const filteredCustomers = customers?.filter(c =>
+    !searchQuery || c.company_name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -91,10 +97,28 @@ export function DocumentsClient({ companyDocs, vendors, userRole, searchQuery }:
            </div>
         </div>
 
-        <VendorGrid 
-          vendors={filteredVendors || []} 
-          userRole={userRole} 
+        <VendorGrid
+          vendors={filteredVendors || []}
+          userRole={userRole}
         />
+      </section>
+
+      {/* 3. Customer Vault Grid */}
+      <section className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="p-2 bg-blue-500/10 rounded-xl">
+              <Users2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            </div>
+            <h2 className="text-sm font-bold text-slate-500 uppercase tracking-widest">Customer Vault</h2>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400 font-medium">{filteredCustomers?.length} Customers Found</span>
+          </div>
+        </div>
+
+        <CustomerGrid customers={filteredCustomers || []} />
       </section>
 
       {/* Company Folder View Modal */}

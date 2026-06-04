@@ -1,4 +1,5 @@
 import { createClient } from '@/utils/supabase/server';
+import { requireCapability } from '@/lib/auth/permissions';
 import { NextResponse } from 'next/server';
 
 export async function GET(request: Request) {
@@ -9,7 +10,12 @@ export async function GET(request: Request) {
   const offset = parseInt(searchParams.get('offset') || '0');
 
   const supabase = await createClient();
-  
+
+  const { error: authError } = await requireCapability('audit.read', supabase);
+  if (authError) {
+    return NextResponse.json({ error: authError }, { status: authError === 'Unauthorized' ? 401 : 403 });
+  }
+
   let query = supabase
     .from('audit_logs')
     .select(`

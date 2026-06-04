@@ -16,6 +16,7 @@ import {
   Settings,
   Building2,
   ChevronDown,
+  FileBarChart,
 } from "lucide-react";
 
 const MODULE_CONFIG = [
@@ -53,7 +54,7 @@ const MODULE_CONFIG = [
     label: "CRM",
     icon: Users,
     subModules: [
-      { id: "crm-customers", label: "Customers", href: "/dashboard/crm" },
+      { id: "crm-customers", label: "All Customers", href: "/dashboard/crm" },
       {
         id: "crm-new-customer",
         label: "Add Customer",
@@ -86,9 +87,21 @@ const MODULE_CONFIG = [
     label: "Accounting",
     icon: BarChart3,
     subModules: [
-      { id: "accounting-dash", label: "Financial Dashboard", href: "/dashboard/accounting" },
-      { id: "accounting-ap", label: "AP Aging", href: "/dashboard/accounting/ap-aging" },
-      { id: "accounting-tax", label: "Tax Summary", href: "/dashboard/accounting/tax" },
+      {
+        id: "accounting-dash",
+        label: "Financial Dashboard",
+        href: "/dashboard/accounting",
+      },
+      {
+        id: "accounting-ap",
+        label: "AP Aging",
+        href: "/dashboard/accounting/ap-aging",
+      },
+      {
+        id: "accounting-tax",
+        label: "Tax Summary",
+        href: "/dashboard/accounting/tax",
+      },
     ],
   },
   {
@@ -98,11 +111,21 @@ const MODULE_CONFIG = [
     href: "/dashboard/invoices",
   },
   {
+    id: "reports",
+    label: "Reports",
+    icon: FileBarChart,
+    href: "/dashboard/reports",
+  },
+  {
     id: "hr",
     label: "HR",
     icon: Users,
     subModules: [
-      { id: "hr-directory", label: "Employee Directory", href: "/dashboard/hr" },
+      {
+        id: "hr-directory",
+        label: "Employee Directory",
+        href: "/dashboard/hr",
+      },
       { id: "hr-add", label: "Add Employee", href: "/dashboard/hr/new" },
     ],
   },
@@ -157,9 +180,7 @@ function SidebarItem({
   const Icon = config.icon;
 
   const handleParentClick = () => {
-    if (!isCollapsed) {
-      setIsOpen(!isOpen);
-    }
+    if (!isCollapsed) setIsOpen(!isOpen);
   };
 
   if (!hasSubModules) {
@@ -183,8 +204,7 @@ function SidebarItem({
 
   return (
     <div className="space-y-1">
-      <Link
-        href={config.subModules[0].href}
+      <button
         onClick={handleParentClick}
         title={isCollapsed ? config.label : undefined}
         className={`flex w-full items-center rounded-lg py-2 text-sm font-medium transition-colors ${
@@ -208,7 +228,7 @@ function SidebarItem({
             }`}
           />
         )}
-      </Link>
+      </button>
 
       {isOpen && !isCollapsed && (
         <div className="ml-9 space-y-1 pt-1">

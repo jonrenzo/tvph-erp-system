@@ -1,6 +1,7 @@
 import { google } from '@ai-sdk/google';
 import { streamText, convertToModelMessages, stepCountIs, type UIMessage } from 'ai';
 import { erpTools } from '@/lib/chat/tools';
+import { getCurrentProfile } from '@/lib/auth/permissions';
 
 // Allow streaming responses up to 60 seconds
 export const maxDuration = 60;
@@ -43,6 +44,13 @@ When you see a user message containing "[Attached file:" that means the user has
 `;
 
 export async function POST(req: Request) {
+  // Require an authenticated profile at the entrypoint. Individual tools also
+  // enforce per-capability checks, but this stops anonymous use of the LLM.
+  const { error: authError } = await getCurrentProfile();
+  if (authError) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const { messages, contextUrl }: { messages?: UIMessage[]; contextUrl?: string } = await req.json();
 
   if (!Array.isArray(messages)) {
