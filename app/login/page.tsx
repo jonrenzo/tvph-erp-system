@@ -1,53 +1,237 @@
 import Image from "next/image";
+import { Suspense } from "react";
 import { LoginForm } from "./login-form";
 
 export default function LoginPage() {
   return (
-    <div className="dark relative flex min-h-screen items-center justify-center overflow-hidden bg-[#071F15]">
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,#0A5C3B_0%,transparent_70%)] opacity-[0.15]" />
-        <div className="absolute -left-40 -top-40 h-80 w-80 rounded-full bg-[#0A5C3B] opacity-35 blur-3xl animate-blob" />
-        <div className="absolute -right-40 top-60 h-96 w-96 rounded-full bg-[#0C6A43] opacity-25 blur-3xl animate-blob animation-delay-2000" />
-        <div className="absolute -bottom-40 left-60 h-80 w-80 rounded-full bg-black opacity-15 blur-3xl animate-blob animation-delay-4000" />
-        <div className="absolute right-20 -bottom-40 h-96 w-96 rounded-full bg-[#0A5C3B] opacity-25 blur-3xl animate-blob" />
-        <div className="absolute inset-0 noise-overlay pointer-events-none" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(10,92,59,0)_0%,rgba(7,31,21,0.4)_100%)]" />
-      </div>
+    <>
+      <style>{`
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(14px); }
+          to   { opacity: 1; transform: translateY(0);    }
+        }
+        @keyframes panelIn {
+          from { opacity: 0; }
+          to   { opacity: 1; }
+        }
+        .anim-panel   { animation: panelIn 0.9s ease forwards; }
+        .anim-fade-up { animation: fadeUp  0.55s ease forwards; opacity: 0; }
+        .anim-d1 { animation-delay: 0.08s; }
+        .anim-d2 { animation-delay: 0.18s; }
+        .anim-d3 { animation-delay: 0.28s; }
+        .anim-d4 { animation-delay: 0.38s; }
+        .anim-d5 { animation-delay: 0.48s; }
+        .anim-d6 { animation-delay: 0.58s; }
+      `}</style>
 
-      <div className="relative z-10 w-full max-w-md px-4">
-        <div className="glass-card rounded-3xl p-8 shadow-2xl">
-          <div className="mb-8 flex flex-col items-center">
-            <div className="mb-6 flex h-16 w-16 items-center justify-center">
+      <div className="flex min-h-screen">
+        {/* ── Left brand panel ─────────────────────────────────── */}
+        <div
+          className="hidden lg:flex lg:w-[42%] xl:w-[40%] relative flex-col justify-between overflow-hidden anim-panel"
+          style={{
+            background:
+              "linear-gradient(148deg,#0d6b45 0%,#0a5c3b 45%,#063322 100%)",
+          }}
+        >
+          {/* Dot grid */}
+          <div className="absolute inset-0 pointer-events-none select-none">
+            <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <pattern
+                  id="dotgrid"
+                  x="0"
+                  y="0"
+                  width="28"
+                  height="28"
+                  patternUnits="userSpaceOnUse"
+                >
+                  <circle
+                    cx="1.5"
+                    cy="1.5"
+                    r="1.5"
+                    fill="white"
+                    fillOpacity="0.09"
+                  />
+                </pattern>
+              </defs>
+              <rect width="100%" height="100%" fill="url(#dotgrid)" />
+            </svg>
+          </div>
+
+          {/* Signal rings — top-right corner */}
+          <div className="absolute -top-20 -right-20 pointer-events-none select-none">
+            <svg width="360" height="360" viewBox="0 0 360 360" fill="none">
+              <circle
+                cx="360"
+                cy="0"
+                r="110"
+                stroke="white"
+                strokeWidth="1"
+                strokeOpacity="0.09"
+              />
+              <circle
+                cx="360"
+                cy="0"
+                r="175"
+                stroke="white"
+                strokeWidth="1"
+                strokeOpacity="0.065"
+              />
+              <circle
+                cx="360"
+                cy="0"
+                r="248"
+                stroke="white"
+                strokeWidth="1"
+                strokeOpacity="0.04"
+              />
+            </svg>
+          </div>
+
+          {/* Bottom-left accent arc */}
+          <div className="absolute -bottom-24 -left-24 pointer-events-none select-none">
+            <svg width="260" height="260" viewBox="0 0 260 260" fill="none">
+              <circle
+                cx="0"
+                cy="260"
+                r="90"
+                stroke="white"
+                strokeWidth="1"
+                strokeOpacity="0.07"
+              />
+              <circle
+                cx="0"
+                cy="260"
+                r="145"
+                stroke="white"
+                strokeWidth="1"
+                strokeOpacity="0.045"
+              />
+            </svg>
+          </div>
+
+          {/* Top: logo + wordmark */}
+          <div className="relative z-10 p-10 pt-11">
+            <div className="flex items-center gap-3">
               <Image
                 src="/logo.svg"
-                alt="TelcoVantage Logo"
-                width={64}
-                height={64}
+                alt="TelcoVantage Philippines"
+                width={30}
+                height={30}
                 priority
                 draggable={false}
                 className="select-none"
               />
+              <span
+                className="font-sans text-[10px] font-bold tracking-[0.22em] uppercase select-none"
+                style={{ color: "rgba(255,255,255,0.65)" }}
+              >
+                TelcoVantage Philippines
+              </span>
             </div>
-            <h1 className="font-plus-jakarta text-3xl font-bold tracking-tighter text-white">
-              TelcoVantage Philippines
-            </h1>
-            <p className="mt-1 font-body text-sm tracking-wide text-slate-400">
-              Management System
+          </div>
+
+          {/* Centre: tagline */}
+          <div className="relative z-10 px-10 pb-4">
+            <div
+              className="w-7 mb-7"
+              style={{ height: "2px", background: "rgba(255,255,255,0.28)" }}
+            />
+            <h2
+              className="font-sans font-bold leading-[1.07] tracking-tight mb-5 select-none"
+              style={{
+                fontSize: "clamp(2rem,3.2vw,2.75rem)",
+                color: "rgba(255,255,255,0.97)",
+              }}
+            >
+              Enterprise
+              <br />
+              Operations,
+              <br />
+              Unified.
+            </h2>
+            <p
+              className="font-body text-sm leading-relaxed select-none"
+              style={{ color: "rgba(255,255,255,0.4)", maxWidth: "260px" }}
+            >
+              TelcoVantage Philippines <br />
+              Internal ERP System.
             </p>
           </div>
 
-          <LoginForm />
-
-          <div className="mt-6 text-center">
-            <a
-              href="#"
-              className="font-body text-sm text-slate-300 hover:text-white transition-colors"
+          {/* Bottom: metadata */}
+          <div
+            className="relative z-10 px-10 py-8 flex items-center justify-between"
+            style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }}
+          >
+            <span
+              className="font-body text-[10px] font-semibold tracking-[0.18em] uppercase select-none"
+              style={{ color: "rgba(255,255,255,0.22)" }}
             >
-              Forgot password?
-            </a>
+              ERP System
+            </span>
+            <span
+              className="font-body text-[10px] select-none"
+              style={{ color: "rgba(255,255,255,0.22)" }}
+            >
+              © 2026 TVPH
+            </span>
+          </div>
+        </div>
+
+        {/* ── Right form panel ──────────────────────────────────── */}
+        <div
+          className="flex-1 flex items-center justify-center px-8 py-14"
+          style={{ background: "#FAFAF5" }}
+        >
+          <div className="w-full max-w-[368px]">
+            {/* Mobile logo (hidden on desktop — shown on left panel) */}
+            <div className="flex items-center justify-center gap-2.5 mb-10 lg:hidden">
+              <Image
+                src="/logo.svg"
+                alt="TelcoVantage"
+                width={26}
+                height={26}
+                priority
+                draggable={false}
+                className="select-none"
+              />
+              <span className="font-sans text-[10px] font-bold tracking-[0.2em] uppercase text-gray-400 select-none">
+                TelcoVantage Philippines
+              </span>
+            </div>
+
+            {/* Heading */}
+            <div className="mb-8 anim-fade-up anim-d1">
+              <div
+                className="w-5 h-[2.5px] rounded-full mb-5"
+                style={{ background: "#0a5c3b" }}
+              />
+              <h1 className="font-sans text-[1.7rem] font-bold text-gray-900 leading-tight tracking-tight mb-1.5">
+                Welcome back
+              </h1>
+              <p className="font-body text-sm text-gray-400">
+                Sign in to continue to your workspace
+              </p>
+            </div>
+
+            {/* Form */}
+            <Suspense>
+              <LoginForm />
+            </Suspense>
+
+            {/* Forgot password */}
+            <div className="mt-5 text-center anim-fade-up anim-d6">
+              <a
+                href="#"
+                className="font-body text-xs text-gray-400 hover:text-gray-700 transition-colors"
+              >
+                Forgot password?
+              </a>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

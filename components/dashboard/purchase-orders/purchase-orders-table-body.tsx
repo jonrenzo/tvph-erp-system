@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { FileText, Download } from 'lucide-react'
+import { FileText, Download, ShieldAlert } from 'lucide-react'
 import { DeletePOButton } from './delete-po-button'
 
 export function PurchaseOrdersTableBody({ pos, error }: { pos: any[] | null; error: any }) {
@@ -54,15 +54,23 @@ export function PurchaseOrdersTableBody({ pos, error }: { pos: any[] | null; err
               ₱{Number(po.amount).toLocaleString()}
             </td>
             <td className="px-6 py-4">
-              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${
-                po.status === 'paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800/50' :
-                po.status === 'issued' ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800/50' :
-                po.status === 'draft' ? 'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700' :
-                po.status === 'overpaid' ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800/50' :
-                'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800/50'
-              }`}>
-                {po.status.replace('_', ' ').charAt(0).toUpperCase() + po.status.replace('_', ' ').slice(1)}
-              </span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${
+                  po.status === 'paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800/50' :
+                  po.status === 'issued' ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800/50' :
+                  po.status === 'draft' ? 'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700' :
+                  po.status === 'overpaid' ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800/50' :
+                  'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800/50'
+                }`}>
+                  {po.status.replace('_', ' ').charAt(0).toUpperCase() + po.status.replace('_', ' ').slice(1)}
+                </span>
+                {po.requirements_waived && !po.waiver_approved && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-800/50">
+                    <ShieldAlert className="h-3 w-3" />
+                    Pending Approval
+                  </span>
+                )}
+              </div>
             </td>
             <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-end gap-1">

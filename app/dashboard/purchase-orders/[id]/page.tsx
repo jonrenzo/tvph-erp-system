@@ -17,13 +17,16 @@ import {
   FolderGit2,
   FileDown,
   MapPin,
-  Pencil
+  Pencil,
+  ShieldAlert,
+  ShieldCheck,
 } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { POProjectAssigner } from "@/components/dashboard/purchase-orders/po-project-assigner";
 import { RecentActivity } from "@/components/dashboard/shared/recent-activity";
 import { PODownloadDropdown } from "@/components/dashboard/purchase-orders/po-download-dropdown";
+import { getCurrentProfile } from "@/lib/auth/permissions";
 
 export const unstable_instant = { 
   prefetch: 'static',
@@ -44,20 +47,23 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
   const params = await paramsPromise;
   const supabase = await createClient();
 
-  const { data: po, error } = await supabase
-    .from("purchase_orders")
-    .select(
-      `
-      *,
-      vendors (
-        name,
-        contact_person,
-        contact_email
+  const [{ data: po, error }, { user: currentUser, role: currentRole }] = await Promise.all([
+    supabase
+      .from("purchase_orders")
+      .select(
+        `
+        *,
+        vendors (
+          name,
+          contact_person,
+          contact_email
+        )
+      `,
       )
-    `,
-    )
-    .eq("id", params.id)
-    .single();
+      .eq("id", params.id)
+      .single(),
+    getCurrentProfile(supabase),
+  ]);
 
   if (error || !po) {
     notFound();
@@ -98,6 +104,23 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
     .select("amount_paid")
     .in("invoice_id", invoiceIds);
 
+  // Fetch waiver profile names if needed
+  const waiverProfileIds = [
+    po.waived_by,
+    po.waiver_approved_by,
+  ].filter(Boolean) as string[];
+
+  const waiverProfiles: Record<string, string> = {};
+  if (waiverProfileIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, full_name")
+      .in("id", waiverProfileIds);
+    for (const p of profiles || []) {
+      waiverProfiles[p.id] = p.full_name;
+    }
+  }
+
   const totalPaid =
     payments?.reduce((sum, p) => sum + Number(p.amount_paid), 0) || 0;
   const totalInvoiced =
@@ -107,6 +130,15 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
   const overpaidAmount = Math.max(0, totalPaid - poAmount);
   const progress = Math.min(100, Math.round((totalPaid / poAmount) * 100)) || 0;
   const isOverpaid = totalPaid > poAmount;
+
+  // Waiver state
+  const isPendingApproval = po.requirements_waived && !po.waiver_approved;
+  const isWaiverApproved = po.requirements_waived && po.waiver_approved;
+  const isExecutive = currentRole === "executive";
+  const canApproveWaiver = isExecutive && isPendingApproval && currentUser?.id !== po.waived_by;
+  const waivedGateLabels = ((po.waived_requirements as string[] | null) || [])
+    .map((g: string) => g === "nda" ? "Signed NDA" : g === "vendor_status" ? "Vendor Active Status" : g)
+    .join(", ");
 
   return (
     <div className="p-6 lg:p-8 max-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -175,6 +207,75 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
           </Link>
         </div>
       </div>
+
+      {/* Waiver Banners */}
+      {isPendingApproval && (
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-2xl bg-orange-50 dark:bg-orange-900/10 border border-orange-200 dark:border-orange-800/50">
+          <div className="flex items-start gap-3 flex-1">
+            <ShieldAlert className="h-5 w-5 text-orange-600 dark:text-orange-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-orange-700 dark:text-orange-400">
+                Requirements Waived — Pending Executive Approval
+              </p>
+              <p className="text-xs text-orange-600/80 dark:text-orange-400/60 mt-1">
+                Waived: <span className="font-medium">{waivedGateLabels}</span>.
+                Waived by <span className="font-medium">{waiverProfiles[po.waived_by] || "Admin"}</span>.
+                This PO <span className="font-semibold">cannot be issued</span> until an executive approves.
+              </p>
+            </div>
+          </div>
+          {canApproveWaiver && (
+            <div className="flex items-center gap-2 shrink-0">
+              <form
+                action={async () => {
+                  "use server";
+                  const { approveWaiver } = await import("../actions");
+                  await approveWaiver(params.id);
+                }}
+              >
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all active:scale-95"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  Approve
+                </button>
+              </form>
+              <form
+                action={async () => {
+                  "use server";
+                  const { rejectWaiver } = await import("../actions");
+                  await rejectWaiver(params.id);
+                }}
+              >
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all active:scale-95"
+                >
+                  <XCircle className="h-4 w-4" />
+                  Reject
+                </button>
+              </form>
+            </div>
+          )}
+        </div>
+      )}
+
+      {isWaiverApproved && (
+        <div className="flex items-start gap-3 p-4 rounded-2xl bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800/50">
+          <ShieldCheck className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-blue-700 dark:text-blue-400">
+              Requirements Waived — Approved
+            </p>
+            <p className="text-xs text-blue-600/80 dark:text-blue-400/60 mt-1">
+              Waived: <span className="font-medium">{waivedGateLabels}</span>.
+              Approved by <span className="font-medium">{waiverProfiles[po.waiver_approved_by] || "Executive"}</span>
+              {po.waiver_approved_at ? ` on ${new Date(po.waiver_approved_at).toLocaleDateString(undefined, { dateStyle: "long" })}` : ""}.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* New Intuitive Financial Dashboard */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

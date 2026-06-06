@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>TelcoVantage ERP - User Guide</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.0.4/reset.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.0.4/reveal.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.0.4/theme/black.min.css" id="theme">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --color-primary: #0a5c3b;
+            --color-primary-light: #0c6a43;
+            --background: #202124;
+            --foreground: #ededed;
+        }
+
+        .reveal {
+            font-family: 'Inter', sans-serif;
+            color: var(--foreground);
+            background-color: var(--background);
+        }
+
+        .reveal h1, .reveal h2, .reveal h3, .reveal h4, .reveal h5, .reveal h6 {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            color: var(--foreground);
+            text-transform: none;
+            font-weight: 700;
+        }
+
+        .reveal h1 { color: var(--color-primary-light); }
+        .reveal h2 { border-bottom: 2px solid var(--color-primary); padding-bottom: 10px; display: inline-block; }
+
+        /* Glass Card Effect */
+        .glass-card {
+            background: rgba(15, 23, 42, 0.4);
+            backdrop-filter: blur(32px) saturate(1.5);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 0 0 1px rgba(12, 106, 67, 0.15) inset, 0 8px 32px rgba(10, 92, 59, 0.2);
+            padding: 30px;
+            border-radius: 16px;
+            margin: 20px auto;
+            max-width: 800px;
+            text-align: left;
+        }
+
+        .reveal ul {
+            display: block;
+            margin-left: 2em;
+        }
+        
+        .reveal li {
+            margin-bottom: 12px;
+            font-size: 0.9em;
+        }
+
+        .text-primary { color: var(--color-primary-light); }
+        
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            align-items: start;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 999px;
+            font-size: 0.6em;
+            font-weight: 600;
+            background: var(--color-primary);
+            color: white;
+            vertical-align: middle;
+            margin-left: 10px;
+        }
+        
+        .badge.amber { background: #d97706; }
+        .badge.red { background: #dc2626; }
+        .badge.blue { background: #2563eb; }
+        
+        .workflow-arrow {
+            color: var(--color-primary);
+            font-weight: bold;
+            margin: 0 10px;
+        }
+
+        .logo-container {
+            margin-bottom: 30px;
+        }
+    </style>
+</head>
+<body>
+    <div class="reveal">
+        <div class="slides">
+            
+            <!-- Section 1: Welcome & Overview -->
+            <section>
+                <div class="logo-container">
+                    <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#0a5c3b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                </div>
+                <h1>TelcoVantage ERP</h1>
+                <h3>The Intelligent Command Surface</h3>
+                <p>A comprehensive user guide for internal staff.</p>
+            </section>
+            
+            <section>
+                <h2>What is TelcoVantage ERP?</h2>
+                <div class="glass-card">
+                    <p>A <strong>full-stack enterprise operations platform</strong> purpose-built for the telecom industry in the Philippines.</p>
+                    <ul>
+                        <li>Replaces spreadsheets & disconnected tools</li>
+                        <li>Provides a single, unified, auditable system</li>
+                        <li>Powered by Google Gemini AI for deep insights</li>
+                        <li>Enforces rigorous compliance and financial rules</li>
+                    </ul>
+                </div>
+            </section>
+
+            <section>
+                <h2>System Overview</h2>
+                <div class="grid-2">
+                    <div class="glass-card">
+                        <h4 class="text-primary">Core Modules</h4>
+                        <ul>
+                            <li>Command Center Dashboard</li>
+                            <li>Vendor Management</li>
+                            <li>Purchase Orders (POs)</li>
+                            <li>Invoices & Payments</li>
+                            <li>Projects & Contracts</li>
+                            <li>Compliance Hub</li>
+                        </ul>
+                    </div>
+                    <div class="glass-card">
+                        <h4 class="text-primary">Supporting Modules</h4>
+                        <ul>
+                            <li>Document Repository</li>
+                            <li>HR & Employee Vault</li>
+                            <li>CRM (Customers)</li>
+                            <li>Asset Management</li>
+                            <li>Accounting Reports</li>
+                            <li>AI Chat Assistant</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Section 2: Getting Started -->
+            <section>
+                <section>
+                    <h2>1. Getting Started</h2>
+                    <p>Login, Navigation, and Basic Controls</p>
+                </section>
+                <section>
+                    <h2>Login & Security</h2>
+                    <div class="glass-card">
+                        <ul>
+                            <li><strong>Access:</strong> Login via email and password at <code>/login</code>.</li>
+                            <li><strong>Security:</strong> All routes are protected by role-based access control.</li>
+                            <li><strong>Profile Management:</strong> Manage your password and avatar from the Profile page.</li>
+                        </ul>
+                    </div>
+                </section>
+                <section>
+                    <h2>Navigation Essentials</h2>
+                    <div class="glass-card">
+                        <ul>
+                            <li><strong>Sidebar:</strong> Collapsible menu containing all system modules.</li>
+                            <li><strong>Global Search (<code>⌘K</code>):</strong> Instantly search vendors, POs, projects, and more across the entire system.</li>
+                            <li><strong>Notification Bell:</strong> Real-time alerts for POs, invoices, and expiring documents.</li>
+                            <li><strong>Theme Toggle:</strong> Switch between Light, Dark, and Midnight modes.</li>
+                        </ul>
+                    </div>
+                </section>
+            </section>
+
+            <!-- Section 3: Command Center Dashboard -->
+            <section>
+                <section>
+                    <h2>2. Command Center</h2>
+                    <p>Your Real-time Operational Pulse</p>
+                </section>
+                <section>
+                    <h2>Key Metrics (KPIs)</h2>
+                    <div class="glass-card">
+                        <p>The dashboard surfaces critical numbers instantly:</p>
+                        <ul>
+                            <li><strong>Current Liability:</strong> Total unpaid invoice amounts.</li>
+                            <li><strong>Active POs:</strong> Open financial commitments.</li>
+                            <li><strong>Pending Vendors:</strong> Vendors awaiting accreditation.</li>
+                            <li><strong>Expiring Docs:</strong> Critical renewals needed in the next 30 days.</li>
+                        </ul>
+                    </div>
+                </section>
+                <section>
+                    <h2>System Activity Feed</h2>
+                    <div class="glass-card">
+                        <ul>
+                            <li>A real-time audit log of everything happening in the system.</li>
+                            <li>Color-coded actions: <span class="text-primary">CREATE (Green)</span>, <span style="color:#2563eb">UPDATE (Blue)</span>, <span style="color:#dc2626">DELETE (Red)</span>.</li>
+                            <li>Fully traceable—know exactly who did what and when.</li>
+                        </ul>
+                    </div>
+                </section>
+            </section>
+
+            <!-- Section 4: Vendor Management -->
+            <section>
+                <section>
+                    <h2>3. Vendor Management</h2>
+                    <p>Full lifecycle. Zero surprises.</p>
+                </section>
+                <section>
+                    <h2>Vendor Directory</h2>
+                    <div class="glass-card">
+                        <ul>
+                            <li><strong>Completeness Indicator:</strong> Green/red dots show if a profile is missing required fields (TIN, Bank, etc.).</li>
+                            <li><strong>Accreditation Progress:</strong> Visual bar showing X/14 required documents approved.</li>
+                            <li><strong>Multi-currency:</strong> Supports both PHP and USD vendors.</li>
+                        </ul>
+                    </div>
+                </section>
+                <section>
+                    <h2>Vendor Lifecycle</h2>
+                    <div class="glass-card text-center" style="font-size: 1.2em;">
+                        <strong>Pending</strong> <span class="workflow-arrow">→</span> <strong>Active</strong> <span class="workflow-arrow">→</span> <strong>Inactive</strong>
+                    </div>
+                    <br>
+                    <div class="glass-card">
+                        <ul>
+                            <li>New vendors start as <strong>Pending</strong>.</li>
+                            <li>Must be activated by an Admin or Procurement officer.</li>
+                            <li>Only <strong>Active</strong> vendors can be issued new Purchase Orders.</li>
+                        </ul>
+                    </div>
+                </section>
+            </section>
+
+            <!-- Section 5: Compliance Hub -->
+            <section>
+                <section>
+                    <h2>4. Compliance Hub</h2>
+                    <p>The 14-Point Accreditation System</p>
+                </section>
+                <section>
+                    <h2>The Accreditation Matrix</h2>
+                    <div class="glass-card">
+                        <p>A bird's-eye view of vendor compliance across 14 document types (NDA, SEC, PCAB, BIR, etc.).</p>
+                        <ul style="list-style: none;">
+                            <li>✅ <strong>Approved:</strong> Valid and verified.</li>
+                            <li>🕐 <strong>Pending Review:</strong> Uploaded but awaiting admin approval.</li>
+                            <li>⚠️ <strong>Expired:</strong> Document validity period has passed.</li>
+                            <li>❌ <strong>Missing:</strong> Document has not been submitted.</li>
+                        </ul>
+                    </div>
+                </section>
+            </section>
+
+            <!-- Section 6: Purchase Orders -->
+            <section>
+                <section>
+                    <h2>5. Purchase Orders</h2>
+                    <p>Governed, trackable commitments.</p>
+                </section>
+                <section>
+                    <h2>PO Creation & Guardrails</h2>
+                    <div class="glass-card">
+                        <ul>
+                            <li><strong>Auto-numbering:</strong> Sequential `PO-YYYY-XXXX` generation.</li>
+                            <li><strong>NDA Gate:</strong> System blocks PO creation if the vendor does not have a signed, valid NDA.</li>
+                            <li><strong>Details:</strong> Build POs with specific line items and deployment site details (Region, Nodes, Cable Length).</li>
+                        </ul>
+                    </div>
+                </section>
+                <section>
+                    <h2>PO Status Workflow</h2>
+                    <div class="glass-card text-center">
+                        Draft <span class="workflow-arrow">→</span> Issued <span class="workflow-arrow">→</span> Partially Paid <span class="workflow-arrow">→</span> Paid
+                    </div>
+                    <br>
+                    <div class="glass-card">
+                        <ul>
+                            <li><strong>Financial Dashboard:</strong> Every PO page features a balance ring showing % paid vs remaining.</li>
+                            <li><strong>Export:</strong> Download POs as PDF or DOCX.</li>
+                            <li><strong>In-Browser Editor:</strong> Edit the DOCX version directly within the ERP.</li>
+                        </ul>
+                    </div>
+                </section>
+            </section>
+
+            <!-- Section 7: Invoicing & Payments -->
+            <section>
+                <section>
+                    <h2>6. Invoicing & Payments</h2>
+                    <p>Know where every peso is.</p>
+                </section>
+                <section>
+                    <h2>Recording Invoices</h2>
+                    <div class="glass-card">
+                        <ul>
+                            <li><strong>PO Amount Guard:</strong> The system prevents invoice amounts from exceeding the remaining PO capacity.</li>
+                            <li>Links directly to a specific PO.</li>
+                            <li>Overpayment detection triggers red warning banners if limits are overridden.</li>
+                        </ul>
+                    </div>
+                </section>
+                <section>
+                    <h2>Recording Payments</h2>
+                    <div class="glass-card">
+                        <p><strong>The Auto-Cascade Logic:</strong></p>
+                        <ol>
+                            <li>Record a payment (Full, Installment, Down Payment).</li>
+                            <li>System updates Invoice status (e.g., to Paid).</li>
+                            <li>System automatically recalculates the linked PO.</li>
+                            <li>PO status automatically updates (e.g., to Partially Paid or Paid).</li>
+                        </ol>
+                    </div>
+                </section>
+            </section>
+
+            <!-- Section 8: Projects & CRM -->
+            <section>
+                <section>
+                    <h2>7. Projects, Contracts & CRM</h2>
+                </section>
+                <section>
+                    <h2>Projects & Contracts</h2>
+                    <div class="glass-card">
+                        <ul>
+                            <li><strong>Projects:</strong> Link multiple vendors and POs to a single internal project.</li>
+                            <li><strong>Safety Guards:</strong> Cannot unlink a vendor if they have open POs on the project.</li>
+                            <li><strong>Master Contract Repository:</strong> Track contract values, start/end dates, and view embedded PDFs.</li>
+                        </ul>
+                    </div>
+                </section>
+                <section>
+                    <h2>CRM (Customer Management)</h2>
+                    <div class="glass-card">
+                        <ul>
+                            <li>Manage Customer accounts and primary/secondary contacts.</li>
+                            <li><strong>Opportunity Pipeline:</strong> Track prospective projects, estimated values, and follow-up dates.</li>
+                            <li>Upload and version customer documents.</li>
+                        </ul>
+                    </div>
+                </section>
+            </section>
+
+            <!-- Section 9: Documents, HR & Assets -->
+            <section>
+                <section>
+                    <h2>8. Operational Vaults</h2>
+                    <p>Documents, HR, and Assets</p>
+                </section>
+                <section>
+                    <h2>Documents & Assets</h2>
+                    <div class="glass-card">
+                        <ul>
+                            <li><strong>Company Library:</strong> Centralized folders for Legal, HR, Finance, and Templates.</li>
+                            <li><strong>In-App Preview:</strong> View PDFs and Office docs without downloading.</li>
+                            <li><strong>Asset Registry:</strong> Track laptops, equipment, serial numbers.</li>
+                            <li><strong>Depreciation Calculator:</strong> Built-in straight-line depreciation tracking.</li>
+                        </ul>
+                    </div>
+                </section>
+                <section>
+                    <h2>HR & Employee 201 Vault</h2>
+                    <div class="glass-card">
+                        <ul>
+                            <li>Manage employee profiles, roles, and employment status.</li>
+                            <li><strong>201 Vault:</strong> Securely store employee documents (IDs, contracts).</li>
+                            <li>Only Admins can invite new users and assign roles (Finance, Procurement, etc.).</li>
+                        </ul>
+                    </div>
+                </section>
+            </section>
+
+            <!-- Section 10: AI Assistant & Portal -->
+            <section>
+                <section>
+                    <h2>9. Advanced Features</h2>
+                    <p>AI Assistant & Vendor Portal</p>
+                </section>
+                <section>
+                    <h2>Gemini AI Assistant</h2>
+                    <div class="glass-card">
+                        <p>Your intelligent co-pilot, accessible via the floating chat bubble.</p>
+                        <ul>
+                            <li><strong>Ask Anything:</strong> "Who are our top vendors?", "List pending POs."</li>
+                            <li><strong>Document Analysis:</strong> Upload a PDF and ask the AI to summarize obligations or extract expiry dates.</li>
+                            <li><strong>Actions:</strong> AI can create vendors or run imports for you (requires your confirmation).</li>
+                        </ul>
+                    </div>
+                </section>
+                <section>
+                    <h2>The Vendor Portal</h2>
+                    <div class="glass-card">
+                        <ul>
+                            <li><strong>Magic Links:</strong> Generate secure, 7-day expiring links to send to vendors.</li>
+                            <li><strong>Self-Service:</strong> Vendors can upload their own accreditation documents.</li>
+                            <li><strong>E-Signature:</strong> Vendors can draw their signature directly on screen; the system auto-stamps it onto the PDF with IP and timestamp.</li>
+                            <li><strong>AI OCR:</strong> The system auto-extracts expiry dates from vendor uploads.</li>
+                        </ul>
+                    </div>
+                </section>
+            </section>
+
+            <!-- Closing -->
+            <section>
+                <h2>Thank You</h2>
+                <div class="glass-card text-center">
+                    <p>TelcoVantage Philippines ERP</p>
+                    <p><em>Efficiency. Compliance. Intelligence.</em></p>
+                    <br>
+                    <p><small>Use <code>⌘K</code> anywhere to search.</small></p>
+                </div>
+            </section>
+
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.0.4/reveal.min.js"></script>
+    <script>
+        Reveal.initialize({
+            hash: true,
+            transition: 'slide',
+            backgroundTransition: 'fade',
+            center: true,
+            controls: true,
+            progress: true,
+        });
+    </script>
+</body>
+</html>

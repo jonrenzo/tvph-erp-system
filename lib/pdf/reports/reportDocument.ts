@@ -1,7 +1,5 @@
-// Generic A4 report PDF builder shared by every report route under
-// app/api/reports/*. Reuses the brand constants from lib/pdf/constants.ts and the
-// same buffer-collection pattern as lib/pdf/generator.ts, but is decoupled from the
-// PO-specific header/footer so each report just describes its content as a ReportSpec.
+// Report PDF builder — redesigned with a dark header band, accent stripe, KPI
+// cards with left-border accents, section rules, and striped tables.
 
 import PDFDocument from "pdfkit";
 import { PassThrough } from "stream";
@@ -10,44 +8,57 @@ import {
   PAGE_HEIGHT,
   MARGIN_LEFT,
   MARGIN_RIGHT,
-  COLOR_PRIMARY,
-  COLOR_TEXT,
-  COLOR_BORDER,
-  COLOR_LIGHT_GRAY,
-  COLOR_WHITE,
   LOGO_PATH,
 } from "../constants";
 
-const CONTENT_LEFT = MARGIN_LEFT;
-const CONTENT_RIGHT = PAGE_WIDTH - MARGIN_RIGHT;
-const CONTENT_WIDTH = CONTENT_RIGHT - CONTENT_LEFT;
-const PAGE_TOP = 40;
-const PAGE_BOTTOM = PAGE_HEIGHT - 50;
+// ─── Design tokens ────────────────────────────────────────────────────────────
+type RGB = [number, number, number];
+
+const ink = {
+  brand:    [10, 92, 59]    as RGB,  // deep forest green
+  brandDk:  [6, 60, 38]     as RGB,  // darker variant for totals row
+  brandAcc: [26, 184, 116]  as RGB,  // bright accent for stripe / hover
+  tint:     [238, 248, 243] as RGB,  // alternating row / KPI bg
+  border:   [198, 222, 210] as RGB,  // table / card borders
+  dark:     [18, 22, 28]    as RGB,  // body text
+  mid:      [80, 94, 106]   as RGB,  // secondary text
+  muted:    [154, 168, 178] as RGB,  // captions, timestamps
+  white:    [255, 255, 255] as RGB,
+};
+
+// ─── Page layout ──────────────────────────────────────────────────────────────
+const CL = MARGIN_LEFT;               // 35
+const CR = PAGE_WIDTH - MARGIN_RIGHT; // 560.28
+const CW = CR - CL;                   // 525.28
+
+const HDR_H    = 76;                                  // main header band
+const ACC_H    = 4;                                   // accent stripe
+const META_H   = 22;                                  // subtitle / timestamp row
+const BODY_Y   = HDR_H + ACC_H + META_H + 14;        // first-page body start
+const SLIM_H   = 26;                                  // thin header on pages 2+
+const SLIM_Y   = SLIM_H + 2 + 8;                     // body start on pages 2+
+const FOOT_Y   = PAGE_HEIGHT - 40;                    // footer rule y
+const BOT      = FOOT_Y - 6;                          // content bottom limit
+
+// ─── Public API ───────────────────────────────────────────────────────────────
 
 export interface ReportColumn {
   header: string;
-  /** Relative weight; widths are normalised to CONTENT_WIDTH. */
+  /** Relative weight; widths are normalised to CW. */
   width: number;
   align?: "left" | "right" | "center";
 }
-
 export interface ReportTable {
   columns: ReportColumn[];
   rows: (string | number)[][];
   totalsRow?: (string | number)[];
 }
-
-export interface ReportKpi {
-  label: string;
-  value: string;
-}
-
+export interface ReportKpi { label: string; value: string }
 export interface ReportSection {
   heading?: string;
   paragraphs?: string[];
   table?: ReportTable;
 }
-
 export interface ReportSpec {
   title: string;
   subtitle?: string;
@@ -62,234 +73,313 @@ export function createReportDocument(spec: ReportSpec): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({
       size: "A4",
-      margins: { top: PAGE_TOP, bottom: PAGE_HEIGHT - PAGE_BOTTOM, left: MARGIN_LEFT, right: MARGIN_RIGHT },
+      margins: { top: 0, bottom: 0, left: 0, right: 0 },
       bufferPages: true,
     });
 
-    const buffers: Buffer[] = [];
+    const bufs: Buffer[] = [];
     const stream = doc.pipe(new PassThrough());
-    stream.on("data", (chunk: Buffer) => buffers.push(chunk));
-    stream.on("end", () => resolve(Buffer.concat(buffers)));
+    stream.on("data", (c: Buffer) => bufs.push(c));
+    stream.on("end", () => resolve(Buffer.concat(bufs)));
     stream.on("error", reject);
 
-    drawBrandHeader(doc, spec);
+    drawFirstHeader(doc, spec);
+    doc.y = BODY_Y;
 
-    if (spec.kpis?.length) drawKpiGrid(doc, spec.kpis);
+    if (spec.kpis?.length) drawKpis(doc, spec.kpis, spec);
+    for (const s of spec.sections ?? []) drawSection(doc, s, spec);
 
-    for (const section of spec.sections ?? []) {
-      drawSection(doc, section);
-    }
-
-    addPageNumbers(doc);
+    finalise(doc, spec);
     doc.end();
   });
 }
 
-// ── Layout helpers ──────────────────────────────────────────────────────────
+// ─── Header helpers ──────────────────────────────────────────────────────────
 
-function ensureSpace(doc: Doc, needed: number) {
-  if (doc.y + needed > PAGE_BOTTOM) {
-    doc.addPage();
-    doc.y = PAGE_TOP;
-  }
-}
+function drawFirstHeader(doc: Doc, spec: ReportSpec) {
+  // Dark green band (edge to edge)
+  doc.rect(0, 0, PAGE_WIDTH, HDR_H).fillAndStroke(ink.brand, ink.brand);
 
-function drawBrandHeader(doc: Doc, spec: ReportSpec) {
-  const top = PAGE_TOP;
+  // Logo
   try {
-    doc.image(LOGO_PATH, CONTENT_LEFT, top, { width: 38 });
-  } catch {
-    // logo missing — continue without it
-  }
+    doc.image(LOGO_PATH, CL, 19, { width: 36 });
+  } catch { /* missing logo — continue */ }
 
-  const textLeft = CONTENT_LEFT + 48;
+  // Company name
+  const nameX = CL + 44;
   doc
     .font("Helvetica-Bold")
-    .fontSize(13)
-    .fillColor(...COLOR_PRIMARY)
-    .text("TELCOVANTAGE PHILIPPINES", textLeft, top + 2);
-  doc
-    .font("Helvetica")
-    .fontSize(8)
-    .fillColor(...COLOR_TEXT)
-    .text("Services Inc. · BGC, Taguig City", textLeft, top + 19);
-
-  // Report title block (right aligned)
-  doc
-    .font("Helvetica-Bold")
-    .fontSize(15)
-    .fillColor(...COLOR_TEXT)
-    .text(spec.title, CONTENT_LEFT, top + 44, { width: CONTENT_WIDTH, align: "left" });
-  if (spec.subtitle) {
-    doc
-      .font("Helvetica")
-      .fontSize(9)
-      .fillColor(...COLOR_TEXT)
-      .text(spec.subtitle, CONTENT_LEFT, doc.y + 2, { width: CONTENT_WIDTH });
-  }
+    .fontSize(9.5)
+    .fillColor(...ink.white)
+    .text("TELCOVANTAGE PHILIPPINES", nameX, 20, { width: 200, lineBreak: false });
   doc
     .font("Helvetica")
     .fontSize(7.5)
-    .fillColor(...COLOR_BORDER)
-    .text(
-      `Generated ${spec.generatedAt.toLocaleString("en-PH")}`,
-      CONTENT_LEFT,
-      doc.y + 2,
-      { width: CONTENT_WIDTH },
-    );
+    .fillColor(180, 220, 200)
+    .text("Services Inc. · BGC, Taguig City", nameX, 34, { width: 200, lineBreak: false });
 
-  // Divider
-  const dy = doc.y + 6;
+  // Report title (right-aligned)
+  const titleW = 240;
   doc
-    .moveTo(CONTENT_LEFT, dy)
-    .lineTo(CONTENT_RIGHT, dy)
-    .lineWidth(1)
-    .strokeColor(...COLOR_PRIMARY)
-    .stroke();
-  doc.y = dy + 12;
-}
+    .font("Times-Bold")
+    .fontSize(18)
+    .fillColor(...ink.white)
+    .text(spec.title, CR - titleW, 18, { width: titleW, align: "right", lineBreak: false });
 
-function drawKpiGrid(doc: Doc, kpis: ReportKpi[]) {
-  const perRow = 3;
-  const gap = 8;
-  const cardW = (CONTENT_WIDTH - gap * (perRow - 1)) / perRow;
-  const cardH = 46;
+  // Bright accent stripe
+  doc.rect(0, HDR_H, PAGE_WIDTH, ACC_H).fillAndStroke(ink.brandAcc, ink.brandAcc);
 
-  kpis.forEach((kpi, i) => {
-    const col = i % perRow;
-    if (col === 0) {
-      ensureSpace(doc, cardH + gap);
-      if (i > 0) doc.y += gap;
-    }
-    const x = CONTENT_LEFT + col * (cardW + gap);
-    const y = doc.y;
-
-    doc
-      .rect(x, y, cardW, cardH)
-      .fillAndStroke(COLOR_LIGHT_GRAY, COLOR_BORDER);
+  // Metadata row: subtitle left, generated date right
+  const metaY = HDR_H + ACC_H + 7;
+  if (spec.subtitle) {
     doc
       .font("Helvetica")
-      .fontSize(7)
-      .fillColor(...COLOR_TEXT)
-      .text(kpi.label.toUpperCase(), x + 8, y + 8, { width: cardW - 16 });
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(14)
-      .fillColor(...COLOR_PRIMARY)
-      .text(kpi.value, x + 8, y + 22, { width: cardW - 16, lineBreak: false });
+      .fontSize(7.5)
+      .fillColor(...ink.mid)
+      .text(spec.subtitle, CL, metaY, { width: CW * 0.6, lineBreak: false });
+  }
+  doc
+    .font("Helvetica")
+    .fontSize(7)
+    .fillColor(...ink.muted)
+    .text(
+      `Generated ${spec.generatedAt.toLocaleString("en-PH")}`,
+      CR - 175,
+      metaY,
+      { width: 175, align: "right", lineBreak: false },
+    );
 
-    // advance doc.y only at the end of a row
-    if (col === perRow - 1 || i === kpis.length - 1) doc.y = y + cardH;
-  });
-  doc.y += 14;
+  // Thin divider
+  const divY = HDR_H + ACC_H + META_H + 4;
+  doc
+    .moveTo(CL, divY)
+    .lineTo(CR, divY)
+    .lineWidth(0.5)
+    .strokeColor(...ink.border)
+    .stroke();
 }
 
-function drawSection(doc: Doc, section: ReportSection) {
-  if (section.heading) {
-    ensureSpace(doc, 24);
+function drawSlimHeader(doc: Doc, title: string) {
+  doc.rect(0, 0, PAGE_WIDTH, SLIM_H).fillAndStroke(ink.brand, ink.brand);
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(7.5)
+    .fillColor(...ink.white)
+    .text("TELCOVANTAGE PHILIPPINES", CL, 9, { width: 200, lineBreak: false });
+  doc
+    .font("Helvetica")
+    .fontSize(7.5)
+    .fillColor(180, 220, 200)
+    .text(title, CR - 220, 9, { width: 220, align: "right", lineBreak: false });
+  doc.rect(0, SLIM_H, PAGE_WIDTH, 2).fillAndStroke(ink.brandAcc, ink.brandAcc);
+}
+
+// ─── Pagination ───────────────────────────────────────────────────────────────
+
+function guard(doc: Doc, needed: number, title: string) {
+  if (doc.y + needed > BOT) {
+    doc.addPage();
+    drawSlimHeader(doc, title);
+    doc.y = SLIM_Y;
+  }
+}
+
+// ─── KPI grid ─────────────────────────────────────────────────────────────────
+
+function drawKpis(doc: Doc, kpis: ReportKpi[], spec: ReportSpec) {
+  const cols = 3;
+  const gap  = 10;
+  const cW   = (CW - gap * (cols - 1)) / cols;
+  const cH   = 54;
+  const bar  = 4;
+
+  kpis.forEach((kpi, i) => {
+    const col = i % cols;
+    if (col === 0) {
+      guard(doc, cH + gap, spec.title);
+      if (i > 0) doc.y += gap;
+    }
+    const x = CL + col * (cW + gap);
+    const y = doc.y;
+
+    // Card bg + border
+    doc.rect(x, y, cW, cH).fillAndStroke(ink.tint, ink.border);
+    // Left accent bar
+    doc.rect(x, y, bar, cH).fillAndStroke(ink.brand, ink.brand);
+
+    // Label
+    doc
+      .font("Helvetica")
+      .fontSize(6.5)
+      .fillColor(...ink.mid)
+      .text(kpi.label.toUpperCase(), x + bar + 8, y + 10, {
+        width: cW - bar - 16,
+        lineBreak: false,
+      });
+    // Value
     doc
       .font("Helvetica-Bold")
-      .fontSize(11)
-      .fillColor(...COLOR_TEXT)
-      .text(section.heading, CONTENT_LEFT, doc.y, { width: CONTENT_WIDTH });
-    doc.y += 4;
+      .fontSize(15)
+      .fillColor(...ink.brand)
+      .text(kpi.value, x + bar + 8, y + 24, {
+        width: cW - bar - 16,
+        lineBreak: false,
+      });
+
+    if (col === cols - 1 || i === kpis.length - 1) doc.y = y + cH;
+  });
+
+  doc.y += 18;
+}
+
+// ─── Sections ────────────────────────────────────────────────────────────────
+
+function drawSection(doc: Doc, section: ReportSection, spec: ReportSpec) {
+  if (section.heading) {
+    guard(doc, 30, spec.title);
+    const y = doc.y;
+    doc.rect(CL, y, 4, 15).fillAndStroke(ink.brand, ink.brand);
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(10)
+      .fillColor(...ink.dark)
+      .text(section.heading, CL + 10, y + 2, { width: CW - 10, lineBreak: false });
+    doc
+      .moveTo(CL, y + 19)
+      .lineTo(CR, y + 19)
+      .lineWidth(0.5)
+      .strokeColor(...ink.border)
+      .stroke();
+    doc.y = y + 26;
   }
 
   for (const para of section.paragraphs ?? []) {
-    ensureSpace(doc, 20);
+    guard(doc, 18, spec.title);
     doc
       .font("Helvetica")
       .fontSize(9)
-      .fillColor(...COLOR_TEXT)
-      .text(para, CONTENT_LEFT, doc.y, { width: CONTENT_WIDTH });
+      .fillColor(...ink.dark)
+      .text(para, CL, doc.y, { width: CW });
     doc.y += 4;
   }
 
-  if (section.table) drawTable(doc, section.table);
-  doc.y += 12;
+  if (section.table) drawTable(doc, section.table, spec);
+  doc.y += 14;
 }
 
-function drawTable(doc: Doc, table: ReportTable) {
-  const totalWeight = table.columns.reduce((s, c) => s + c.width, 0);
-  const widths = table.columns.map((c) => (c.width / totalWeight) * CONTENT_WIDTH);
-  const rowH = 18;
-  const cellPad = 4;
+// ─── Table ────────────────────────────────────────────────────────────────────
+
+function drawTable(doc: Doc, table: ReportTable, spec: ReportSpec) {
+  const total = table.columns.reduce((s, c) => s + c.width, 0);
+  const ws    = table.columns.map((c) => (c.width / total) * CW);
+  const rowH  = 19;
+  const pad   = 5;
 
   const drawHeaderRow = () => {
     const y = doc.y;
-    doc.rect(CONTENT_LEFT, y, CONTENT_WIDTH, rowH).fillAndStroke(COLOR_PRIMARY, COLOR_PRIMARY);
-    let x = CONTENT_LEFT;
-    doc.font("Helvetica-Bold").fontSize(7.5).fillColor(...COLOR_WHITE);
+    doc.rect(CL, y, CW, rowH).fillAndStroke(ink.brand, ink.brand);
+    let x = CL;
+    doc.font("Helvetica-Bold").fontSize(7.5).fillColor(...ink.white);
     table.columns.forEach((col, i) => {
-      doc.text(col.header.toUpperCase(), x + cellPad, y + 5, {
-        width: widths[i] - cellPad * 2,
+      doc.text(col.header.toUpperCase(), x + pad, y + 6, {
+        width: ws[i] - pad * 2,
         align: col.align ?? "left",
         lineBreak: false,
       });
-      x += widths[i];
+      x += ws[i];
     });
     doc.y = y + rowH;
   };
 
-  ensureSpace(doc, rowH * 2);
+  guard(doc, rowH * 3, spec.title);
   drawHeaderRow();
 
-  const drawRow = (cells: (string | number)[], bold = false) => {
-    if (doc.y + rowH > PAGE_BOTTOM) {
+  const drawRow = (cells: (string | number)[], idx: number, bold = false, totals = false) => {
+    if (doc.y + rowH > BOT) {
       doc.addPage();
-      doc.y = PAGE_TOP;
+      drawSlimHeader(doc, spec.title);
+      doc.y = SLIM_Y;
       drawHeaderRow();
     }
     const y = doc.y;
-    doc.rect(CONTENT_LEFT, y, CONTENT_WIDTH, rowH).strokeColor(...COLOR_BORDER).lineWidth(0.5).stroke();
-    let x = CONTENT_LEFT;
-    doc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(8).fillColor(...COLOR_TEXT);
+    const bg = totals ? ink.brandDk : idx % 2 === 0 ? ink.white : ink.tint;
+    doc.rect(CL, y, CW, rowH).fillAndStroke(bg, ink.border);
+    // Column dividers
+    let divX = CL;
+    doc.strokeColor(...ink.border).lineWidth(0.3);
+    ws.slice(0, -1).forEach((w) => {
+      divX += w;
+      doc.moveTo(divX, y).lineTo(divX, y + rowH).stroke();
+    });
+
+    const fg = totals ? (ink.white as RGB) : (ink.dark as RGB);
+    let x = CL;
+    doc.font(bold || totals ? "Helvetica-Bold" : "Helvetica").fontSize(8).fillColor(...fg);
     table.columns.forEach((col, i) => {
-      doc.text(String(cells[i] ?? ""), x + cellPad, y + 5, {
-        width: widths[i] - cellPad * 2,
+      doc.text(String(cells[i] ?? ""), x + pad, y + 6, {
+        width: ws[i] - pad * 2,
         align: col.align ?? "left",
         lineBreak: false,
       });
-      x += widths[i];
+      x += ws[i];
     });
     doc.y = y + rowH;
   };
 
   if (table.rows.length === 0) {
     const y = doc.y;
-    doc.rect(CONTENT_LEFT, y, CONTENT_WIDTH, rowH).strokeColor(...COLOR_BORDER).lineWidth(0.5).stroke();
-    doc.font("Helvetica-Oblique").fontSize(8).fillColor(...COLOR_BORDER);
-    doc.text("No records to display.", CONTENT_LEFT + cellPad, y + 5, {
-      width: CONTENT_WIDTH - cellPad * 2,
-      align: "center",
-      lineBreak: false,
-    });
+    doc.rect(CL, y, CW, rowH).fillAndStroke(ink.tint, ink.border);
+    doc
+      .font("Helvetica-Oblique")
+      .fontSize(8)
+      .fillColor(...ink.muted)
+      .text("No records to display.", CL + pad, y + 6, {
+        width: CW - pad * 2,
+        align: "center",
+        lineBreak: false,
+      });
     doc.y = y + rowH;
   } else {
-    table.rows.forEach((r) => drawRow(r));
+    table.rows.forEach((r, i) => drawRow(r, i));
   }
 
-  if (table.totalsRow) drawRow(table.totalsRow, true);
+  if (table.totalsRow) drawRow(table.totalsRow, 0, true, true);
 }
 
-function addPageNumbers(doc: Doc) {
+// ─── Finalise: add footer to every page ───────────────────────────────────────
+
+function finalise(doc: Doc, spec: ReportSpec) {
+  void spec;
   const range = doc.bufferedPageRange();
   for (let i = 0; i < range.count; i++) {
     doc.switchToPage(range.start + i);
     doc
+      .moveTo(CL, FOOT_Y)
+      .lineTo(CR, FOOT_Y)
+      .lineWidth(0.5)
+      .strokeColor(...ink.border)
+      .stroke();
+    doc
       .font("Helvetica")
       .fontSize(7)
-      .fillColor(...COLOR_BORDER)
-      .text(
-        `Page ${i + 1} of ${range.count}`,
-        MARGIN_LEFT,
-        PAGE_HEIGHT - 38,
-        { width: CONTENT_WIDTH, align: "center", lineBreak: false },
-      );
+      .fillColor(...ink.muted)
+      .text("TELCOVANTAGE PHILIPPINES SERVICES INC.", CL, FOOT_Y + 8, {
+        width: CW * 0.5,
+        lineBreak: false,
+      });
+    doc
+      .font("Helvetica")
+      .fontSize(7)
+      .fillColor(...ink.muted)
+      .text(`Page ${i + 1} of ${range.count}`, CL, FOOT_Y + 8, {
+        width: CW,
+        align: "right",
+        lineBreak: false,
+      });
   }
 }
 
-// ── Shared formatters for report routes ──────────────────────────────────────
+// ─── Shared formatters ────────────────────────────────────────────────────────
 
 export function peso(n: number): string {
   return `PHP ${n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;

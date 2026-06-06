@@ -2,10 +2,13 @@ import Link from 'next/link';
 import { createClient } from '@/utils/supabase/server';
 import { ArrowLeft } from 'lucide-react';
 import { CreatePOForm } from '@/components/dashboard/purchase-orders/create-po-form';
+import { getCurrentProfile } from '@/lib/auth/permissions';
 
 export default async function NewPurchaseOrderPage() {
   const supabase = await createClient();
-  
+
+  const { role } = await getCurrentProfile(supabase);
+
   // Fetch vendors with their NDA status and currency
   const { data: vendors } = await supabase
     .from('vendors')
@@ -52,7 +55,7 @@ export default async function NewPurchaseOrderPage() {
         </div>
       </div>
 
-      <CreatePOForm vendors={vendorsWithNda} projects={projects || []} />
+      <CreatePOForm vendors={vendorsWithNda} projects={projects || []} userRole={role || ''} />
     </div>
   );
 }

@@ -10,6 +10,7 @@ import {
   FolderGit2,
   AlertTriangle,
   ShieldCheck,
+  ShieldAlert,
   Plus,
   Trash2,
   MapPin,
@@ -59,18 +60,23 @@ const EMPTY_SITE: SiteDetail = {
 export function CreatePOForm({
   vendors,
   projects,
+  userRole,
 }: {
   vendors: VendorWithNda[];
   projects: { id: string; name: string }[];
+  userRole: string;
 }) {
   const [state, formAction, isPending] = useActionState(createPurchaseOrder, null);
   const [selectedVendor, setSelectedVendor] = useState("");
   const [lineItems, setLineItems] = useState<LineItem[]>([{ ...EMPTY_LINE_ITEM }]);
   const [siteDetails, setSiteDetails] = useState<SiteDetail[]>([{ ...EMPTY_SITE }]);
+  const [waiveRequirements, setWaiveRequirements] = useState(false);
 
   const vendor = vendors.find((v) => v.id === selectedVendor);
   const ndaBlocked = vendor && !vendor.nda_approved;
   const statusBlocked = vendor && vendor.status !== "active";
+  const hasBlockers = !!ndaBlocked || !!statusBlocked;
+  const isAdmin = userRole === "admin";
   const currencySymbol = vendor?.currency === "USD" ? "$" : "₱";
   const currencyLabel = vendor?.currency || "PHP";
 
@@ -187,6 +193,34 @@ export function CreatePOForm({
           <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
             Signed NDA approved — PO creation allowed. Currency: {currencyLabel}
           </span>
+        </div>
+      )}
+
+      {/* Admin-only waiver checkbox — shown only when there are blockers */}
+      {hasBlockers && isAdmin && (
+        <div className={`flex items-start gap-3 p-4 rounded-2xl border transition-colors ${
+          waiveRequirements
+            ? "bg-orange-50 dark:bg-orange-900/10 border-orange-300 dark:border-orange-700/50"
+            : "bg-slate-50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-700"
+        }`}>
+          <ShieldAlert className={`h-5 w-5 shrink-0 mt-0.5 ${waiveRequirements ? "text-orange-600 dark:text-orange-400" : "text-slate-400"}`} />
+          <label className="flex items-start gap-3 cursor-pointer flex-1">
+            <input
+              type="checkbox"
+              name="waive_requirements"
+              checked={waiveRequirements}
+              onChange={(e) => setWaiveRequirements(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500"
+            />
+            <div>
+              <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                Waive requirements and create PO anyway
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                This PO will be created pending executive approval and <span className="font-semibold">cannot be issued</span> until an executive approves the waiver.
+              </p>
+            </div>
+          </label>
         </div>
       )}
 
@@ -573,7 +607,7 @@ export function CreatePOForm({
         </button>
         <button
           type="submit"
-          disabled={isPending || !!ndaBlocked || !!statusBlocked}
+          disabled={isPending || (hasBlockers && !waiveRequirements)}
           className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2.5 rounded-xl font-medium transition-all hover:shadow-lg hover:shadow-primary/20 active:scale-95"
         >
           {isPending ? (

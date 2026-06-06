@@ -1,34 +1,60 @@
 "use client";
 
 import { useState } from "react";
-import { Download, Loader2 } from "lucide-react";
+import { Download, Loader2, AlertCircle } from "lucide-react";
 
-/**
- * Opens a report PDF route in a new tab. Shows a brief pending state so the user
- * gets feedback while the server generates the document.
- */
 export function GenerateReportButton({ href }: { href: string }) {
-  const [pending, setPending] = useState(false);
+  const [state, setState] = useState<"idle" | "loading" | "error">("idle");
 
-  const handleClick = () => {
-    setPending(true);
-    window.open(href, "_blank", "noopener,noreferrer");
-    // The PDF renders in the new tab; clear the local pending state shortly after.
-    setTimeout(() => setPending(false), 1500);
+  const handleClick = async () => {
+    setState("loading");
+    try {
+      const res = await fetch(href, { credentials: "same-origin" });
+      if (!res.ok) throw new Error(`${res.status}`);
+
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+
+      // Use the filename the server provides, if any.
+      const cd    = res.headers.get("content-disposition") ?? "";
+      const match = cd.match(/filename="([^"]+)"/);
+      a.download  = match?.[1] ?? "report.pdf";
+      a.href      = url;
+
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+
+      setState("idle");
+    } catch {
+      setState("error");
+      setTimeout(() => setState("idle"), 3000);
+    }
   };
+
+  const isError   = state === "error";
+  const isLoading = state === "loading";
 
   return (
     <button
       onClick={handleClick}
-      disabled={pending}
-      className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 disabled:opacity-60 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm"
+      disabled={isLoading}
+      className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm disabled:opacity-60 ${
+        isError
+          ? "bg-red-500 hover:bg-red-600 text-white"
+          : "bg-primary hover:bg-primary/90 text-white"
+      }`}
     >
-      {pending ? (
+      {isLoading ? (
         <Loader2 className="h-4 w-4 animate-spin" />
+      ) : isError ? (
+        <AlertCircle className="h-4 w-4" />
       ) : (
         <Download className="h-4 w-4" />
       )}
-      {pending ? "Generating…" : "Generate PDF"}
+      {isLoading ? "Generating…" : isError ? "Failed — retry?" : "Download PDF"}
     </button>
   );
 }
