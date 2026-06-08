@@ -22,11 +22,13 @@ export function DashboardShell({
   userEmail,
   userName,
   avatarUrl,
+  userRole,
 }: {
   children: React.ReactNode
   userEmail: string
   userName?: string
   avatarUrl?: string
+  userRole: string
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
@@ -39,6 +41,7 @@ export function DashboardShell({
         {/* Sidebar */}
         <Sidebar
           userEmail={userEmail}
+          userRole={userRole}
           isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
           isCollapsed={isCollapsed}

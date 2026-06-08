@@ -1,17 +1,19 @@
 import { createClient } from "@/utils/supabase/server";
-import { FolderGit2, Clock, ExternalLink, Building2, Plus } from "lucide-react";
+import { FolderGit2, Clock, ExternalLink, Building2, Plus, Users } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 import { Pagination } from "@/components/ui/pagination";
 import { LIST_PAGE_SIZE, parsePage, pageRange } from "@/components/ui/pagination-utils";
+import { ImportExportButtons } from "@/components/dashboard/import-export-buttons";
+import { importProjects } from "./actions";
 
 export const unstable_instant = {
   prefetch: "static",
-  samples: [{ searchParams: { page: null } }],
+  samples: [{ searchParams: { page: null, account_id: null } }],
 };
 
 export default function ProjectsPage(props: {
-  searchParams?: Promise<{ page?: string }>;
+  searchParams?: Promise<{ page?: string; account_id?: string }>;
 }) {
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -25,12 +27,19 @@ export default function ProjectsPage(props: {
             Manage all projects and link vendors to them.
           </p>
         </div>
-        <Link
-          href="/dashboard/projects/new"
-          className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2.5 rounded-xl font-medium transition-all hover:shadow-lg hover:shadow-primary/20 active:scale-95 whitespace-nowrap"
-        >
-          <Plus className="h-5 w-5" /> New Project
-        </Link>
+        <div className="flex items-center gap-2 flex-wrap">
+          <ImportExportButtons
+            title="Projects"
+            exportBaseUrl="/api/export/projects"
+            importAction={importProjects}
+          />
+          <Link
+            href="/dashboard/projects/new"
+            className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2.5 rounded-xl font-medium transition-all hover:shadow-lg hover:shadow-primary/20 active:scale-95 whitespace-nowrap"
+          >
+            <Plus className="h-5 w-5" /> New Project
+          </Link>
+        </div>
       </div>
 
       <Suspense fallback={<ProjectsSkeleton />}>
@@ -43,33 +52,43 @@ export default function ProjectsPage(props: {
 async function ProjectsContent({
   searchParams: searchParamsPromise,
 }: {
-  searchParams?: Promise<{ page?: string }>;
+  searchParams?: Promise<{ page?: string; account_id?: string }>;
 }) {
   const supabase = await createClient();
   const searchParams = await searchParamsPromise;
   const page = parsePage(searchParams?.page);
   const [from, to] = pageRange(page, LIST_PAGE_SIZE);
+  const accountFilter = searchParams?.account_id || null;
 
-  const { data: projects, count } = await supabase
-    .from("projects")
-    .select(
-      `
-      id, name, status, description, created_at,
-      project_vendors (
-        vendors (
-          id,
-          name
-        )
-      ),
-      purchase_orders (
-        id
+  const [{ data: projects, count }, { data: accounts }] = await Promise.all([
+    supabase
+      .from("projects")
+      .select(
+        `id, name, status, description, created_at,
+        account_id,
+        crm_accounts(id, company_name),
+        project_vendors(vendors(id, name)),
+        purchase_orders(id)`,
+        { count: "exact" },
       )
-    `,
-      { count: "exact" },
-    )
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false })
-    .range(from, to);
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .range(from, to)
+      .then((res) => {
+        if (accountFilter) {
+          return {
+            ...res,
+            data: (res.data || []).filter((p: any) => p.account_id === accountFilter),
+          };
+        }
+        return res;
+      }),
+    supabase
+      .from("crm_accounts")
+      .select("id, company_name")
+      .is("deleted_at", null)
+      .order("company_name"),
+  ]);
 
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
@@ -83,6 +102,32 @@ async function ProjectsContent({
         return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400";
     }
   };
+
+  const CustomerFilter = () => (
+    <div className="flex items-center gap-3 mb-6">
+      <form method="GET" className="flex items-center gap-2">
+        <select
+          name="account_id"
+          defaultValue={accountFilter || ""}
+          onChange={(e) => {
+            const form = e.target.closest('form') as HTMLFormElement;
+            form?.submit();
+          }}
+          className="px-3 py-2 bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:border-primary transition-all appearance-none"
+        >
+          <option value="">All Clients</option>
+          {(accounts || []).map((a: any) => (
+            <option key={a.id} value={a.id}>{a.company_name}</option>
+          ))}
+        </select>
+      </form>
+      {accountFilter && (
+        <Link href="/dashboard/projects" className="text-xs text-slate-500 hover:text-primary transition-colors">
+          Clear filter
+        </Link>
+      )}
+    </div>
+  );
 
   if (!projects || projects.length === 0) {
     return (
@@ -110,8 +155,15 @@ async function ProjectsContent({
 
   return (
     <>
+    <CustomerFilter />
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {projects.map((project: any) => (
+      {projects.map((project: any) => {
+        const linkedVendors = (project.project_vendors || [])
+          .map((pv: any) => pv.vendors?.name)
+          .filter(Boolean);
+        const clientName = project.crm_accounts?.company_name;
+
+        return (
         <div
           key={project.id}
           className="bg-white dark:bg-[#0a0a0a] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm flex flex-col transition-all hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-md"
@@ -128,23 +180,26 @@ async function ProjectsContent({
               </span>
             </div>
 
-            <p className="text-sm font-medium text-primary mb-3 flex items-start gap-1.5">
-              <Building2 className="h-3.5 w-3.5" />
-              {(() => {
-                const linkedVendors = (project.project_vendors || [])
-                  .map((pv: any) => pv.vendors?.name)
-                  .filter(Boolean);
-                if (linkedVendors.length === 0) return "No vendors linked";
-                if (linkedVendors.length <= 2)
-                  return (
-                    <span className="flex flex-col">
-                      {linkedVendors.map((name: string, i: number) => (
-                        <span key={i}>{name}</span>
-                      ))}
-                    </span>
-                  );
-                return `${linkedVendors[0]} + ${linkedVendors.length - 1} more`;
-              })()}
+            {/* Client row */}
+            <p className="text-sm font-medium mb-1.5 flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
+              <Users className="h-3.5 w-3.5 shrink-0 text-primary" />
+              {clientName ? (
+                <Link href={`/dashboard/crm/${project.crm_accounts.id}`} className="hover:text-primary transition-colors truncate">
+                  {clientName}
+                </Link>
+              ) : (
+                <span className="text-slate-400 dark:text-slate-500">No client</span>
+              )}
+            </p>
+
+            {/* Vendors row */}
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-3 flex items-start gap-1.5">
+              <Building2 className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              {linkedVendors.length === 0
+                ? "No vendors linked"
+                : linkedVendors.length <= 2
+                ? linkedVendors.join(", ")
+                : `${linkedVendors[0]} +${linkedVendors.length - 1} more`}
             </p>
 
             {project.description && (
@@ -175,7 +230,8 @@ async function ProjectsContent({
             </Link>
           </div>
         </div>
-      ))}
+        );
+      })}
     </div>
     {(count ?? 0) > LIST_PAGE_SIZE && (
       <div className="mt-6 bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">

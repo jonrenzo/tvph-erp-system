@@ -1,8 +1,16 @@
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { NewProjectForm } from '@/components/dashboard/projects/new-project-form';
+import { Suspense } from 'react';
 
-export default function NewProjectPage() {
+export const unstable_instant = {
+  prefetch: 'static',
+  samples: [{ searchParams: { account_id: null } }],
+};
+
+export default function NewProjectPage(props: {
+  searchParams?: Promise<{ account_id?: string }>;
+}) {
   return (
     <div className="p-6 lg:p-8 max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex items-center gap-4">
@@ -17,12 +25,14 @@ export default function NewProjectPage() {
             Create New Project
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Create a project, then link vendors to it afterwards.
+            Create a project and optionally link it to a client.
           </p>
         </div>
       </div>
 
-      <NewProjectForm />
+      <Suspense fallback={null}>
+        <NewProjectForm searchParamsPromise={props.searchParams} />
+      </Suspense>
     </div>
   );
 }

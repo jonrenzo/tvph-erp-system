@@ -23,6 +23,10 @@ const VALID_VENDOR_FIELDS = new Set([
   "bank_account_name", "payment_terms", "currency", "notes", "status",
 ]);
 
+const VALID_PROJECT_FIELDS = new Set([
+  "name", "description", "contract_url", "status",
+]);
+
 const getValueByDbField = (
   row: Record<string, string>,
   colMap: Record<string, string>,
@@ -34,7 +38,7 @@ const getValueByDbField = (
 
 export function validateImportFile(
   buffer: ArrayBuffer,
-  type: "Customers" | "Vendors",
+  type: "Customers" | "Vendors" | "Projects",
   customMapping?: Record<string, string>
 ): ClientParsedResult {
   const rows = parseFile(buffer);
@@ -73,6 +77,12 @@ export function validateImportFile(
 
       if (!name) {
         errors.push({ row: rowIndex, reason: "Missing vendor name." });
+      }
+    } else if (type === "Projects") {
+      const name = getValueByDbField(row, columnMap, "name");
+
+      if (!name) {
+        errors.push({ row: rowIndex, reason: "Missing project name." });
       }
     }
   }

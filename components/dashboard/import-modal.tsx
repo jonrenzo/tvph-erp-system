@@ -53,6 +53,13 @@ const CUSTOMER_OPTIONS = [
   { value: "contact_fax", label: "Contact Fax" },
 ];
 
+const PROJECT_OPTIONS = [
+  { value: "name", label: "Project Name (Required)" },
+  { value: "description", label: "Description" },
+  { value: "contract_url", label: "Contract URL" },
+  { value: "status", label: "Status" },
+];
+
 const VENDOR_OPTIONS = [
   { value: "name", label: "Vendor Name (Required)" },
   { value: "address", label: "Address" },
@@ -98,13 +105,13 @@ export function ImportModal({ title, action, onClose }: Props) {
         }
       }
     }
-    return validateImportFile(fileBuffer, title as "Customers" | "Vendors", simpleMapping);
+    return validateImportFile(fileBuffer, title as "Customers" | "Vendors" | "Projects", simpleMapping);
   }, [fileBuffer, richMapping, title]);
 
   const triggerAiMapping = useCallback(async (headers: string[], currentMap: RichColumnMapping) => {
     setIsMappingAiLoading(true);
     try {
-      const res = await suggestColumnMapping(headers, title as "Customers" | "Vendors");
+      const res = await suggestColumnMapping(headers, title as "Customers" | "Vendors" | "Projects");
       if (res.mappings && Object.keys(res.mappings).length > 0) {
         setRichMapping((prev) => {
           if (!prev) return null;
@@ -138,7 +145,7 @@ export function ImportModal({ title, action, onClose }: Props) {
       const buffer = await f.arrayBuffer();
       setFileBuffer(buffer);
 
-      const parsed = validateImportFile(buffer, title as "Customers" | "Vendors");
+      const parsed = validateImportFile(buffer, title as "Customers" | "Vendors" | "Projects");
       const fileHeaders = parsed.rows.length > 0 ? Object.keys(parsed.rows[0]) : [];
       const richMap = buildRichColumnMap(fileHeaders);
       setRichMapping(richMap);
@@ -393,7 +400,7 @@ function PreviewView({
   const fileHeaders = parsedData.rows.length > 0 ? Object.keys(parsedData.rows[0]) : [];
   const previewRows = parsedData.rows.slice(0, 10);
 
-  const options = title === "Customers" ? CUSTOMER_OPTIONS : VENDOR_OPTIONS;
+  const options = title === "Customers" ? CUSTOMER_OPTIONS : title === "Projects" ? PROJECT_OPTIONS : VENDOR_OPTIONS;
 
   // Calculate unmapped columns count
   const unmappedCount = Object.values(richMapping).filter((v) => v.field === null).length;

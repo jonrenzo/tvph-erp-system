@@ -563,3 +563,293 @@ export async function importVendors(formData: FormData) {
 }
 
 // Project actions have been moved to app/dashboard/projects/actions.ts
+
+export async function uploadCustomVendorDocument(
+  vendorId: string,
+  label: string,
+  formData: FormData,
+) {
+  const supabase = await createClient();
+  const { user, error: authError } = await requireCapability("vendor.write", supabase);
+  if (authError || !user) return { error: authError || "Unauthorized" };
+
+  const file = formData.get("file") as File;
+  if (!file) return { error: "No file provided" };
+
+  const labelSlug = label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/_+$/, "").slice(0, 40);
+  const fileExt = file.name.split(".").pop();
+  const fileName = `${labelSlug}_${Date.now()}.${fileExt}`;
+  const filePath = `vendors/${vendorId}/custom/${fileName}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("vendor-documents")
+    .upload(filePath, file, { contentType: file.type, upsert: false });
+  if (uploadError) return { error: uploadError.message };
+
+  const { data: { publicUrl } } = supabase.storage.from("vendor-documents").getPublicUrl(filePath);
+
+  const { data: newDoc, error: insertError } = await supabase
+    .from("vendor_documents")
+    .insert({
+      vendor_id: vendorId,
+      doc_type: "custom",
+      label: label.trim(),
+      status: "submitted",
+      submitted_at: new Date().toISOString(),
+      uploaded_by: user.id,
+      version_number: 1,
+      updated_at: new Date().toISOString(),
+    })
+    .select("id")
+    .single();
+
+  if (insertError || !newDoc) return { error: insertError?.message || "Failed to create document" };
+
+  const { data: version, error: versionError } = await supabase
+    .from("vendor_document_versions")
+    .insert({
+      document_id: newDoc.id,
+      version_number: 1,
+      file_url: publicUrl,
+      file_name: file.name,
+      uploaded_by: user.id,
+    })
+    .select("id")
+    .single();
+
+  if (versionError) return { error: versionError.message };
+
+  await supabase
+    .from("vendor_documents")
+    .update({
+      current_version_id: version.id,
+      file_url: publicUrl,
+      file_name: file.name,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", newDoc.id);
+
+  await recordAuditLog({
+    entity_type: "vendor_document",
+    entity_id: vendorId,
+    action: "CREATE",
+    changes: { after: { doc_type: "custom", label, status: "submitted" } },
+    performed_by: user.id,
+  });
+
+  revalidatePath(`/dashboard/vendors/${vendorId}`);
+  return { success: true };
+}
+
+export async function approveVendorDocumentById(
+  documentId: string,
+  expiryDate: string,
+) {
+  const supabase = await createClient();
+  const { user, error: authError } = await requireCapability("document.approve", supabase);
+  if (authError || !user) return { error: authError || "Unauthorized" };
+
+  if (!expiryDate) return { error: "An expiry date is required when approving a document." };
+
+  const { data: doc } = await supabase
+    .from("vendor_documents")
+    .select("vendor_id, label")
+    .eq("id", documentId)
+    .single();
+
+  if (!doc) return { error: "Document not found." };
+
+  const { error } = await supabase
+    .from("vendor_documents")
+    .update({
+      status: "approved",
+      approved_at: new Date().toISOString(),
+      expiry_date: expiryDate,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", documentId)
+    .is("archived_at", null);
+
+  if (error) return { error: error.message };
+
+  await recordAuditLog({
+    entity_type: "vendor_document",
+    entity_id: documentId,
+    action: "UPDATE",
+    changes: { after: { status: "approved", expiry_date: expiryDate } },
+    performed_by: user.id,
+  });
+
+  revalidatePath(`/dashboard/vendors/${doc.vendor_id}`);
+  return { success: true };
+}
+
+export async function getVendorDocumentVersions(documentId: string) {
+  const supabase = await createClient();
+  const { data: doc } = await supabase
+    .from("vendor_documents")
+    .select("id, current_version_id")
+    .eq("id", documentId)
+    .single();
+
+  if (!doc) return { versions: [] };
+
+  const { data: versions, error } = await supabase
+    .from("vendor_document_versions")
+    .select(`
+      id,
+      version_number,
+      file_name,
+      notes,
+      created_at,
+      uploaded_by,
+      profiles!uploaded_by(full_name, email)
+    `)
+    .eq("document_id", documentId)
+    .order("version_number", { ascending: false });
+
+  if (error) return { error: error.message };
+
+  return {
+    versions: (versions || []).map((v) => ({
+      ...v,
+      is_current: v.id === doc.current_version_id,
+    })),
+  };
+}
+
+export async function getVendorVersionSignedUrl(versionId: string) {
+  const supabase = await createClient();
+  const { data: version } = await supabase
+    .from("vendor_document_versions")
+    .select("file_url")
+    .eq("id", versionId)
+    .single();
+
+  if (!version) return { error: "Version not found" };
+
+  const path = version.file_url.split("/public/vendor-documents/")[1];
+  if (!path) return { url: version.file_url };
+
+  const { data } = await supabase.storage
+    .from("vendor-documents")
+    .createSignedUrl(path, 3600);
+
+  return { url: data?.signedUrl || version.file_url };
+}
+
+export async function updateVendorDocumentVersion(
+  documentId: string,
+  formData: FormData,
+) {
+  const supabase = await createClient();
+  const { user, error: authError } = await requireCapability("vendor.write", supabase);
+  if (authError || !user) return { error: authError || "Unauthorized" };
+
+  const file = formData.get("file") as File;
+  if (!file) return { error: "No file provided" };
+
+  const { data: doc } = await supabase
+    .from("vendor_documents")
+    .select("id, vendor_id, doc_type, label, version_number")
+    .eq("id", documentId)
+    .single();
+
+  if (!doc) return { error: "Document not found" };
+
+  const labelSlug = doc.label
+    ? doc.label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/_+$/, "").slice(0, 40)
+    : doc.doc_type;
+  const fileExt = file.name.split(".").pop();
+  const fileName = `${labelSlug}_${Date.now()}.${fileExt}`;
+  const filePath = `vendors/${doc.vendor_id}/custom/${fileName}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("vendor-documents")
+    .upload(filePath, file, { contentType: file.type, upsert: false });
+  if (uploadError) return { error: uploadError.message };
+
+  const { data: { publicUrl } } = supabase.storage.from("vendor-documents").getPublicUrl(filePath);
+
+  const nextVersion = (doc.version_number || 1) + 1;
+
+  const { data: version, error: versionError } = await supabase
+    .from("vendor_document_versions")
+    .insert({
+      document_id: doc.id,
+      version_number: nextVersion,
+      file_url: publicUrl,
+      file_name: file.name,
+      uploaded_by: user.id,
+    })
+    .select("id")
+    .single();
+
+  if (versionError) return { error: versionError.message };
+
+  const { error: updateError } = await supabase
+    .from("vendor_documents")
+    .update({
+      current_version_id: version.id,
+      file_url: publicUrl,
+      file_name: file.name,
+      version_number: nextVersion,
+      status: "submitted",
+      submitted_at: new Date().toISOString(),
+      uploaded_by: user.id,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", doc.id);
+
+  if (updateError) return { error: updateError.message };
+
+  revalidatePath(`/dashboard/vendors/${doc.vendor_id}`);
+  return { success: true };
+}
+
+export async function rollbackVendorDocumentVersion(
+  documentId: string,
+  versionId: string,
+) {
+  const supabase = await createClient();
+  const { user, error: authError } = await requireCapability("document.approve", supabase);
+  if (authError || !user) return { error: authError || "Unauthorized" };
+
+  const { data: version } = await supabase
+    .from("vendor_document_versions")
+    .select("file_url, file_name")
+    .eq("id", versionId)
+    .eq("document_id", documentId)
+    .single();
+
+  if (!version) return { error: "Version not found" };
+
+  const { data: doc } = await supabase
+    .from("vendor_documents")
+    .select("vendor_id")
+    .eq("id", documentId)
+    .single();
+
+  const { error } = await supabase
+    .from("vendor_documents")
+    .update({
+      current_version_id: versionId,
+      file_url: version.file_url,
+      file_name: version.file_name,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", documentId);
+
+  if (error) return { error: error.message };
+
+  await recordAuditLog({
+    entity_type: "vendor_document",
+    entity_id: documentId,
+    action: "UPDATE",
+    changes: { after: { action: "rollback", version_id: versionId } },
+    performed_by: user.id,
+  });
+
+  if (doc?.vendor_id) revalidatePath(`/dashboard/vendors/${doc.vendor_id}`);
+  return { success: true };
+}

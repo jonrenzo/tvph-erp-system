@@ -17,6 +17,13 @@ const CUSTOMER_FIELDS = [
   { field: "fax", description: "The fax number of the primary contact person" },
 ];
 
+const PROJECT_FIELDS = [
+  { field: "name", description: "The name of the project" },
+  { field: "description", description: "A description of the project scope or objectives" },
+  { field: "contract_url", description: "URL link to the project contract document" },
+  { field: "status", description: "The status of the project (e.g. active, completed, on_hold, cancelled)" },
+];
+
 const VENDOR_FIELDS = [
   { field: "name", description: "The name of the vendor company" },
   { field: "address", description: "The address of the vendor" },
@@ -36,13 +43,13 @@ const VENDOR_FIELDS = [
 
 export async function suggestColumnMapping(
   unmappedHeaders: string[],
-  importType: "Customers" | "Vendors"
+  importType: "Customers" | "Vendors" | "Projects"
 ) {
   if (!unmappedHeaders || unmappedHeaders.length === 0) {
     return { mappings: {} };
   }
 
-  const fields = importType === "Customers" ? CUSTOMER_FIELDS : VENDOR_FIELDS;
+  const fields = importType === "Customers" ? CUSTOMER_FIELDS : importType === "Projects" ? PROJECT_FIELDS : VENDOR_FIELDS;
   
   const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
   if (!apiKey) {

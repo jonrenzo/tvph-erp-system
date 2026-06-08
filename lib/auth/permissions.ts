@@ -22,6 +22,7 @@ export type Capability =
   | "document.write"
   | "export.crm"
   | "export.financial"
+  | "export.project"
   | "export.vendor"
   | "invoice.pay"
   | "invoice.write"
@@ -42,7 +43,10 @@ export type Capability =
   | "asset.read"
   | "asset.write"
   | "po.waive_requirements"
-  | "po.approve_waiver";
+  | "po.approve_waiver"
+  | "client_po.write"
+  | "client_invoice.write"
+  | "client_invoice.pay";
 
 const CAPABILITY_ROLES = {
   "audit.read": ["admin"],
@@ -52,6 +56,7 @@ const CAPABILITY_ROLES = {
   "document.write": ["admin"],
   "export.crm": ["admin", "commercial_manager"],
   "export.financial": ["admin", "finance"],
+  "export.project": ["admin", "project_manager", "commercial_manager"],
   "export.vendor": ["admin", "procurement", "finance"],
   "invoice.pay": ["admin", "finance"],
   "invoice.write": ["admin", "finance"],
@@ -73,6 +78,9 @@ const CAPABILITY_ROLES = {
   "asset.write": ["admin", "procurement"],
   "po.waive_requirements": ["admin"],
   "po.approve_waiver": ["executive"],
+  "client_po.write": ["admin", "commercial_manager"],
+  "client_invoice.write": ["admin", "finance"],
+  "client_invoice.pay": ["admin", "finance"],
 } as const satisfies Record<Capability, readonly Role[]>;
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;

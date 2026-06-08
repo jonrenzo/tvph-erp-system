@@ -1,21 +1,26 @@
 "use client";
 
 import { useState } from "react";
-import { Building2, Users, CreditCard, Save, Shield, Paintbrush } from "lucide-react";
+import { Building2, Users, CreditCard, Save, Shield, Paintbrush, ShieldCheck } from "lucide-react";
+import { RbacView } from "@/components/dashboard/settings/rbac-view";
 import { updateOrganizationSettings, updateFinancialSettings, updateUserRole, forcePasswordReset, clearMustChangePassword } from "@/app/dashboard/settings/actions";
 import { AddUserButton } from "@/components/dashboard/hr/add-user-button";
 import { RemoveTeamMemberButton } from "@/components/dashboard/settings/remove-team-member-button";
 import { AppearanceSettings } from "@/components/dashboard/settings/appearance-settings";
 
-export function SettingsTabs({ initialSettings, team }: { initialSettings: any, team: any[] }) {
-  const [activeTab, setActiveTab] = useState("organization");
+export function SettingsTabs({ initialSettings, team, userRole }: { initialSettings: any, team: any[], userRole: string }) {
+  const isAdmin = userRole === "admin";
+  const [activeTab, setActiveTab] = useState(isAdmin ? "organization" : "access");
   const [isSaving, setIsSaving] = useState(false);
 
   const tabs = [
-    { id: "organization", label: "Organization", icon: Building2 },
-    { id: "team", label: "Team Management", icon: Users },
-    { id: "financials", label: "Financials", icon: CreditCard },
-    { id: "appearance", label: "Appearance", icon: Paintbrush },
+    ...(isAdmin ? [
+      { id: "organization", label: "Organization", icon: Building2 },
+      { id: "team", label: "Team Management", icon: Users },
+      { id: "financials", label: "Financials", icon: CreditCard },
+      { id: "appearance", label: "Appearance", icon: Paintbrush },
+    ] : []),
+    { id: "access", label: isAdmin ? "Access Control" : "My Access", icon: ShieldCheck },
   ];
 
   return (
@@ -252,6 +257,23 @@ export function SettingsTabs({ initialSettings, team }: { initialSettings: any, 
         {/* Appearance Tab */}
         {activeTab === "appearance" && (
           <AppearanceSettings />
+        )}
+
+        {/* Access Control Tab */}
+        {activeTab === "access" && (
+          <div>
+            <div className="px-8 py-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+              <h3 className="font-bold text-slate-900 dark:text-white font-plus-jakarta tracking-tight">
+                {isAdmin ? "Role Permission Matrix" : "My Access"}
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {isAdmin
+                  ? "Full breakdown of what each system role can and cannot do."
+                  : "Capabilities granted to your role in this system."}
+              </p>
+            </div>
+            <RbacView userRole={userRole} />
+          </div>
         )}
       </div>
     </div>

@@ -31,17 +31,18 @@ async function DashboardWithAuth({ children }: { children: React.ReactNode }) {
   if (user) {
     const { data: profileData } = await supabase
       .from('profiles')
-      .select('full_name, avatar_url')
+      .select('full_name, avatar_url, role')
       .eq('id', user.id)
       .single();
     profile = profileData;
   }
 
   return (
-    <DashboardShell 
-      userEmail={user?.email || 'Admin'} 
+    <DashboardShell
+      userEmail={user?.email || 'Admin'}
       userName={profile?.full_name || 'User'}
       avatarUrl={profile?.avatar_url}
+      userRole={profile?.role || 'user'}
     >
       {children}
     </DashboardShell>

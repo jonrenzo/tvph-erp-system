@@ -22,10 +22,10 @@ async function ProjectDetailLoader({ paramsPromise }: { paramsPromise: Promise<{
   const params = await paramsPromise;
   const supabase = await createClient();
 
-  const [{ data: project }, { data: pos }, { data: projectVendors }, { data: allVendors }] = await Promise.all([
+  const [{ data: project }, { data: pos }, { data: projectVendors }, { data: allVendors }, { data: allAccounts }] = await Promise.all([
     supabase
       .from('projects')
-      .select('*')
+      .select('*, crm_accounts(id, company_name)')
       .eq('id', params.id)
       .single(),
     supabase
@@ -44,6 +44,11 @@ async function ProjectDetailLoader({ paramsPromise }: { paramsPromise: Promise<{
       .eq('status', 'active')
       .is('deleted_at', null)
       .order('name'),
+    supabase
+      .from('crm_accounts')
+      .select('id, company_name')
+      .is('deleted_at', null)
+      .order('company_name'),
   ]);
 
   if (!project) notFound();
@@ -53,11 +58,12 @@ async function ProjectDetailLoader({ paramsPromise }: { paramsPromise: Promise<{
   const availableVendors = (allVendors || []).filter((v: any) => !linkedVendorIds.includes(v.id));
 
   return (
-    <ProjectDetailContent 
-      project={project} 
-      pos={pos || []} 
+    <ProjectDetailContent
+      project={project}
+      pos={pos || []}
       linkedVendors={linkedVendors}
       availableVendors={availableVendors}
+      allAccounts={allAccounts || []}
     />
   );
 }

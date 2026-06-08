@@ -56,6 +56,13 @@ export const CRM_CONTACT_HEADERS: { header: string; field: string }[] = [
   { header: "Contact Fax", field: "fax" },
 ];
 
+export const PROJECT_HEADERS: { header: string; field: string }[] = [
+  { header: "Project Name", field: "name" },
+  { header: "Description", field: "description" },
+  { header: "Contract URL", field: "contract_url" },
+  { header: "Status", field: "status" },
+];
+
 const HEADER_ALIASES: Record<string, string> = {
   "vendor name": "name",
   "name": "name",
@@ -102,6 +109,11 @@ const HEADER_ALIASES: Record<string, string> = {
   "secondary bank name": "_sb_bank_name",
   "secondary bank account number": "_sb_account_number",
   "secondary bank account name": "_sb_account_name",
+  "project name": "name",
+  "description": "description",
+  "contract url": "contract_url",
+  "contract": "contract_url",
+  "contract link": "contract_url",
   "secondary contact name_raw": "_sc_name_raw",
   "secondary contact email_raw": "_sc_email_raw",
   "secondary contact phone_raw": "_sc_phone_raw",

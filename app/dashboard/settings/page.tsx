@@ -27,20 +27,15 @@ export default function SettingsPage() {
 async function SettingsContent() {
   const supabase = await createClient();
 
-  // Fetch current system settings
-  const { data: settings } = await supabase
-    .from('system_settings')
-    .select('*')
-    .eq('id', 1)
-    .single();
+  const { data: { user } } = await supabase.auth.getUser();
 
-  // Fetch all users for team management
-  const { data: team } = await supabase
-    .from('profiles')
-    .select('*')
-    .order('full_name');
+  const [{ data: settings }, { data: team }, { data: profile }] = await Promise.all([
+    supabase.from('system_settings').select('*').eq('id', 1).single(),
+    supabase.from('profiles').select('*').order('full_name'),
+    user ? supabase.from('profiles').select('role').eq('id', user.id).single() : Promise.resolve({ data: null }),
+  ]);
 
-  return <SettingsTabs initialSettings={settings} team={team || []} />;
+  return <SettingsTabs initialSettings={settings} team={team || []} userRole={profile?.role || 'user'} />;
 }
 
 function SettingsSkeleton() {
