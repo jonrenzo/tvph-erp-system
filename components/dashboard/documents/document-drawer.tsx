@@ -3,6 +3,7 @@
 import { X, FileText, Download, ShieldAlert, CheckCircle2, Lock, ExternalLink, Eye } from "lucide-react";
 import { useEffect, useState } from "react";
 import { DocumentPreview } from "./document-preview";
+import { isAdminOrAbove } from "@/lib/auth/roles";
 
 interface VendorDocument {
   id: string;
@@ -37,7 +38,7 @@ export function DocumentDrawer({ vendor, isOpen, onClose, userRole }: DocumentDr
 
   if (!mounted || !vendor) return null;
 
-  const isStaff = userRole === 'admin' || userRole === 'finance';
+  const isStaff = isAdminOrAbove(userRole) || userRole === 'finance';
   const documents = vendor.vendor_documents || [];
 
   return (

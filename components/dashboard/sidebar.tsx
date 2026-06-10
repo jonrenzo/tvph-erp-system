@@ -18,6 +18,7 @@ import {
   ChevronDown,
   FileBarChart,
 } from "lucide-react";
+import { ROLE_LABELS } from "@/lib/auth/roles";
 
 type ModuleItem = {
   id: string;
@@ -46,25 +47,25 @@ const MODULE_CONFIG: ModuleItem[] = [
     id: "vendor",
     label: "Vendors",
     icon: Building2,
-    roles: ["admin", "procurement"],
+    roles: ["superadmin", "admin", "operations"],
     subModules: [
-      { id: "vendor-list", label: "All Vendors", href: "/dashboard/vendors", roles: ["admin", "procurement"] },
-      { id: "purchase-orders", label: "Purchase Orders", href: "/dashboard/purchase-orders", roles: ["admin", "procurement"] },
-      { id: "vendor-contracts", label: "Contracts", href: "/dashboard/vendors/contracts", roles: ["admin", "procurement", "project_manager"] },
-      { id: "vendor-performance", label: "Performance", href: "/dashboard/vendors/performance", roles: ["admin", "procurement"] },
+      { id: "vendor-list", label: "All Vendors", href: "/dashboard/vendors", roles: ["superadmin", "admin", "operations"] },
+      { id: "purchase-orders", label: "Purchase Orders", href: "/dashboard/purchase-orders", roles: ["superadmin", "admin", "operations"] },
+      { id: "vendor-contracts", label: "Contracts", href: "/dashboard/vendors/contracts", roles: ["superadmin", "admin", "operations"] },
+      { id: "vendor-performance", label: "Performance", href: "/dashboard/vendors/performance", roles: ["superadmin", "admin", "operations"] },
     ],
   },
   {
     id: "crm",
     label: "CRM",
     icon: Users,
-    roles: ["admin", "commercial_manager", "finance", "project_manager"],
+    roles: ["superadmin", "admin", "operations", "finance"],
     subModules: [
-      { id: "crm-customers", label: "All Customers", href: "/dashboard/crm", roles: ["admin", "commercial_manager"] },
-      { id: "crm-new-customer", label: "Add Customer", href: "/dashboard/crm/new", roles: ["admin", "commercial_manager"] },
-      { id: "crm-new-project", label: "New Customer Project", href: "/dashboard/crm/projects/new", roles: ["admin", "commercial_manager", "project_manager"] },
-      { id: "client-pos", label: "Client POs", href: "/dashboard/client-pos", roles: ["admin", "commercial_manager"] },
-      { id: "client-invoices", label: "Client Invoices", href: "/dashboard/client-invoices", roles: ["admin", "finance"] },
+      { id: "crm-customers", label: "All Customers", href: "/dashboard/crm", roles: ["superadmin", "admin", "operations"] },
+      { id: "crm-new-customer", label: "Add Customer", href: "/dashboard/crm/new", roles: ["superadmin", "admin", "operations"] },
+      { id: "crm-new-project", label: "New Customer Project", href: "/dashboard/crm/projects/new", roles: ["superadmin", "admin", "operations"] },
+      { id: "client-pos", label: "Client POs", href: "/dashboard/client-pos", roles: ["superadmin", "admin", "operations"] },
+      { id: "client-invoices", label: "Client Invoices", href: "/dashboard/client-invoices", roles: ["superadmin", "admin", "finance"] },
     ],
   },
   {
@@ -72,7 +73,7 @@ const MODULE_CONFIG: ModuleItem[] = [
     label: "Projects",
     icon: FolderOpen,
     href: "/dashboard/projects",
-    roles: ["admin", "project_manager", "procurement", "commercial_manager"],
+    roles: ["superadmin", "admin", "operations"],
   },
   {
     id: "assets",
@@ -80,18 +81,18 @@ const MODULE_CONFIG: ModuleItem[] = [
     icon: Package,
     subModules: [
       { id: "assets-list", label: "Asset Registry", href: "/dashboard/assets" },
-      { id: "assets-add", label: "Add Asset", href: "/dashboard/assets/new", roles: ["admin", "procurement"] },
+      { id: "assets-add", label: "Add Asset", href: "/dashboard/assets/new", roles: ["superadmin", "admin", "operations"] },
     ],
   },
   {
     id: "accounting",
     label: "Accounting",
     icon: BarChart3,
-    roles: ["admin", "finance"],
+    roles: ["superadmin", "admin", "finance"],
     subModules: [
-      { id: "accounting-dash", label: "Financial Dashboard", href: "/dashboard/accounting", roles: ["admin", "finance"] },
-      { id: "accounting-ap", label: "AP Aging", href: "/dashboard/accounting/ap-aging", roles: ["admin", "finance"] },
-      { id: "accounting-tax", label: "Tax Summary", href: "/dashboard/accounting/tax", roles: ["admin", "finance"] },
+      { id: "accounting-dash", label: "Financial Dashboard", href: "/dashboard/accounting", roles: ["superadmin", "admin", "finance"] },
+      { id: "accounting-ap", label: "AP Aging", href: "/dashboard/accounting/ap-aging", roles: ["superadmin", "admin", "finance"] },
+      { id: "accounting-tax", label: "Tax Summary", href: "/dashboard/accounting/tax", roles: ["superadmin", "admin", "finance"] },
     ],
   },
   {
@@ -99,14 +100,14 @@ const MODULE_CONFIG: ModuleItem[] = [
     label: "Invoices",
     icon: FileText,
     href: "/dashboard/invoices",
-    roles: ["admin", "finance"],
+    roles: ["superadmin", "admin", "finance"],
   },
   {
     id: "reports",
     label: "Reports",
     icon: FileBarChart,
     href: "/dashboard/reports",
-    roles: ["admin", "finance", "executive"],
+    roles: ["superadmin", "admin", "finance"],
   },
   {
     id: "hr",
@@ -114,7 +115,7 @@ const MODULE_CONFIG: ModuleItem[] = [
     icon: Users,
     subModules: [
       { id: "hr-directory", label: "Employee Directory", href: "/dashboard/hr" },
-      { id: "hr-add", label: "Add Employee", href: "/dashboard/hr/new", roles: ["admin"] },
+      { id: "hr-add", label: "Add Employee", href: "/dashboard/hr/new", roles: ["superadmin", "admin"] },
     ],
   },
   {
@@ -134,19 +135,9 @@ const MODULE_CONFIG: ModuleItem[] = [
     label: "Audit Logs",
     icon: AlertCircle,
     href: "/dashboard/audit-logs",
-    roles: ["admin"],
+    roles: ["superadmin"],
   },
 ];
-
-const ROLE_LABELS: Record<string, string> = {
-  admin: "Administrator",
-  finance: "Finance",
-  procurement: "Procurement",
-  commercial_manager: "Commercial Manager",
-  project_manager: "Project Manager",
-  executive: "Executive",
-  user: "Standard User",
-};
 
 function canSee(roles: string[] | undefined, userRole: string) {
   return !roles || roles.includes(userRole);
@@ -338,7 +329,7 @@ export function Sidebar({ userEmail, userRole, isOpen, onClose, isCollapsed }: S
         >
           <div className="text-xs text-slate-500 overflow-hidden">
             <p className="font-medium text-slate-700 dark:text-slate-300 mb-0.5 whitespace-nowrap">
-              {ROLE_LABELS[userRole] || userRole}
+              {ROLE_LABELS[userRole as keyof typeof ROLE_LABELS] || userRole}
             </p>
             <p className="truncate" title={userEmail}>
               {userEmail}

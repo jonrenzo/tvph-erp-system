@@ -24,7 +24,7 @@ export function AddUserButton() {
     email: "",
     fullName: "",
     password: "",
-    role: "user"
+    role: "viewer"
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -50,7 +50,7 @@ export function AddUserButton() {
       setTimeout(() => {
         setIsOpen(false);
         setSuccess(false);
-        setFormData({ email: "", fullName: "", password: "", role: "user" });
+        setFormData({ email: "", fullName: "", password: "", role: "viewer" });
         router.refresh();
       }, 2000);
     } catch (err: any) {
@@ -153,10 +153,8 @@ export function AddUserButton() {
                       {[
                         { id: 'admin', label: 'Admin' },
                         { id: 'finance', label: 'Finance' },
-                        { id: 'procurement', label: 'Procurement' },
-                        { id: 'commercial_manager', label: 'Commercial' },
-                        { id: 'project_manager', label: 'PM' },
-                        { id: 'user', label: 'Standard' },
+                        { id: 'operations', label: 'Operations' },
+                        { id: 'viewer', label: 'Viewer' },
                       ].map((role) => (
                         <button
                           key={role.id}

@@ -16,6 +16,7 @@ import {
   MapPin,
 } from "lucide-react";
 import { createPurchaseOrder } from "@/app/dashboard/purchase-orders/actions";
+import { hasCapability } from "@/lib/auth/roles";
 
 interface VendorWithNda {
   id: string;
@@ -76,7 +77,7 @@ export function CreatePOForm({
   const ndaBlocked = vendor && !vendor.nda_approved;
   const statusBlocked = vendor && vendor.status !== "active";
   const hasBlockers = !!ndaBlocked || !!statusBlocked;
-  const isAdmin = userRole === "admin";
+  const isAdmin = hasCapability(userRole, "po.waive_requirements");
   const currencySymbol = vendor?.currency === "USD" ? "$" : "₱";
   const currencyLabel = vendor?.currency || "PHP";
 

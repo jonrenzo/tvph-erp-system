@@ -8,6 +8,7 @@ import { CustomerGrid } from "./customer-grid";
 import { CompanyFolderView } from "./company-folder-view";
 import { UploadCompanyDocModal } from "./upload-company-doc-modal";
 import { SearchInput } from "@/components/ui/search-input";
+import { isAdminOrAbove } from "@/lib/auth/roles";
 
 interface DocumentsClientProps {
   companyDocs: any[];
@@ -20,7 +21,7 @@ interface DocumentsClientProps {
 export function DocumentsClient({ companyDocs, vendors, customers, userRole, searchQuery }: DocumentsClientProps) {
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
-  const isAdmin = userRole === 'admin';
+  const isAdmin = isAdminOrAbove(userRole);
 
   const filteredVendors = vendors?.filter(v =>
     !searchQuery || v.name.toLowerCase().includes(searchQuery.toLowerCase())

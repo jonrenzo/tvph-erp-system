@@ -7,7 +7,7 @@ import { createServiceRoleClient } from '@/utils/supabase/service';
 import { recordAuditLog } from '@/utils/audit';
 import { createNotification } from '@/utils/notifications';
 import { parseFile, buildColumnMap } from '@/utils/import-export';
-import { requireCapability } from '@/lib/auth/permissions';
+import { requireCapability, isAdminOrAbove } from '@/lib/auth/permissions';
 
 type ActionState = { error?: string; success?: string } | null;
 
@@ -906,7 +906,7 @@ export async function rollbackDocumentVersion(documentId: string, versionId: str
     .eq('id', user.id)
     .single();
 
-  if (!profile || profile.role !== 'admin') {
+  if (!profile || !isAdminOrAbove(profile.role)) {
     return { error: 'Only admins can rollback documents.' };
   }
 
@@ -954,7 +954,7 @@ export async function approveCustomerDocumentById(documentId: string, expiryDate
     .eq('id', user.id)
     .single();
 
-  if (!profile || profile.role !== 'admin') {
+  if (!profile || !isAdminOrAbove(profile.role)) {
     return { error: 'Only admins can approve documents.' };
   }
 
@@ -1104,7 +1104,7 @@ export async function approveCustomerDocument(customerId: string, docType: strin
     .eq('id', user.id)
     .single();
 
-  if (!profile || profile.role !== 'admin') {
+  if (!profile || !isAdminOrAbove(profile.role)) {
     return { error: 'Only admins can approve documents.' };
   }
 

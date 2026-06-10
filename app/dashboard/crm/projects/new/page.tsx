@@ -40,7 +40,7 @@ async function NewCrmOpportunityContent({ searchParamsPromise }: { searchParamsP
     supabase
       .from('profiles')
       .select('id, full_name, role')
-      .in('role', ['admin', 'commercial_manager', 'project_manager'])
+      .in('role', ['superadmin', 'admin', 'operations'])
       .order('full_name'),
   ]);
 

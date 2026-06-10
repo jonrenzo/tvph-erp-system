@@ -2,6 +2,7 @@
 
 import React from "react";
 import { ShieldCheck, ShieldOff } from "lucide-react";
+import { hasCapability, isAdminOrAbove, type Capability } from "@/lib/auth/roles";
 
 const CAPABILITY_LABELS: Record<string, { label: string; group: string }> = {
   "vendor.write":         { label: "Create / Edit Vendors",        group: "Vendors" },
@@ -38,59 +39,22 @@ const CAPABILITY_LABELS: Record<string, { label: string; group: string }> = {
   "export.project":       { label: "Export Project Data",          group: "Exports" },
 };
 
-const CAPABILITY_ROLES: Record<string, string[]> = {
-  "vendor.write":          ["admin", "procurement"],
-  "vendor.status":         ["admin", "procurement"],
-  "vendor.delete":         ["admin"],
-  "document.write":        ["admin"],
-  "document.approve":      ["admin"],
-  "po.create":             ["admin", "procurement"],
-  "po.write":              ["admin", "procurement"],
-  "po.status":             ["admin", "procurement", "finance"],
-  "po.delete":             ["admin"],
-  "po.waive_requirements": ["admin"],
-  "po.approve_waiver":     ["executive"],
-  "invoice.write":         ["admin", "finance"],
-  "invoice.pay":           ["admin", "finance"],
-  "client_po.write":       ["admin", "commercial_manager"],
-  "client_invoice.write":  ["admin", "finance"],
-  "client_invoice.pay":    ["admin", "finance"],
-  "crm.write":             ["admin", "commercial_manager"],
-  "project.write":         ["admin", "project_manager", "procurement"],
-  "contract.write":        ["admin", "procurement", "project_manager"],
-  "hr.read":               ["admin", "finance", "procurement", "project_manager", "commercial_manager", "user"],
-  "hr.write":              ["admin"],
-  "asset.read":            ["admin", "finance", "procurement", "project_manager", "commercial_manager", "user"],
-  "asset.write":           ["admin", "procurement"],
-  "accounting.read":       ["admin", "finance"],
-  "accounting.write":      ["admin", "finance"],
-  "audit.read":            ["admin"],
-  "settings.manage":       ["admin"],
-  "user.manage":           ["admin"],
-  "export.vendor":         ["admin", "procurement", "finance"],
-  "export.financial":      ["admin", "finance"],
-  "export.crm":            ["admin", "commercial_manager"],
-  "export.project":        ["admin", "project_manager", "commercial_manager"],
-};
-
 const ALL_ROLES = [
-  { id: "admin",              label: "Admin",               color: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400" },
-  { id: "finance",            label: "Finance",             color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
-  { id: "procurement",        label: "Procurement",         color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" },
-  { id: "commercial_manager", label: "Commercial Mgr",      color: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400" },
-  { id: "project_manager",    label: "Project Mgr",         color: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400" },
-  { id: "executive",          label: "Executive",           color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" },
-  { id: "user",               label: "Standard User",       color: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400" },
+  { id: "superadmin", label: "Superadmin", color: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400" },
+  { id: "admin",      label: "Admin",      color: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400" },
+  { id: "finance",    label: "Finance",    color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
+  { id: "operations", label: "Operations", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" },
+  { id: "viewer",     label: "Viewer",     color: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400" },
 ];
 
 const GROUPS = Array.from(new Set(Object.values(CAPABILITY_LABELS).map((v) => v.group)));
 
 function has(capability: string, role: string) {
-  return (CAPABILITY_ROLES[capability] || []).includes(role);
+  return hasCapability(role, capability as Capability);
 }
 
 export function RbacView({ userRole }: { userRole: string }) {
-  const isAdmin = userRole === "admin";
+  const isAdmin = isAdminOrAbove(userRole);
   const visibleRoles = isAdmin ? ALL_ROLES : ALL_ROLES.filter((r) => r.id === userRole);
   const currentRole = ALL_ROLES.find((r) => r.id === userRole);
 

@@ -15,7 +15,7 @@ export default function AddEmployeePage() {
     email: "",
     fullName: "",
     password: "",
-    role: "user"
+    role: "viewer"
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -134,12 +134,10 @@ export default function AddEmployeePage() {
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">System Role</label>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   {[
-                    { id: 'admin', label: 'Admin', desc: 'Full access' },
-                    { id: 'finance', label: 'Finance', desc: 'Invoices & Reports' },
-                    { id: 'procurement', label: 'Procurement', desc: 'POs & Vendors' },
-                    { id: 'commercial_manager', label: 'Commercial', desc: 'CRM & Sales' },
-                    { id: 'project_manager', label: 'Project Manager', desc: 'Projects & Tasks' },
-                    { id: 'user', label: 'Standard User', desc: 'Basic access' },
+                    { id: 'admin', label: 'Admin', desc: 'Director — runs the business' },
+                    { id: 'finance', label: 'Finance', desc: 'Invoices, payments, accounting' },
+                    { id: 'operations', label: 'Operations', desc: 'Vendors, POs, projects, CRM' },
+                    { id: 'viewer', label: 'Viewer', desc: 'Read-only access' },
                   ].map((role) => (
                     <button
                       key={role.id}

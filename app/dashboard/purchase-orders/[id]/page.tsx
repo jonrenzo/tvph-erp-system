@@ -147,8 +147,7 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
   // Waiver state
   const isPendingApproval = po.requirements_waived && !po.waiver_approved;
   const isWaiverApproved = po.requirements_waived && po.waiver_approved;
-  const isExecutive = currentRole === "executive";
-  const canApproveWaiver = isExecutive && isPendingApproval && currentUser?.id !== po.waived_by;
+  const canApproveWaiver = hasCapability(currentRole, "po.approve_waiver") && isPendingApproval && currentUser?.id !== po.waived_by;
   const waivedGateLabels = ((po.waived_requirements as string[] | null) || [])
     .map((g: string) => g === "nda" ? "Signed NDA" : g === "vendor_status" ? "Vendor Active Status" : g)
     .join(", ");

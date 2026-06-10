@@ -1,15 +1,16 @@
 import { createClient } from '@supabase/supabase-js';
 import { createClient as createServerClient } from '@/utils/supabase/server';
 import { NextResponse } from 'next/server';
+import { isAdminOrAbove, isSuperadmin, ROLES } from '@/lib/auth/roles';
 
 export async function POST(req: Request) {
   try {
     const { email, fullName, role, password } = await req.json();
-    
-    // 1. Verify that the requester is an ADMIN
+
+    // 1. Verify that the requester is an admin (or above)
     const supabaseServer = await createServerClient();
     const { data: { user: requester } } = await supabaseServer.auth.getUser();
-    
+
     if (!requester) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { data: profile } = await supabaseServer
@@ -18,8 +19,16 @@ export async function POST(req: Request) {
       .eq('id', requester.id)
       .single();
 
-    if (profile?.role !== 'admin') {
+    if (!isAdminOrAbove(profile?.role)) {
       return NextResponse.json({ error: "Only admins can invite team members" }, { status: 403 });
+    }
+
+    // Validate the requested role; only a superadmin can mint another superadmin.
+    if (!(ROLES as readonly string[]).includes(role)) {
+      return NextResponse.json({ error: "Invalid role" }, { status: 400 });
+    }
+    if (role === 'superadmin' && !isSuperadmin(profile?.role)) {
+      return NextResponse.json({ error: "Only a superadmin can assign the superadmin role" }, { status: 403 });
     }
 
     // 2. Initialize Admin Client

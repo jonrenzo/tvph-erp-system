@@ -3,13 +3,14 @@
 import { useState } from "react";
 import { Building2, Users, CreditCard, Save, Shield, Paintbrush, ShieldCheck, BellRing } from "lucide-react";
 import { RbacView } from "@/components/dashboard/settings/rbac-view";
+import { isAdminOrAbove } from "@/lib/auth/roles";
 import { updateOrganizationSettings, updateFinancialSettings, updateReminderSettings, updateUserRole, forcePasswordReset, clearMustChangePassword } from "@/app/dashboard/settings/actions";
 import { AddUserButton } from "@/components/dashboard/hr/add-user-button";
 import { RemoveTeamMemberButton } from "@/components/dashboard/settings/remove-team-member-button";
 import { AppearanceSettings } from "@/components/dashboard/settings/appearance-settings";
 
 export function SettingsTabs({ initialSettings, reminderDays = [30, 14, 7, 1], team, userRole }: { initialSettings: any, reminderDays?: number[], team: any[], userRole: string }) {
-  const isAdmin = userRole === "admin";
+  const isAdmin = isAdminOrAbove(userRole);
   const [activeTab, setActiveTab] = useState(isAdmin ? "organization" : "access");
   const [isSaving, setIsSaving] = useState(false);
 
@@ -142,17 +143,20 @@ export function SettingsTabs({ initialSettings, reminderDays = [30, 14, 7, 1], t
                               </div>
                            </td>
                            <td className="px-8 py-4">
-                              <select 
+                              <select
                                 value={user.role}
+                                disabled={user.role === 'superadmin' && userRole !== 'superadmin'}
                                 onChange={async (e) => await updateUserRole(user.id, e.target.value)}
-                                className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-2 py-1 text-xs font-medium focus:outline-none focus:border-primary"
+                                className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-2 py-1 text-xs font-medium focus:outline-none focus:border-primary disabled:opacity-60"
                               >
-                                 <option value="admin">Administrator</option>
+                                 {/* Superadmin is dev-only: shown when you are one, or to display an existing superadmin row */}
+                                 {(userRole === 'superadmin' || user.role === 'superadmin') && (
+                                   <option value="superadmin">Superadmin</option>
+                                 )}
+                                 <option value="admin">Admin</option>
                                  <option value="finance">Finance</option>
-                                 <option value="procurement">Procurement</option>
-                                 <option value="commercial_manager">Commercial Manager</option>
-                                 <option value="project_manager">Project Manager</option>
-                                 <option value="user">Standard User</option>
+                                 <option value="operations">Operations</option>
+                                 <option value="viewer">Viewer</option>
                               </select>
                            </td>
                            <td className="px-8 py-4 text-slate-500 text-xs">

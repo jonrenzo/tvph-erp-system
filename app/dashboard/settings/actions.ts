@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/utils/supabase/server';
 import { createClient as createAdminClient } from '@supabase/supabase-js';
 import { recordAuditLog } from '@/utils/audit';
-import { requireCapability } from '@/lib/auth/permissions';
+import { requireCapability, isSuperadmin, ROLES } from '@/lib/auth/permissions';
 
 export async function updateOrganizationSettings(formData: FormData) {
   const supabase = await createClient();
@@ -121,8 +121,25 @@ export async function updateReminderSettings(formData: FormData) {
 
 export async function updateUserRole(userId: string, role: string) {
   const supabase = await createClient();
-  const { user, error: authError } = await requireCapability('user.manage', supabase);
+  const { user, role: actorRole, error: authError } = await requireCapability('user.manage', supabase);
   if (authError || !user) return { error: authError || 'Unauthorized' };
+
+  if (!(ROLES as readonly string[]).includes(role)) {
+    return { error: 'Invalid role.' };
+  }
+
+  // Granting superadmin, or changing a superadmin's role, is superadmin-only.
+  if (role === 'superadmin' && !isSuperadmin(actorRole)) {
+    return { error: 'Only a superadmin can assign the superadmin role.' };
+  }
+  const { data: target } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', userId)
+    .maybeSingle();
+  if (target?.role === 'superadmin' && !isSuperadmin(actorRole)) {
+    return { error: "Only a superadmin can change a superadmin's role." };
+  }
 
   const { error } = await supabase
     .from('profiles')
@@ -210,7 +227,7 @@ export async function clearMustChangePassword(userId: string) {
 
 export async function removeTeamMember(userId: string) {
   const supabase = await createClient();
-  const { user, error: authError } = await requireCapability('user.manage', supabase);
+  const { user, role: actorRole, error: authError } = await requireCapability('user.manage', supabase);
   if (authError || !user) return { error: authError || 'Unauthorized' };
 
   const supabaseAdmin = createAdminClient(
@@ -226,14 +243,19 @@ export async function removeTeamMember(userId: string) {
 
   if (!targetProfile) return { error: 'User not found' };
 
-  // Last admin guard
+  // Only a superadmin can remove a superadmin.
+  if (targetProfile.role === 'superadmin' && !isSuperadmin(actorRole)) {
+    return { error: 'Only a superadmin can remove a superadmin.' };
+  }
+
+  // Last-administrator guard: never remove the final superadmin/admin.
   const { count: adminCount } = await supabaseAdmin
     .from('profiles')
     .select('*', { count: 'exact', head: true })
-    .eq('role', 'admin');
+    .in('role', ['superadmin', 'admin']);
 
-  if (targetProfile.role === 'admin' && adminCount !== null && adminCount <= 1) {
-    return { error: 'Cannot remove the last admin. Promote another user to admin first.' };
+  if (['superadmin', 'admin'].includes(targetProfile.role) && adminCount !== null && adminCount <= 1) {
+    return { error: 'Cannot remove the last administrator. Promote another user first.' };
   }
 
   // Nullify all FK references pointing to this user

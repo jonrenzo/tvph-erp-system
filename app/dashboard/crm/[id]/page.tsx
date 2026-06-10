@@ -90,7 +90,7 @@ async function CustomerDetailContent({
   if (error || !customer) notFound();
 
   const userRole = userProfile?.role || '';
-  const canManage = ['admin', 'commercial_manager'].includes(userRole);
+  const canManage = ['superadmin', 'admin', 'operations'].includes(userRole);
 
   const documentsWithUrls = await Promise.all((documents || []).map(async (doc: any) => {
     if (doc.file_url) {

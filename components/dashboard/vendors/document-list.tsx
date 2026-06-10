@@ -29,6 +29,7 @@ import {
   updateVendorDocumentVersion,
 } from "@/app/dashboard/vendors/actions";
 import { RequestDocumentsButton } from "./request-documents-button";
+import { hasCapability } from "@/lib/auth/roles";
 
 const DOCUMENT_TYPES = [
   { id: 'signed_nda', label: 'Signed NDA' },
@@ -99,7 +100,7 @@ export function DocumentList({ vendorId, documents, userRole }: { vendorId: stri
   const ndaApproved = ndaDoc?.status === 'approved';
   const ndaExpired = ndaDoc?.status === 'expired';
 
-  const isAdmin = userRole === 'admin';
+  const isAdmin = hasCapability(userRole, 'document.approve');
 
   const handleUpload = async (docType: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -318,7 +319,7 @@ export function DocumentList({ vendorId, documents, userRole }: { vendorId: stri
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-[#0a0a0a]/50 flex items-center justify-between">
           <h2 className="font-semibold text-slate-900 dark:text-white text-sm">Documents</h2>
           <div className="flex items-center gap-2">
-            {(userRole === 'admin' || userRole === 'procurement') && (
+            {hasCapability(userRole, 'email.send') && (
               <RequestDocumentsButton vendorId={vendorId} documents={documents} />
             )}
             <button

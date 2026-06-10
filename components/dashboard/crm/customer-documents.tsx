@@ -19,6 +19,7 @@ import {
   HardDrive,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { isAdminOrAbove } from "@/lib/auth/roles";
 import {
   uploadCustomerDocument,
   uploadCustomCustomerDocument,
@@ -211,7 +212,7 @@ export function CustomerDocuments({ customerId, documents, userRole }: { custome
     }
   };
 
-  const isAdmin = userRole === 'admin';
+  const isAdmin = isAdminOrAbove(userRole);
 
   const formatBytes = (bytes: number | null) => {
     if (!bytes || bytes === 0) return '—';

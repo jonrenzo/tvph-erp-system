@@ -64,7 +64,7 @@ async function CrmOpportunityDetailLoader({ paramsPromise }: { paramsPromise: Pr
 
   if (!opportunity) notFound();
 
-  const canManage = ['admin', 'commercial_manager'].includes(userData?.role || '');
+  const canManage = ['superadmin', 'admin', 'operations'].includes(userData?.role || '');
   const currentStatusLabel =
     stageOptions.find((stage) => stage.value === opportunity.stage)?.label || opportunity.stage.replace(/_/g, ' ');
 
