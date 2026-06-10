@@ -1,14 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Building2, Users, CreditCard, Save, Shield, Paintbrush, ShieldCheck } from "lucide-react";
+import { Building2, Users, CreditCard, Save, Shield, Paintbrush, ShieldCheck, BellRing } from "lucide-react";
 import { RbacView } from "@/components/dashboard/settings/rbac-view";
-import { updateOrganizationSettings, updateFinancialSettings, updateUserRole, forcePasswordReset, clearMustChangePassword } from "@/app/dashboard/settings/actions";
+import { updateOrganizationSettings, updateFinancialSettings, updateReminderSettings, updateUserRole, forcePasswordReset, clearMustChangePassword } from "@/app/dashboard/settings/actions";
 import { AddUserButton } from "@/components/dashboard/hr/add-user-button";
 import { RemoveTeamMemberButton } from "@/components/dashboard/settings/remove-team-member-button";
 import { AppearanceSettings } from "@/components/dashboard/settings/appearance-settings";
 
-export function SettingsTabs({ initialSettings, team, userRole }: { initialSettings: any, team: any[], userRole: string }) {
+export function SettingsTabs({ initialSettings, reminderDays = [30, 14, 7, 1], team, userRole }: { initialSettings: any, reminderDays?: number[], team: any[], userRole: string }) {
   const isAdmin = userRole === "admin";
   const [activeTab, setActiveTab] = useState(isAdmin ? "organization" : "access");
   const [isSaving, setIsSaving] = useState(false);
@@ -18,6 +18,7 @@ export function SettingsTabs({ initialSettings, team, userRole }: { initialSetti
       { id: "organization", label: "Organization", icon: Building2 },
       { id: "team", label: "Team Management", icon: Users },
       { id: "financials", label: "Financials", icon: CreditCard },
+      { id: "reminders", label: "Reminders", icon: BellRing },
       { id: "appearance", label: "Appearance", icon: Paintbrush },
     ] : []),
     { id: "access", label: isAdmin ? "Access Control" : "My Access", icon: ShieldCheck },
@@ -250,6 +251,50 @@ export function SettingsTabs({ initialSettings, team, userRole }: { initialSetti
                  {isSaving ? <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save className="h-4 w-4" />}
                  Update Financial Rules
                </button>
+            </div>
+          </form>
+        )}
+
+        {/* Reminders Tab */}
+        {activeTab === "reminders" && (
+          <form action={async (formData) => {
+            setIsSaving(true);
+            await updateReminderSettings(formData);
+            setIsSaving(false);
+          }} className="p-8 space-y-8">
+            <div className="max-w-xl space-y-6">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+                  Document Expiry Reminder Lead-Times (days)
+                </label>
+                <input
+                  name="reminder_days"
+                  defaultValue={reminderDays.join(", ")}
+                  placeholder="30, 14, 7, 1"
+                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:border-primary"
+                />
+                <p className="text-[11px] text-slate-400">
+                  Comma-separated days before a vendor document expires when a reminder
+                  email should be sent. A reminder on the expiry day itself is always sent.
+                </p>
+              </div>
+              <div className="p-4 bg-blue-50 dark:bg-blue-900/10 border border-blue-200/50 dark:border-blue-800/30 rounded-2xl flex gap-3">
+                <BellRing className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+                <p className="text-[10px] text-blue-800 dark:text-blue-400 leading-relaxed">
+                  The scheduled job runs daily and emails the vendor contact plus the
+                  internal team. Each milestone is sent once per document.
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end pt-4 border-t border-slate-100 dark:border-slate-800/50">
+              <button
+                type="submit"
+                disabled={isSaving}
+                className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-6 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
+              >
+                {isSaving ? <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save className="h-4 w-4" />}
+                Update Reminder Settings
+              </button>
             </div>
           </form>
         )}

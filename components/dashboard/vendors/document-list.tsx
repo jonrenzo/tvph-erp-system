@@ -28,6 +28,7 @@ import {
   rollbackVendorDocumentVersion,
   updateVendorDocumentVersion,
 } from "@/app/dashboard/vendors/actions";
+import { RequestDocumentsButton } from "./request-documents-button";
 
 const DOCUMENT_TYPES = [
   { id: 'signed_nda', label: 'Signed NDA' },
@@ -316,13 +317,18 @@ export function DocumentList({ vendorId, documents, userRole }: { vendorId: stri
       <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-[#0a0a0a]/50 flex items-center justify-between">
           <h2 className="font-semibold text-slate-900 dark:text-white text-sm">Documents</h2>
-          <button
-            onClick={() => { setShowAddForm(!showAddForm); setApproveError(null); }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-primary/10 text-primary hover:bg-primary hover:text-white transition-all"
-          >
-            {showAddForm ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
-            {showAddForm ? 'Cancel' : 'Add Document'}
-          </button>
+          <div className="flex items-center gap-2">
+            {(userRole === 'admin' || userRole === 'procurement') && (
+              <RequestDocumentsButton vendorId={vendorId} documents={documents} />
+            )}
+            <button
+              onClick={() => { setShowAddForm(!showAddForm); setApproveError(null); }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-primary/10 text-primary hover:bg-primary hover:text-white transition-all"
+            >
+              {showAddForm ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+              {showAddForm ? 'Cancel' : 'Add Document'}
+            </button>
+          </div>
         </div>
 
         {showAddForm && (

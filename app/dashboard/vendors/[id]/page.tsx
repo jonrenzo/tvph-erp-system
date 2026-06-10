@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation';
 import { DocumentList } from '@/components/dashboard/vendors/document-list';
 import { VendorProfileDetails } from '@/components/dashboard/vendors/vendor-profile-details';
 import { VendorProjectsTab } from '@/components/dashboard/vendors/vendor-projects-tab';
+import { VendorEmailHistory } from '@/components/dashboard/vendors/email-history';
 import GenerateLinkButton from '@/components/dashboard/vendors/generate-link-button';
 import { Suspense } from 'react';
 import { RecentActivity } from '@/components/dashboard/shared/recent-activity';
@@ -116,6 +117,7 @@ async function VendorDetailContent({
     { id: 'documents', label: 'Accreditation Docs' },
     { id: 'purchase-orders', label: 'Purchase Orders' },
     { id: 'invoices', label: 'Invoices' },
+    { id: 'email-history', label: 'Email History' },
   ];
 
   return (
@@ -213,6 +215,10 @@ async function VendorDetailContent({
 
         {tab === 'documents' && (
           <DocumentList vendorId={vendor.id} documents={documentsWithUrls || []} userRole={userRole} />
+        )}
+
+        {tab === 'email-history' && (
+          <VendorEmailHistory vendorId={vendor.id} />
         )}
 
         {tab === 'purchase-orders' && (

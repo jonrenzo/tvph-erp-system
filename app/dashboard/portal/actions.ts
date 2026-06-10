@@ -1,9 +1,8 @@
 "use server";
 
-import crypto from "crypto";
 import { createClient } from "@/utils/supabase/server";
 import { requireCapability } from "@/lib/auth/permissions";
-import { headers } from "next/headers";
+import { createPortalLink } from "@/lib/portal/links";
 
 export async function generateMagicLink(
   entityId: string,
@@ -14,31 +13,15 @@ export async function generateMagicLink(
   // Require write capability to generate links
   const capability = entityType === "vendor" ? "vendor.write" : "crm.write";
   const { user, error: authError } = await requireCapability(capability, supabase);
-  
+
   if (authError || !user) {
     return { error: authError || "Unauthorized" };
   }
 
-  const token = crypto.randomBytes(32).toString("hex");
-  const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + expiresInDays);
-
-  const { error } = await supabase.from("magic_links").insert({
-    token,
-    entity_id: entityId,
-    entity_type: entityType,
-    expires_at: expiresAt.toISOString(),
-  });
-
-  if (error) {
-    return { error: error.message };
+  const result = await createPortalLink(entityType, entityId, expiresInDays);
+  if ("error" in result) {
+    return { error: result.error };
   }
 
-  // Dynamically resolve base URL from request headers (auto-handles localhost vs Vercel domains)
-  const headersList = await headers();
-  const host = headersList.get("host") || "localhost:3000";
-  const protocol = host.includes("localhost") ? "http" : "https";
-  const portalUrl = `${protocol}://${host}/portal/upload/${token}`;
-
-  return { success: true, portalUrl };
+  return { success: true, portalUrl: result.portalUrl };
 }

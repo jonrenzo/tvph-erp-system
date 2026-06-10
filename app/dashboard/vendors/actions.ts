@@ -8,6 +8,10 @@ import { createNotification } from "@/utils/notifications";
 import { recordAuditLog } from "@/utils/audit";
 import { parseFile, buildColumnMap } from "@/utils/import-export";
 import { requireCapability } from "@/lib/auth/permissions";
+import { createPortalLink } from "@/lib/portal/links";
+import { docTypeLabel } from "@/lib/vendors/document-types";
+import { sendEmail, internalCc } from "@/lib/email/send";
+import { DocRequestEmail } from "@/lib/email/templates/doc-request";
 
 export async function approveVendorDocument(
   vendorId: string,
@@ -851,5 +855,81 @@ export async function rollbackVendorDocumentVersion(
   });
 
   if (doc?.vendor_id) revalidatePath(`/dashboard/vendors/${doc.vendor_id}`);
+  return { success: true };
+}
+
+/**
+ * Emails a vendor an on-demand request to submit/update a set of documents,
+ * including a checklist and a fresh magic-link to the upload portal.
+ */
+export async function requestVendorDocuments(
+  vendorId: string,
+  docTypes: string[],
+  note?: string,
+) {
+  const supabase = await createClient();
+  const { user, profile, error: authError } = await requireCapability("email.send", supabase);
+  if (authError || !user) return { error: authError || "Unauthorized" };
+
+  if (!docTypes || docTypes.length === 0) {
+    return { error: "Select at least one document to request." };
+  }
+
+  const { data: vendor } = await supabase
+    .from("vendors")
+    .select("name, contact_person, contact_email")
+    .eq("id", vendorId)
+    .single();
+
+  if (!vendor) return { error: "Vendor not found." };
+  if (!vendor.contact_email) {
+    return { error: "This vendor has no contact email on file." };
+  }
+
+  const link = await createPortalLink("vendor", vendorId);
+  if ("error" in link) return { error: link.error };
+
+  const labels = docTypes.map((t) => docTypeLabel(t));
+
+  const result = await sendEmail({
+    kind: "doc_request",
+    refId: vendorId,
+    to: [vendor.contact_email],
+    cc: internalCc(profile?.email),
+    subject: `Document submission request from TVPH`,
+    react: DocRequestEmail({
+      vendorName: vendor.name || "Vendor",
+      vendorContact: vendor.contact_person,
+      documentLabels: labels,
+      portalUrl: link.portalUrl,
+      senderName: profile?.full_name,
+      note: note || null,
+    }),
+    createdBy: user.id,
+    vendorId,
+  });
+
+  await recordAuditLog({
+    entity_type: "vendor",
+    entity_id: vendorId,
+    action: "UPDATE",
+    changes: { after: { documents_requested: docTypes, email_status: result.status } },
+    performed_by: user.id,
+  });
+
+  if (result.status === "sent") {
+    await createNotification({
+      type: "vendor",
+      title: "✉️ Documents requested",
+      message: `Requested ${labels.length} document(s) from ${vendor.name}.`,
+      link: `/dashboard/vendors/${vendorId}`,
+      created_by: user.id,
+    });
+  }
+
+  revalidatePath(`/dashboard/vendors/${vendorId}`);
+  if (result.status === "failed") {
+    return { error: result.error || "Failed to send email." };
+  }
   return { success: true };
 }

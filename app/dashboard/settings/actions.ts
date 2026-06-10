@@ -76,6 +76,49 @@ export async function updateFinancialSettings(formData: FormData) {
   return { success: true };
 }
 
+export async function updateReminderSettings(formData: FormData) {
+  const supabase = await createClient();
+  const { user, error: authError } = await requireCapability('settings.manage', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
+
+  // Parse a comma-separated list of positive day offsets, e.g. "30, 14, 7, 1".
+  const raw = (formData.get('reminder_days') as string) || '';
+  const reminder_days = Array.from(
+    new Set(
+      raw
+        .split(',')
+        .map((s) => parseInt(s.trim(), 10))
+        .filter((n) => Number.isInteger(n) && n > 0),
+    ),
+  ).sort((a, b) => b - a);
+
+  if (reminder_days.length === 0) {
+    return { error: 'Enter at least one positive number of days (e.g. 30, 14, 7, 1).' };
+  }
+
+  const { error } = await supabase
+    .from('email_settings')
+    .upsert({
+      id: 1,
+      reminder_days,
+      updated_at: new Date().toISOString(),
+      updated_by: user.id,
+    });
+
+  if (error) return { error: error.message };
+
+  await recordAuditLog({
+    entity_type: 'system_settings',
+    entity_id: '1',
+    action: 'UPDATE',
+    changes: { after: { reminder_days } },
+    performed_by: user.id,
+  });
+
+  revalidatePath('/dashboard/settings');
+  return { success: true, reminder_days };
+}
+
 export async function updateUserRole(userId: string, role: string) {
   const supabase = await createClient();
   const { user, error: authError } = await requireCapability('user.manage', supabase);

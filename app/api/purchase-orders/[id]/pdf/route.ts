@@ -1,6 +1,5 @@
 import { NextRequest } from 'next/server'
-import { fetchPoData } from '@/lib/pdf/fetchPoData'
-import { createPoDocument } from '@/lib/pdf/generator'
+import { renderPoPdf } from '@/lib/pdf/renderPoPdf'
 import { getCurrentProfile } from '@/lib/auth/permissions'
 
 export async function GET(
@@ -15,14 +14,13 @@ export async function GET(
 
     const { id } = await params
 
-    const poData = await fetchPoData(id)
+    const rendered = await renderPoPdf(id)
 
-    if (!poData) {
+    if (!rendered) {
       return new Response('Purchase order not found', { status: 404 })
     }
 
-    const buffer = await createPoDocument(poData)
-    const filename = `${poData.po_number.replace(/[^a-zA-Z0-9-]/g, '_')}.pdf`
+    const { buffer, filename } = rendered
 
     return new Response(buffer as unknown as BodyInit, {
       status: 200,

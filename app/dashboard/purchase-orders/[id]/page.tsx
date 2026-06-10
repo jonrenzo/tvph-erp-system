@@ -26,7 +26,8 @@ import { Suspense } from "react";
 import { POProjectAssigner } from "@/components/dashboard/purchase-orders/po-project-assigner";
 import { RecentActivity } from "@/components/dashboard/shared/recent-activity";
 import { PODownloadDropdown } from "@/components/dashboard/purchase-orders/po-download-dropdown";
-import { getCurrentProfile } from "@/lib/auth/permissions";
+import { PoResendButton } from "@/components/dashboard/purchase-orders/po-resend-button";
+import { getCurrentProfile, hasCapability } from "@/lib/auth/permissions";
 
 export const unstable_instant = { 
   prefetch: 'static',
@@ -95,6 +96,18 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
     .select("*")
     .eq("po_id", po.id)
     .order("sn");
+
+  // Latest PO email attempt — drives the "email not sent" banner.
+  const { data: lastPoEmail } = await supabase
+    .from("email_log")
+    .select("status, error, created_at")
+    .eq("kind", "po_issued")
+    .eq("ref_id", po.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const canSendEmail = hasCapability(currentRole, "email.send");
 
   const invoiceIds = invoices?.map((i) => i.id) || [];
 
@@ -197,6 +210,9 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
               </button>
             </form>
           )}
+          {po.status !== "draft" && canSendEmail && (
+            <PoResendButton poId={po.id} />
+          )}
           <PODownloadDropdown poId={po.id} />
           <Link
             href={`/dashboard/purchase-orders/${po.id}/editor`}
@@ -207,6 +223,22 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
           </Link>
         </div>
       </div>
+
+      {/* Email-failed banner — the PO was issued but the vendor email didn't send */}
+      {lastPoEmail?.status === "failed" && (
+        <div className="flex items-start gap-3 p-4 rounded-2xl bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/50">
+          <Mail className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+              Vendor email was not sent
+            </p>
+            <p className="text-xs text-amber-600/80 dark:text-amber-400/60 mt-1">
+              {lastPoEmail.error || "The last attempt to email this PO to the vendor failed."}
+              {canSendEmail ? " Use “Resend to Vendor” above to try again." : ""}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Waiver Banners */}
       {isPendingApproval && (

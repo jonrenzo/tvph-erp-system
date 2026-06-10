@@ -29,13 +29,21 @@ async function SettingsContent() {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  const [{ data: settings }, { data: team }, { data: profile }] = await Promise.all([
+  const [{ data: settings }, { data: emailSettings }, { data: team }, { data: profile }] = await Promise.all([
     supabase.from('system_settings').select('*').eq('id', 1).single(),
+    supabase.from('email_settings').select('reminder_days').eq('id', 1).maybeSingle(),
     supabase.from('profiles').select('*').order('full_name'),
     user ? supabase.from('profiles').select('role').eq('id', user.id).single() : Promise.resolve({ data: null }),
   ]);
 
-  return <SettingsTabs initialSettings={settings} team={team || []} userRole={profile?.role || 'user'} />;
+  return (
+    <SettingsTabs
+      initialSettings={settings}
+      reminderDays={emailSettings?.reminder_days ?? [30, 14, 7, 1]}
+      team={team || []}
+      userRole={profile?.role || 'user'}
+    />
+  );
 }
 
 function SettingsSkeleton() {

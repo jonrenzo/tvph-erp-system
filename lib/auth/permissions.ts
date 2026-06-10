@@ -20,6 +20,7 @@ export type Capability =
   | "crm.write"
   | "document.approve"
   | "document.write"
+  | "email.send"
   | "export.crm"
   | "export.financial"
   | "export.project"
@@ -54,6 +55,7 @@ const CAPABILITY_ROLES = {
   "crm.write": ["admin", "commercial_manager"],
   "document.approve": ["admin"],
   "document.write": ["admin"],
+  "email.send": ["admin", "procurement"],
   "export.crm": ["admin", "commercial_manager"],
   "export.financial": ["admin", "finance"],
   "export.project": ["admin", "project_manager", "commercial_manager"],

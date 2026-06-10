@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation';
 import { createNotification } from '@/utils/notifications';
 import { recordAuditLog } from '@/utils/audit';
 import { requireCapability, hasCapability } from '@/lib/auth/permissions';
+import { sendPoIssuedEmail } from '@/lib/email/po';
 
 export async function createPurchaseOrder(prevState: any, formData: FormData) {
   const supabase = await createClient();
@@ -228,7 +229,46 @@ export async function updatePOStatus(poId: string, status: string) {
     created_by: user.id
   });
 
+  // Auto-email the vendor when the PO is issued. Decoupled: a failed send never
+  // blocks issuing — it's logged in email_log and surfaced for a manual resend.
+  let emailWarning: string | undefined;
+  if (status === 'issued') {
+    const result = await sendPoIssuedEmail(poId, { actorId: user.id });
+    if (result.status === 'failed') {
+      emailWarning = result.error || 'The PO was issued but the email could not be sent.';
+      await createNotification({
+        type: 'po',
+        title: '⚠️ PO email not sent',
+        message: `${emailWarning} Open the PO to resend it to the vendor.`,
+        link: `/dashboard/purchase-orders/${poId}`,
+        created_by: user.id
+      });
+    }
+  }
+
   revalidatePath(`/dashboard/purchase-orders/${poId}`);
+  return { success: true, emailWarning };
+}
+
+export async function resendPurchaseOrderEmail(poId: string) {
+  const supabase = await createClient();
+  const { user, error: authError } = await requireCapability('email.send', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
+
+  const result = await sendPoIssuedEmail(poId, { actorId: user.id });
+
+  await recordAuditLog({
+    entity_type: 'purchase_order',
+    entity_id: poId,
+    action: 'UPDATE',
+    changes: { after: { email_resent: result.status === 'sent', email_error: result.error ?? null } },
+    performed_by: user.id
+  });
+
+  revalidatePath(`/dashboard/purchase-orders/${poId}`);
+  if (result.status === 'failed') {
+    return { error: result.error || 'Failed to send email.' };
+  }
   return { success: true };
 }
 
