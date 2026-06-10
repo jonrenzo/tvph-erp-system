@@ -121,13 +121,23 @@ async function syncMicrosoftProfile(
     if (avatarUrl) updates.avatar_url = avatarUrl;
     await service.from("profiles").update(updates).eq("id", userId);
   } else {
-    // First Microsoft SSO login — create profile with default role
-    await service.from("profiles").insert({
+    // First Microsoft SSO login — create profile with default (read-only) role
+    const { error: insertError } = await service.from("profiles").insert({
       id: userId,
       email,
       full_name: fullName,
-      role: "user",
+      role: "viewer",
       ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
     });
+
+    // Ping the admin (Telegram) to assign the real role. Never blocks login.
+    if (!insertError) {
+      try {
+        const { sendNewUserRoleAlert } = await import("@/lib/telegram/notify");
+        await sendNewUserRoleAlert({ userId, email, fullName });
+      } catch (e) {
+        console.error("[MSO sync] role alert failed:", e);
+      }
+    }
   }
 }

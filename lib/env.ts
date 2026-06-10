@@ -17,6 +17,11 @@ const envSchema = z.object({
   EMAIL_CC_INTERNAL: z.enum(["true", "false"]).optional(),
   // Shared secret guarding the scheduled reminder route (pg_cron Bearer token).
   CRON_SECRET: z.string().min(1).optional(),
+  // Telegram bot (new-user / existing-user role assignment). Feature no-ops if
+  // these are unset.
+  TELEGRAM_BOT_TOKEN: z.string().min(1).optional(),
+  TELEGRAM_ADMIN_CHAT_ID: z.string().min(1).optional(),
+  TELEGRAM_WEBHOOK_SECRET: z.string().min(1).optional(),
 });
 
 export const env = envSchema.parse({
@@ -29,4 +34,7 @@ export const env = envSchema.parse({
   EMAIL_REPLY_TO: process.env.EMAIL_REPLY_TO,
   EMAIL_CC_INTERNAL: process.env.EMAIL_CC_INTERNAL,
   CRON_SECRET: process.env.CRON_SECRET,
+  TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
+  TELEGRAM_ADMIN_CHAT_ID: process.env.TELEGRAM_ADMIN_CHAT_ID,
+  TELEGRAM_WEBHOOK_SECRET: process.env.TELEGRAM_WEBHOOK_SECRET,
 });
