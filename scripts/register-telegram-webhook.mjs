@@ -37,6 +37,7 @@ const res = await api("setWebhook", {
   url: `${base}/api/telegram/webhook`,
   secret_token: secret,
   allowed_updates: ["message", "callback_query"],
+  drop_pending_updates: true,
 });
 console.log("setWebhook:", res);
 console.log("getWebhookInfo:", await api("getWebhookInfo", {}));
