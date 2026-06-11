@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   const { data: projects, error } = await supabase
     .from("projects")
     .select(`
-      id, name, description, contract_url, status, created_at,
+      id, name, description, contract_file_name, status, created_at,
       project_vendors (
         vendors ( name )
       )
@@ -39,7 +39,7 @@ export async function GET(request: Request) {
     rows.push({
       "Project Name": p.name,
       Description: p.description || "",
-      "Contract URL": p.contract_url || "",
+      "Contract Document": p.contract_file_name || "",
       Status: p.status || "active",
       "Linked Vendors": vendorNames,
     });

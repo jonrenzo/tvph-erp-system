@@ -52,6 +52,17 @@ export async function extractDocumentMetadata(
       "net_income": "Net income value (numeric)",
       "auditor_name": "Name of the auditing firm or CPA"
     }`;
+  } else if (docType === "vendor_invoice") {
+    prompt = `Extract the following details from this vendor invoice or receipt:
+    {
+      "invoice_number": "The invoice or receipt number",
+      "amount": "The total amount due or payable (numeric only, no currency symbols or commas)",
+      "invoice_date": "The invoice issue date in YYYY-MM-DD format",
+      "due_date": "The payment due date in YYYY-MM-DD format, or null if not stated",
+      "vendor_name": "The name of the vendor or issuing company",
+      "vendor_tin": "The vendor's Tax Identification Number (TIN), or null if not found",
+      "po_number": "A purchase order number referenced on the invoice, or null if absent"
+    }`;
   } else {
     prompt = `Extract standard document details:
     {

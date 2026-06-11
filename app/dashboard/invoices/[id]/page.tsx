@@ -1,11 +1,14 @@
 import Link from 'next/link';
 import { createClient } from '@/utils/supabase/server';
-import { ArrowLeft, Building2, Calendar, FileText, CreditCard, Clock, ExternalLink, History, Plus, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Building2, FileText, CreditCard, History, ExternalLink, AlertCircle, Clock, Paperclip } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import { RecordPaymentModal } from '@/components/dashboard/invoices/record-payment-modal';
+import { AttachPaymentDocModal } from '@/components/dashboard/invoices/attach-payment-doc-modal';
 import { Suspense } from 'react';
+import { getCurrentProfile, hasCapability } from '@/lib/auth/permissions';
+import { signDocUrls } from '@/utils/storage';
 
-export const unstable_instant = { 
+export const unstable_instant = {
   prefetch: 'static',
   samples: [{ params: { id: 'sample-id' } }]
 };
@@ -22,38 +25,50 @@ async function InvoiceDetailContent({ paramsPromise }: { paramsPromise: Promise<
   const params = await paramsPromise;
   const supabase = await createClient();
 
-  // Both queries only depend on params.id — run in parallel
   const [
     { data: invoice, error },
     { data: payments },
+    { role },
   ] = await Promise.all([
     supabase
       .from('service_invoices')
-      .select(`
-        *,
-        vendors (name),
-        purchase_orders (po_number, amount)
-      `)
+      .select(`*, vendors (name), purchase_orders (po_number, amount)`)
       .eq('id', params.id)
       .single(),
     supabase
       .from('payments')
-      .select('id, payment_date, payment_type, reference_number, amount_paid')
+      .select(`
+        id, payment_date, payment_type, reference_number, amount_paid,
+        payment_documents (id, doc_type, label, file_url, file_name)
+      `)
       .eq('invoice_id', params.id)
       .order('payment_date', { ascending: false }),
+    getCurrentProfile(supabase),
   ]);
 
-  if (error || !invoice) {
-    notFound();
-  }
+  if (error || !invoice) notFound();
 
-  const totalPaid = payments?.reduce((sum, p) => sum + Number(p.amount_paid), 0) || 0;
+  const canPay = role ? hasCapability(role, 'invoice.pay') : false;
+
+  // Sign all payment document URLs in parallel
+  const paymentsWithSignedDocs = await Promise.all(
+    (payments ?? []).map(async (p: any) => {
+      const liveDocs = (p.payment_documents ?? []).filter((d: any) => !d.deleted_at);
+      const signedDocs = await signDocUrls(supabase, 'vendor-documents', liveDocs);
+      return { ...p, payment_documents: signedDocs };
+    })
+  );
+
+  const totalPaid = paymentsWithSignedDocs.reduce((sum, p) => sum + Number(p.amount_paid), 0);
   const balance = Number(invoice.amount) - totalPaid;
   const isOverpaid = totalPaid > Number(invoice.amount);
 
+  // Sign the invoice's original file URL if present
+  const [signedInvoiceRecord] = await signDocUrls(supabase, 'vendor-documents', invoice.file_url ? [{ file_url: invoice.file_url as string }] : []);
+  const invoiceFileUrl = signedInvoiceRecord?.file_url ?? invoice.file_url;
+
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      {/* Overpayment Warning */}
       {isOverpaid && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-2xl p-4 flex items-center gap-3 text-red-700 dark:text-red-400">
           <AlertCircle className="h-5 w-5 shrink-0" />
@@ -94,24 +109,24 @@ async function InvoiceDetailContent({ paramsPromise }: { paramsPromise: Promise<
         </div>
 
         <div className="flex items-center gap-3 md:ml-auto">
-          {invoice.file_url && (
-            <a 
-              href={invoice.file_url} 
-              target="_blank" 
+          {invoiceFileUrl && (
+            <a
+              href={invoiceFileUrl}
+              target="_blank"
               className="inline-flex items-center gap-2 bg-white dark:bg-[#0a0a0a] border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm"
             >
               <ExternalLink className="h-4 w-4" />
               View Original
             </a>
           )}
-          {balance > 0 && (
+          {balance > 0 && canPay && (
             <RecordPaymentModal invoiceId={invoice.id} remainingBalance={balance} />
           )}
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Invoice Summary Card */}
+        {/* Invoice Summary + Payment History */}
         <div className="lg:col-span-2 space-y-8">
           <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
             <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-slate-100 dark:divide-slate-800/50">
@@ -134,7 +149,7 @@ async function InvoiceDetailContent({ paramsPromise }: { paramsPromise: Promise<
 
           {/* Payment History */}
           <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-[#0a0a0a]/50 flex items-center justify-between">
+            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-[#0a0a0a]/50 flex items-center">
               <h2 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
                 <History className="h-5 w-5 text-primary" /> Payment History
               </h2>
@@ -147,32 +162,64 @@ async function InvoiceDetailContent({ paramsPromise }: { paramsPromise: Promise<
                     <th className="px-6 py-3 font-semibold">Type</th>
                     <th className="px-6 py-3 font-semibold">Reference</th>
                     <th className="px-6 py-3 font-semibold">Amount</th>
+                    <th className="px-6 py-3 font-semibold">Documents</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {payments?.length === 0 ? (
+                  {paymentsWithSignedDocs.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="px-6 py-12 text-center text-slate-400 italic">
+                      <td colSpan={5} className="px-6 py-12 text-center text-slate-400 italic">
                         No payments recorded yet for this invoice.
                       </td>
                     </tr>
                   ) : (
-                    payments?.map((p: any) => (
-                      <tr key={p.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors">
-                        <td className="px-6 py-4 text-slate-900 dark:text-white font-medium">
-                          {new Date(p.payment_date).toLocaleDateString()}
-                        </td>
-                        <td className="px-6 py-4 capitalize text-slate-600 dark:text-slate-400">
-                          {p.payment_type.replace('_', ' ')}
-                        </td>
-                        <td className="px-6 py-4 font-mono text-xs text-slate-500">
-                          {p.reference_number || 'N/A'}
-                        </td>
-                        <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">
-                          ₱{Number(p.amount_paid).toLocaleString()}
-                        </td>
-                      </tr>
-                    ))
+                    paymentsWithSignedDocs.map((p: any) => {
+                      const hasOR = p.payment_documents?.some((d: any) => d.doc_type === 'official_receipt');
+                      return (
+                        <tr key={p.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors">
+                          <td className="px-6 py-4 text-slate-900 dark:text-white font-medium whitespace-nowrap">
+                            {new Date(p.payment_date).toLocaleDateString()}
+                          </td>
+                          <td className="px-6 py-4 capitalize text-slate-600 dark:text-slate-400">
+                            {p.payment_type.replace('_', ' ')}
+                          </td>
+                          <td className="px-6 py-4 font-mono text-xs text-slate-500">
+                            {p.reference_number || 'N/A'}
+                          </td>
+                          <td className="px-6 py-4 font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                            ₱{Number(p.amount_paid).toLocaleString()}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {p.payment_documents?.map((doc: any) => (
+                                <a
+                                  key={doc.id}
+                                  href={doc.file_url}
+                                  target="_blank"
+                                  title={doc.label || doc.doc_type.replace(/_/g, ' ')}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-primary/10 hover:text-primary transition-colors"
+                                >
+                                  <Paperclip className="h-2.5 w-2.5" />
+                                  {doc.doc_type === 'payment_voucher' ? 'PV' :
+                                   doc.doc_type === 'proof_of_payment' ? 'Proof' :
+                                   doc.doc_type === 'official_receipt' ? 'OR' :
+                                   doc.label ?? 'Doc'}
+                                </a>
+                              ))}
+                              {!hasOR && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800/50">
+                                  <Clock className="h-2.5 w-2.5" />
+                                  Awaiting OR
+                                </span>
+                              )}
+                              {!hasOR && canPay && (
+                                <AttachPaymentDocModal paymentId={p.id} />
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>

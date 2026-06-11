@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useActionState } from "react";
-import { Save, Building2, Calendar, FileText, Upload, Link as LinkIcon } from "lucide-react";
-import { createInvoice } from "@/app/dashboard/invoices/actions";
+import { useState, useActionState, useTransition } from "react";
+import { Save, Building2, Calendar, FileText, Upload, Link as LinkIcon, AlertTriangle } from "lucide-react";
+import { createInvoice, discardStagedInvoiceFile } from "@/app/dashboard/invoices/actions";
+import { InvoiceOcrUpload } from "@/components/dashboard/invoices/invoice-ocr-upload";
 
 interface Vendor {
   id: string;
@@ -16,12 +17,69 @@ interface PO {
   amount: number;
 }
 
+interface StagedExtraction {
+  stagedPath: string;
+  stagedFileName: string;
+  vendorMatch: { id: string; name: string; matchedBy: "tin" | "name" } | null;
+  ocrWarning?: string;
+}
+
 export function CreateInvoiceForm({ vendors, pos }: { vendors: Vendor[], pos: PO[] }) {
   const [state, formAction, isPending] = useActionState(createInvoice, null);
+  const [, startDiscard] = useTransition();
+
   const [selectedVendor, setSelectedVendor] = useState("");
-  
-  // Filter POs based on selected vendor
+  const [selectedPo, setSelectedPo] = useState("");
+  const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [amount, setAmount] = useState("");
+  const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split("T")[0]);
+  const [dueDate, setDueDate] = useState("");
+
+  const [staged, setStaged] = useState<StagedExtraction | null>(null);
+  const [vendorHint, setVendorHint] = useState<string | null>(null);
+
   const filteredPOs = pos.filter(po => po.vendor_id === selectedVendor);
+
+  function handleExtracted(result: any) {
+    const { stagedPath, stagedFileName, extracted, vendorMatch, poMatch, ocrWarning } = result;
+    setStaged({ stagedPath, stagedFileName, vendorMatch, ocrWarning });
+
+    if (extracted) {
+      if (extracted.invoice_number) setInvoiceNumber(extracted.invoice_number);
+      if (extracted.amount != null) {
+        const cleaned = String(extracted.amount).replace(/[^\d.]/g, "");
+        const parsed = parseFloat(cleaned);
+        if (!isNaN(parsed)) setAmount(String(parsed));
+      }
+      if (extracted.invoice_date) setInvoiceDate(extracted.invoice_date);
+      if (extracted.due_date) setDueDate(extracted.due_date);
+    }
+
+    if (vendorMatch) {
+      setSelectedVendor(vendorMatch.id);
+      setVendorHint(
+        vendorMatch.matchedBy === "tin"
+          ? `Suggested vendor (TIN match): ${vendorMatch.name}`
+          : `Suggested vendor (name match): ${vendorMatch.name}`
+      );
+    } else {
+      setVendorHint(null);
+    }
+
+    // Pre-select PO only if it belongs to the matched vendor
+    if (poMatch && vendorMatch && poMatch.vendor_id === vendorMatch.id) {
+      const matchedPO = pos.find(p => p.id === poMatch.id);
+      if (matchedPO) setSelectedPo(poMatch.id);
+    }
+  }
+
+  function handleCleared() {
+    if (!staged) return;
+    const path = staged.stagedPath;
+    setStaged(null);
+    setVendorHint(null);
+    startDiscard(async () => { await discardStagedInvoiceFile(path); });
+  }
 
   return (
     <form action={formAction} className="space-y-6">
@@ -29,6 +87,21 @@ export function CreateInvoiceForm({ vendors, pos }: { vendors: Vendor[], pos: PO
         <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 text-sm font-medium">
           {state.error}
         </div>
+      )}
+
+      {staged?.ocrWarning && (
+        <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 text-amber-700 dark:text-amber-400 text-sm">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          {staged.ocrWarning}
+        </div>
+      )}
+
+      {/* Staged file hidden inputs */}
+      {staged && (
+        <>
+          <input type="hidden" name="staged_file_path" value={staged.stagedPath} />
+          <input type="hidden" name="staged_file_name" value={staged.stagedFileName} />
+        </>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -39,75 +112,94 @@ export function CreateInvoiceForm({ vendors, pos }: { vendors: Vendor[], pos: PO
               <FileText className="h-5 w-5 text-primary" />
               <h2 className="font-semibold text-slate-900 dark:text-white">Billing Details</h2>
             </div>
-            
-            <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <div className="space-y-2 sm:col-span-2">
-                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Vendor <span className="text-red-500">*</span>
-                </label>
-                <select
-                  name="vendor_id"
-                  required
-                  value={selectedVendor}
-                  onChange={(e) => setSelectedVendor(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary appearance-none"
-                >
-                  <option value="">Select vendor</option>
-                  {vendors.map((v) => (
-                    <option key={v.id} value={v.id}>{v.name}</option>
-                  ))}
-                </select>
-              </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Invoice Number <span className="text-red-500">*</span>
-                </label>
-                <input
-                  name="invoice_number"
-                  type="text"
-                  required
-                  className="w-full px-4 py-2.5 bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                  placeholder="INV-001"
-                />
-              </div>
+            <div className="p-6 space-y-4">
+              {/* OCR Upload */}
+              <InvoiceOcrUpload
+                onExtracted={handleExtracted}
+                onCleared={handleCleared}
+                stagedFileName={staged?.stagedFileName}
+              />
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Amount (PHP) <span className="text-red-500">*</span>
-                </label>
-                <input
-                  name="amount"
-                  type="number"
-                  step="0.01"
-                  required
-                  className="w-full px-4 py-2.5 bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                  placeholder="0.00"
-                />
-              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="space-y-2 sm:col-span-2">
+                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Vendor <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    name="vendor_id"
+                    required
+                    value={selectedVendor}
+                    onChange={(e) => { setSelectedVendor(e.target.value); setVendorHint(null); setSelectedPo(""); }}
+                    className="w-full px-4 py-2.5 bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary appearance-none"
+                  >
+                    <option value="">Select vendor</option>
+                    {vendors.map((v) => (
+                      <option key={v.id} value={v.id}>{v.name}</option>
+                    ))}
+                  </select>
+                  {vendorHint && (
+                    <p className="text-[10px] text-primary italic">{vendorHint}</p>
+                  )}
+                </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Invoice Date <span className="text-red-500">*</span>
-                </label>
-                <input
-                  name="invoice_date"
-                  type="date"
-                  required
-                  defaultValue={new Date().toISOString().split('T')[0]}
-                  className="w-full px-4 py-2.5 bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                />
-              </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Invoice Number <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    name="invoice_number"
+                    type="text"
+                    required
+                    value={invoiceNumber}
+                    onChange={(e) => setInvoiceNumber(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                    placeholder="INV-001"
+                  />
+                </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Due Date
-                </label>
-                <input
-                  name="due_date"
-                  type="date"
-                  className="w-full px-4 py-2.5 bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                />
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Amount (PHP) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    name="amount"
+                    type="number"
+                    step="0.01"
+                    required
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                    placeholder="0.00"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Invoice Date <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    name="invoice_date"
+                    type="date"
+                    required
+                    value={invoiceDate}
+                    onChange={(e) => setInvoiceDate(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Due Date
+                  </label>
+                  <input
+                    name="due_date"
+                    type="date"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -135,6 +227,8 @@ export function CreateInvoiceForm({ vendors, pos }: { vendors: Vendor[], pos: PO
               <select
                 name="po_id"
                 disabled={!selectedVendor}
+                value={selectedPo}
+                onChange={(e) => setSelectedPo(e.target.value)}
                 className="w-full mt-2 px-4 py-2.5 bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary disabled:opacity-50"
               >
                 <option value="">No PO Linked</option>
@@ -148,20 +242,23 @@ export function CreateInvoiceForm({ vendors, pos }: { vendors: Vendor[], pos: PO
             </div>
           </div>
 
-          <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-[#0a0a0a]/50 flex items-center gap-3">
-              <Upload className="h-5 w-5 text-primary" />
-              <h2 className="font-semibold text-slate-900 dark:text-white">Attachment</h2>
+          {!staged && (
+            <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+              <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-[#0a0a0a]/50 flex items-center gap-3">
+                <Upload className="h-5 w-5 text-primary" />
+                <h2 className="font-semibold text-slate-900 dark:text-white">Attachment</h2>
+              </div>
+              <div className="p-6">
+                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Invoice Scan (PDF/IMG)</label>
+                <p className="text-[10px] text-slate-400 mt-1 mb-2">Or use "Scan invoice" above to also extract data.</p>
+                <input
+                  name="file"
+                  type="file"
+                  className="text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                />
+              </div>
             </div>
-            <div className="p-6">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Invoice Scan (PDF/IMG)</label>
-              <input
-                name="file"
-                type="file"
-                className="mt-2 text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
-              />
-            </div>
-          </div>
+          )}
         </div>
       </div>
 

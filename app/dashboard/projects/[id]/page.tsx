@@ -2,6 +2,7 @@ import { createClient } from '@/utils/supabase/server';
 import { notFound } from 'next/navigation';
 import { ProjectDetailContent } from '@/components/dashboard/projects/project-detail-content';
 import { Suspense } from 'react';
+import { signDocUrl } from '@/utils/storage';
 
 export const unstable_instant = {
   prefetch: 'static',
@@ -53,13 +54,15 @@ async function ProjectDetailLoader({ paramsPromise }: { paramsPromise: Promise<{
 
   if (!project) notFound();
 
+  const signedProject = await signDocUrl(supabase, 'crm-documents', project);
+
   const linkedVendors = (projectVendors || []).map((pv: any) => pv.vendors).filter(Boolean);
   const linkedVendorIds = linkedVendors.map((v: any) => v.id);
   const availableVendors = (allVendors || []).filter((v: any) => !linkedVendorIds.includes(v.id));
 
   return (
     <ProjectDetailContent
-      project={project}
+      project={signedProject}
       pos={pos || []}
       linkedVendors={linkedVendors}
       availableVendors={availableVendors}
