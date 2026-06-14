@@ -5,6 +5,8 @@ import {
   CreditCard,
   AlertTriangle,
   ArrowUpRight,
+  ArrowDownLeft,
+  TrendingUp,
   Clock,
   History,
   ChevronDown,
@@ -88,6 +90,36 @@ function urgencyRowClass(days: number) {
   return "border-l-4 border-l-yellow-400 bg-yellow-50/20 dark:bg-yellow-950/10";
 }
 
+function StatChip({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: number;
+  color: "emerald" | "amber" | "red";
+}) {
+  const styles = {
+    emerald:
+      "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800",
+    amber:
+      "bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800",
+    red: "bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800",
+  };
+  return (
+    <div
+      className={`rounded-xl border px-3 py-2.5 ${styles[color]} flex flex-col gap-0.5`}
+    >
+      <span className="text-[10px] font-medium opacity-70 leading-tight">
+        {label}
+      </span>
+      <span className="text-sm font-bold tabular-nums leading-tight">
+        ₱{value.toLocaleString()}
+      </span>
+    </div>
+  );
+}
+
 async function DashboardContent() {
   const supabase = await createClient();
 
@@ -101,6 +133,12 @@ async function DashboardContent() {
   const sevenDayStr = sevenDaysFromNow.toISOString().split("T")[0];
   const futureStr = thirtyDaysFromNow.toISOString().split("T")[0];
 
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
+    .toISOString().split("T")[0];
+  const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0)
+    .toISOString().split("T")[0];
+  const monthLabel = today.toLocaleString("default", { month: "long", year: "numeric" });
+
   const [
     { count: pendingVendors },
     { data: activePOs },
@@ -110,6 +148,11 @@ async function DashboardContent() {
     { data: recentLogs },
     { data: nearDueInvoices },
     { data: nearDuePOs },
+    { data: vendorPaymentsThisMonth },
+    { data: apOverdueData },
+    { data: clientPaymentsThisMonth },
+    { data: arOutstandingData },
+    { data: clientTotalPayments },
   ] = await Promise.all([
     supabase
       .from("vendors")
@@ -146,6 +189,34 @@ async function DashboardContent() {
       .gte("due_date", todayStr)
       .lte("due_date", sevenDayStr)
       .order("due_date", { ascending: true }),
+    // Payment Overview queries
+    supabase
+      .from("payments")
+      .select("amount_paid")
+      .gte("payment_date", monthStart)
+      .lte("payment_date", monthEnd)
+      .is("deleted_at", null),
+    supabase
+      .from("service_invoices")
+      .select("amount")
+      .neq("status", "paid")
+      .lt("due_date", todayStr)
+      .is("deleted_at", null),
+    supabase
+      .from("client_payments")
+      .select("amount_paid")
+      .gte("payment_date", monthStart)
+      .lte("payment_date", monthEnd)
+      .is("deleted_at", null),
+    supabase
+      .from("client_invoices")
+      .select("amount, due_date")
+      .not("status", "in", '("paid","cancelled")')
+      .is("deleted_at", null),
+    supabase
+      .from("client_payments")
+      .select("amount_paid")
+      .is("deleted_at", null),
   ]);
 
   const totalPOCommitment =
@@ -155,6 +226,29 @@ async function DashboardContent() {
   const totalInvoiced =
     unpaidInvoices?.reduce((sum, inv) => sum + Number(inv.amount), 0) || 0;
   const outstandingLiability = Math.max(0, totalInvoiced - totalPaid);
+
+  // Payment Overview calculations
+  const apPaidThisMonth =
+    vendorPaymentsThisMonth?.reduce((sum, p) => sum + Number(p.amount_paid), 0) || 0;
+  const apOverdue =
+    apOverdueData?.reduce((sum, inv) => sum + Number(inv.amount), 0) || 0;
+  const apTotal = totalPaid + outstandingLiability;
+  const apSettledPct = apTotal > 0 ? (totalPaid / apTotal) * 100 : 0;
+
+  const arCollectedThisMonth =
+    clientPaymentsThisMonth?.reduce((sum, p) => sum + Number(p.amount_paid), 0) || 0;
+  const arOutstanding =
+    arOutstandingData?.reduce((sum, inv) => sum + Number(inv.amount), 0) || 0;
+  const arOverdue =
+    arOutstandingData
+      ?.filter((inv) => inv.due_date < todayStr)
+      .reduce((sum, inv) => sum + Number(inv.amount), 0) || 0;
+  const clientTotalPaid =
+    clientTotalPayments?.reduce((sum, p) => sum + Number(p.amount_paid), 0) || 0;
+  const arTotal = clientTotalPaid + arOutstanding;
+  const arSettledPct = arTotal > 0 ? (clientTotalPaid / arTotal) * 100 : 0;
+
+  const netCashFlow = arCollectedThisMonth - apPaidThisMonth;
 
   function daysUntil(dateStr: string) {
     const diff = new Date(dateStr).getTime() - new Date(todayStr).getTime();
@@ -359,6 +453,98 @@ async function DashboardContent() {
         ))}
       </div>
 
+      {/* ── PAYMENT OVERVIEW ── */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#071F15] shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-3">
+          <div className="p-1.5 rounded-lg bg-primary/10">
+            <TrendingUp className="h-4 w-4 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+              Payment Overview
+            </h2>
+            <p className="text-[10px] text-slate-400">{monthLabel}</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-slate-100 dark:divide-slate-800">
+          {/* AP — money out */}
+          <div className="p-5 space-y-4">
+            <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+              <ArrowDownLeft className="h-3.5 w-3.5 text-red-400" />
+              Accounts Payable — Vendor Payments
+            </h3>
+            <div className="grid grid-cols-3 gap-3">
+              <StatChip label="Paid this month" value={apPaidThisMonth} color="emerald" />
+              <StatChip label="Outstanding" value={outstandingLiability} color="amber" />
+              <StatChip label="Overdue" value={apOverdue} color="red" />
+            </div>
+            <div>
+              <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mb-1.5">
+                <span>Settlement rate (all-time)</span>
+                <span className="font-medium">{apSettledPct.toFixed(1)}%</span>
+              </div>
+              <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500 rounded-full transition-all duration-700"
+                  style={{ width: `${apSettledPct}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-[10px] text-slate-400 mt-1.5">
+                <span>₱{totalPaid.toLocaleString()} paid</span>
+                <span>₱{outstandingLiability.toLocaleString()} left</span>
+              </div>
+            </div>
+          </div>
+
+          {/* AR — money in */}
+          <div className="p-5 space-y-4">
+            <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+              <ArrowUpRight className="h-3.5 w-3.5 text-emerald-400" />
+              Accounts Receivable — Client Collections
+            </h3>
+            <div className="grid grid-cols-3 gap-3">
+              <StatChip label="Collected" value={arCollectedThisMonth} color="emerald" />
+              <StatChip label="Outstanding" value={arOutstanding} color="amber" />
+              <StatChip label="Overdue" value={arOverdue} color="red" />
+            </div>
+            <div>
+              <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mb-1.5">
+                <span>Collection rate (all-time)</span>
+                <span className="font-medium">{arSettledPct.toFixed(1)}%</span>
+              </div>
+              <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500 rounded-full transition-all duration-700"
+                  style={{ width: `${arSettledPct}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-[10px] text-slate-400 mt-1.5">
+                <span>₱{clientTotalPaid.toLocaleString()} collected</span>
+                <span>₱{arOutstanding.toLocaleString()} left</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Net cash flow strip */}
+        <div className="border-t border-slate-100 dark:border-slate-800 px-6 py-3 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/20">
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+            Net Cash Flow — {monthLabel}
+          </span>
+          <span
+            className={`text-sm font-bold tabular-nums ${
+              netCashFlow >= 0
+                ? "text-emerald-600 dark:text-emerald-400"
+                : "text-red-600 dark:text-red-400"
+            }`}
+          >
+            {netCashFlow >= 0 ? "+" : ""}₱
+            {Math.abs(netCashFlow).toLocaleString()}
+          </span>
+        </div>
+      </div>
+
       {/* ── ACTIVITY FEED (demoted, collapsible) ── */}
       <details className="group rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#071F15] overflow-hidden shadow-sm">
         <summary className="px-6 py-4 flex items-center justify-between cursor-pointer select-none list-none">
@@ -435,6 +621,7 @@ function DashboardSkeleton() {
           />
         ))}
       </div>
+      <div className="h-44 rounded-2xl bg-slate-100 dark:bg-slate-800/50" />
       <div className="h-16 rounded-2xl bg-slate-100 dark:bg-slate-800/50" />
     </div>
   );
