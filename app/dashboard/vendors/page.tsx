@@ -4,8 +4,9 @@ import { Plus, Building2, ChevronRight } from "lucide-react";
 import { Suspense } from "react";
 import { SearchInput } from "@/components/ui/search-input";
 import { StatusSelect } from "@/components/ui/status-select";
+import { SortColumnButton } from "@/components/ui/sort-column-button";
 import { Pagination } from "@/components/ui/pagination";
-import { LIST_PAGE_SIZE, parsePage, pageRange } from "@/components/ui/pagination-utils";
+import { parsePage, pageRange } from "@/components/ui/pagination-utils";
 import { VendorsTableBody } from "@/components/dashboard/vendors/vendors-table-body";
 import { ImportExportButtons } from "@/components/dashboard/import-export-buttons";
 import { importVendors } from "@/app/dashboard/vendors/actions";
@@ -13,13 +14,15 @@ import { isVendorProfileComplete, getVendorMissingFields } from "@/utils/complet
 import { Tooltip } from "@/components/ui/tooltip";
 import { TOTAL_REQUIRED_DOCS } from "@/lib/reports/compliance";
 
+const VENDORS_PAGE_SIZE = 10;
+
 export const unstable_instant = {
   prefetch: "static",
-  samples: [{ searchParams: { q: null, status: null, page: null } }],
+  samples: [{ searchParams: { q: null, status: null, sort: null, page: null } }],
 };
 
 export default function VendorsPage(props: {
-  searchParams?: Promise<{ q?: string; status?: string; page?: string }>;
+  searchParams?: Promise<{ q?: string; status?: string; sort?: string; page?: string }>;
 }) {
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -65,8 +68,9 @@ async function VendorsContent({
   const supabase = await createClient();
   const q = searchParams?.q || "";
   const statusFilter = searchParams?.status || "all";
+  const sort = searchParams?.sort as "asc" | "desc" | undefined;
   const page = parsePage(searchParams?.page);
-  const [from, to] = pageRange(page, LIST_PAGE_SIZE);
+  const [from, to] = pageRange(page, VENDORS_PAGE_SIZE);
 
   let query = supabase
     .from("vendors")
@@ -75,7 +79,7 @@ async function VendorsContent({
       { count: "exact" },
     )
     .is("deleted_at", null)
-    .order("created_at", { ascending: false });
+    .order(sort ? "name" : "created_at", { ascending: sort === "asc" ? true : sort === "desc" ? false : false });
 
   if (q) {
     query = query.ilike("name", `%${q}%`);
@@ -102,29 +106,31 @@ async function VendorsContent({
         />
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm text-left">
+      <div>
+        <table className="w-full table-fixed text-sm text-left">
           <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800/20 border-b border-slate-200 dark:border-slate-800">
             <tr>
-              <th className="px-6 py-4 font-semibold">Vendor Details</th>
-              <th className="px-6 py-4 font-semibold">TIN</th>
-               <th className="px-6 py-4 font-semibold">Contact Person</th>
-               <th className="px-6 py-4 font-semibold">Accreditation</th>
-              <th className="px-6 py-4 font-semibold">Status</th>
-              <th className="px-6 py-4 font-semibold">NDA</th>
-              <th className="px-6 py-4 font-semibold text-right">Actions</th>
+              <th className="px-4 py-3 font-semibold w-[28%]">
+                <SortColumnButton label="Vendor Details" paramName="sort" />
+              </th>
+              <th className="px-4 py-3 font-semibold w-[10%]">TIN</th>
+              <th className="px-4 py-3 font-semibold w-[18%]">Contact Person</th>
+              <th className="px-4 py-3 font-semibold w-[17%]">Accreditation</th>
+              <th className="px-4 py-3 font-semibold w-[10%]">Status</th>
+              <th className="px-4 py-3 font-semibold w-[10%]">NDA</th>
+              <th className="px-4 py-3 font-semibold w-[7%] text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
             {error ? (
               <tr>
-                <td colSpan={7} className="px-6 py-12 text-center text-red-500">
+                <td colSpan={7} className="px-4 py-12 text-center text-red-500">
                   Failed to load vendors.
                 </td>
               </tr>
             ) : vendors?.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-6 py-12 text-center">
+                <td colSpan={7} className="px-4 py-12 text-center">
                   <div className="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400">
                     <div className="h-12 w-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-3">
                       <Building2 className="h-6 w-6 text-slate-400" />
@@ -144,7 +150,7 @@ async function VendorsContent({
                   key={vendor.id}
                   className="group hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-colors"
                 >
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-3">
                     <Tooltip content={
                       isVendorProfileComplete(vendor)
                         ? "Profile complete"
@@ -152,23 +158,23 @@ async function VendorsContent({
                     }>
                       <div className="flex items-center gap-2">
                         <span className={`inline-block h-2.5 w-2.5 rounded-full flex-shrink-0 ${isVendorProfileComplete(vendor) ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                        <span className="font-semibold text-slate-900 dark:text-white">{vendor.name}</span>
+                        <span className="font-semibold text-slate-900 dark:text-white truncate">{vendor.name}</span>
                       </div>
                     </Tooltip>
-                    <div className="text-slate-500 dark:text-slate-400 text-xs mt-0.5 truncate max-w-xs">
+                    <div className="text-slate-500 dark:text-slate-400 text-xs mt-0.5 truncate">
                       {vendor.address || "No address provided"}
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-slate-600 dark:text-slate-400 font-mono text-xs">
+                  <td className="px-4 py-3 text-slate-600 dark:text-slate-400 font-mono text-xs truncate">
                     {vendor.tin || "-"}
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-3">
                     {vendor.contact_person ? (
-                      <div>
-                        <div className="font-medium text-slate-900 dark:text-white">
+                      <div className="min-w-0">
+                        <div className="font-medium text-slate-900 dark:text-white truncate">
                           {vendor.contact_person}
                         </div>
-                        <div className="text-slate-500 dark:text-slate-400 text-xs">
+                        <div className="text-slate-500 dark:text-slate-400 text-xs truncate">
                           {vendor.contact_email}
                         </div>
                       </div>
@@ -176,7 +182,7 @@ async function VendorsContent({
                       <span className="text-slate-400">-</span>
                     )}
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-3">
                     {(() => {
                       const TOTAL = TOTAL_REQUIRED_DOCS;
                       const docs: any[] = vendor.vendor_documents || [];
@@ -198,7 +204,7 @@ async function VendorsContent({
                           >
                             {submitted}/{TOTAL}
                           </span>
-                          <div className="w-16 h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                          <div className="w-12 h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                             <div
                               className={`h-full rounded-full transition-all ${
                                 pct === 100
@@ -214,7 +220,7 @@ async function VendorsContent({
                       );
                     })()}
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-3">
                     <span
                       className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${
                         vendor.status === "active"
@@ -228,7 +234,7 @@ async function VendorsContent({
                         vendor.status.slice(1)}
                     </span>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-3">
                     {(() => {
                       // vendor_documents is an array — find the NDA doc rather than
                       // reading fields off the array itself.
@@ -259,7 +265,7 @@ async function VendorsContent({
                       );
                     })()}
                   </td>
-                  <td className="px-6 py-4 text-right">
+                  <td className="px-4 py-3 text-right">
                     <Link
                       href={`/dashboard/vendors/${vendor.id}`}
                       className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-slate-400 group-hover:text-primary group-hover:bg-primary/10 transition-colors"
@@ -277,7 +283,7 @@ async function VendorsContent({
       <Pagination
         page={page}
         totalCount={count ?? 0}
-        pageSize={LIST_PAGE_SIZE}
+        pageSize={VENDORS_PAGE_SIZE}
       />
     </div>
   );
