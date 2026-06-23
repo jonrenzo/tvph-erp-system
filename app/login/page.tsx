@@ -1,8 +1,13 @@
 import Image from "next/image";
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
+import { createClient } from "@/utils/supabase/server";
 import { LoginForm } from "./login-form";
 
-export default function LoginPage() {
+export default async function LoginPage() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user) redirect('/dashboard');
   return (
     <>
       <style>{`
