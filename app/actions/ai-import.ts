@@ -1,6 +1,7 @@
 "use server";
 
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { google } from "@ai-sdk/google";
+import { generateText } from "ai";
 
 const CUSTOMER_FIELDS = [
   { field: "company_name", description: "The name of the company or customer" },
@@ -51,25 +52,21 @@ export async function suggestColumnMapping(
 
   const fields = importType === "Customers" ? CUSTOMER_FIELDS : importType === "Projects" ? PROJECT_FIELDS : VENDOR_FIELDS;
   
-  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-  if (!apiKey) {
+  if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
     console.error("GOOGLE_GENERATIVE_AI_API_KEY is not defined.");
     return { mappings: {}, error: "AI service not configured on server" };
   }
 
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-flash",
-    systemInstruction: "You are a high-speed schema-mapping engine. Map user headers to target database fields. Return JSON only with key 'mappings'. Do not include extra text. Only map if confident; otherwise omit the key.",
-    generationConfig: { responseMimeType: "application/json" }
-  });
-
   const prompt = `Type: ${importType}\nFields:\n${JSON.stringify(fields)}\nHeaders to map:\n${JSON.stringify(unmappedHeaders)}`;
 
   try {
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
-    const parsed = JSON.parse(text);
+    const { text } = await generateText({
+      model: google("gemini-2.5-flash"),
+      system: "You are a high-speed schema-mapping engine. Map user headers to target database fields. Return JSON only with key 'mappings'. Do not include extra text. Only map if confident; otherwise omit the key.",
+      prompt,
+    });
+    const cleanText = text.replace(/```json/g, "").replace(/```/g, "").trim();
+    const parsed = JSON.parse(cleanText);
     return { mappings: parsed.mappings || {} };
   } catch (error: any) {
     console.error("Gemini mapping error:", error);

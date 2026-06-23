@@ -1,24 +1,17 @@
 "use server";
 
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { google } from "@ai-sdk/google";
+import { generateText } from "ai";
 
 export async function extractDocumentMetadata(
   fileBufferBase64: string,
   mimeType: string,
   docType: string,
 ) {
-  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-  if (!apiKey) {
+  if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
     console.error("GOOGLE_GENERATIVE_AI_API_KEY is not defined.");
     return { error: "AI service not configured on server" };
   }
-
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-flash",
-    systemInstruction: "You are an advanced enterprise document OCR and data extraction engine. Extract metadata from the uploaded document. Return JSON ONLY matching the requested schema. If a field cannot be found, return null. Do not include markdown code block formatting in your response — return ONLY the raw JSON string.",
-    generationConfig: { responseMimeType: "application/json" }
-  });
 
   let prompt = "";
   if (docType === "signed_nda") {
@@ -75,16 +68,19 @@ export async function extractDocumentMetadata(
   }
 
   try {
-    const filePart = {
-      inlineData: {
-        data: fileBufferBase64,
-        mimeType: mimeType,
-      },
-    };
+    const { text } = await generateText({
+      model: google("gemini-2.5-flash"),
+      system: "You are an advanced enterprise document OCR and data extraction engine. Extract metadata from the uploaded document. Return JSON ONLY matching the requested schema. If a field cannot be found, return null. Do not include markdown code block formatting in your response — return ONLY the raw JSON string.",
+      messages: [{
+        role: "user",
+        content: [
+          { type: "file", data: fileBufferBase64, mediaType: mimeType },
+          { type: "text", text: prompt },
+        ],
+      }],
+    });
 
-    const result = await model.generateContent([filePart, prompt]);
-    const responseText = result.response.text();
-    const cleanText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
+    const cleanText = text.replace(/```json/g, "").replace(/```/g, "").trim();
     const parsed = JSON.parse(cleanText);
 
     return { success: true, metadata: parsed };
