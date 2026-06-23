@@ -1,6 +1,5 @@
 import { NextRequest } from 'next/server'
-import { generatePurchaseOrderDocx } from '@/lib/docx/generator'
-import { createClient } from '@/utils/supabase/server'
+import { resolvePoDocx } from '@/lib/docx/resolvePoDocx'
 import { getCurrentProfile } from '@/lib/auth/permissions'
 
 export async function GET(
@@ -8,43 +7,13 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const supabase = await createClient()
-
-    const { error: authError } = await getCurrentProfile(supabase)
+    const { error: authError } = await getCurrentProfile()
     if (authError) {
       return new Response('Unauthorized', { status: 401 })
     }
 
     const { id } = await params
-
-    let buffer: Buffer
-
-    // Check if an edited version exists
-    const { data: artifact } = await supabase
-      .from('purchase_order_artifacts')
-      .select('storage_path')
-      .eq('po_id', id)
-      .eq('artifact_type', 'docx')
-      .order('generated_at', { ascending: false })
-      .limit(1)
-      .single()
-
-    if (artifact?.storage_path) {
-      // Download from storage
-      const { data: fileData, error } = await supabase.storage
-        .from('po-artifacts')
-        .download(artifact.storage_path)
-      
-      if (error || !fileData) {
-        throw new Error('Failed to download stored DOCX')
-      }
-      buffer = Buffer.from(await fileData.arrayBuffer())
-    } else {
-      // Generate fresh
-      buffer = await generatePurchaseOrderDocx(id)
-    }
-
-    const filename = `PO_${id.split('-')[0].toUpperCase()}.docx`
+    const { buffer, filename } = await resolvePoDocx(id)
 
     return new Response(buffer as unknown as BodyInit, {
       status: 200,
