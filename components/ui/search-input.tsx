@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
-import { useDebounce } from "use-debounce";
 
 interface SearchInputProps {
   placeholder?: string;
@@ -22,7 +21,11 @@ export function SearchInput({
   const [isPending, startTransition] = useTransition();
 
   const [text, setText] = useState(searchParams.get(paramName) || "");
-  const [debouncedValue] = useDebounce(text, 300);
+  const [debouncedValue, setDebouncedValue] = useState(text);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedValue(text), 300);
+    return () => clearTimeout(t);
+  }, [text]);
 
   // Tracks the last value we pushed to the URL so the sync effect below
   // doesn't overwrite the input while the user is still typing.

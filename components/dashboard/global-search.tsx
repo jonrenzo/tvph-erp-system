@@ -21,7 +21,6 @@ import {
   Package
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useDebounce } from "use-debounce";
 import { globalSearch } from "@/app/dashboard/search/actions";
 
 interface SearchResults {
@@ -65,7 +64,11 @@ const QUICK_ACTIONS: QuickAction[] = [
 export function GlobalSearch() {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [debouncedQuery] = useDebounce(query, 300);
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query), 300);
+    return () => clearTimeout(t);
+  }, [query]);
   const [results, setResults] = useState<SearchResults>({ 
     vendors: [], pos: [], invoices: [], projects: [], payments: [], documents: [], crm_accounts: [], crm_opportunities: [], employees: [], assets: []
   });

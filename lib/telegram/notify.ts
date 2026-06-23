@@ -1,6 +1,6 @@
 import "server-only";
 
-import { sendMessage } from "./client";
+import { sendMessage, escapeHtml } from "./client";
 import { roleKeyboard } from "./service";
 
 /**
@@ -27,8 +27,4 @@ export async function sendNewUserRoleAlert(user: {
   } catch (e) {
     console.error("sendNewUserRoleAlert failed:", e);
   }
-}
-
-function escapeHtml(s: string) {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }

@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { sendMessage, editMessageText, answerCallbackQuery } from "@/lib/telegram/client";
+import { sendMessage, editMessageText, answerCallbackQuery, escapeHtml } from "@/lib/telegram/client";
 import {
   assignRole,
   roleKeyboard,
@@ -11,10 +11,6 @@ import {
 import { ROLE_LABELS, type Role } from "@/lib/auth/roles";
 
 const ok = () => Response.json({ ok: true });
-
-function escapeHtml(s: string) {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
 
 export async function POST(request: NextRequest) {
   // 1. Auth: Telegram's secret-token header must match.
