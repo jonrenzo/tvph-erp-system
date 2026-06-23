@@ -27,9 +27,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
+  if (user && (request.nextUrl.pathname === '/' || request.nextUrl.pathname === '/login')) {
+    return NextResponse.redirect(new URL('/dashboard', request.url))
+  }
+
   return supabaseResponse
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*'],
+  matcher: ['/', '/login', '/dashboard/:path*'],
 }
