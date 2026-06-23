@@ -13,7 +13,8 @@ export async function renderPoPdf(poId: string): Promise<RenderedPoPdf | null> {
     const docx = await resolvePoDocx(poId);
     const buffer = await convertDocxToPdf(docx.buffer, docx.filename);
     return { buffer, filename: docx.filename.replace(/\.docx$/i, ".pdf") };
-  } catch {
+  } catch (err) {
+    console.error("[renderPoPdf]", err);
     return null;
   }
 }

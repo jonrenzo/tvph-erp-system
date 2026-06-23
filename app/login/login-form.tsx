@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { login } from "./actions";
 import { createClient } from "@/utils/supabase/client";
 
@@ -17,7 +17,6 @@ export function LoginForm() {
   );
   const [isPending, startTransition] = useTransition();
   const [isMsoPending, setIsMsoPending] = useState(false);
-  const router = useRouter();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,8 +28,6 @@ export function LoginForm() {
       const result = await login(formData);
       if (result?.error) {
         setError(result.error);
-      } else if (result?.success) {
-        router.push("/dashboard");
       }
     });
   };
