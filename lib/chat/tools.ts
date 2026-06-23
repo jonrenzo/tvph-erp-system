@@ -1,5 +1,5 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { tool } from "ai";
+import { google } from "@ai-sdk/google";
+import { generateText, tool } from "ai";
 import { z } from "zod";
 import { getCurrentProfile, requireCapability } from "@/lib/auth/permissions";
 import { createClient } from "@/utils/supabase/server";
@@ -787,21 +787,25 @@ export const erpTools = {
         return { error: `Failed to generate document access: ${signError?.message}` };
       }
 
-      const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || "");
-      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
       const prompt =
         question ||
         "Please summarize this document concisely for a TelcoVantage team member. Include key dates, parties, and obligations.";
 
       try {
-        const result = await model.generateContent([
-          { fileData: { mimeType: "application/pdf", fileUri: signed.signedUrl } },
-          { text: prompt },
-        ] as any);
+        const { text } = await generateText({
+          model: google("gemini-2.5-flash"),
+          messages: [{
+            role: "user",
+            content: [
+              { type: "file", data: new URL(signed.signedUrl), mediaType: "application/pdf" },
+              { type: "text", text: prompt },
+            ],
+          }],
+        });
 
         return {
           file_name: doc.file_name,
-          analysis: result.response.text(),
+          analysis: text,
           note: "The signed URL expires after 1 hour and is not shown to end users.",
         };
       } catch (geminiError) {
