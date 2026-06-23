@@ -293,6 +293,7 @@ export async function updateVendorProfile(prevState: any, formData: FormData) {
   if (!id) return { error: "Vendor ID is required." };
 
   const address = formData.get("address") as string;
+  const tin = formData.get("tin") as string;
   const contact_person = formData.get("contact_person") as string;
   const contact_email = formData.get("contact_email") as string;
   const contact_phone = formData.get("contact_phone") as string;
@@ -326,6 +327,7 @@ export async function updateVendorProfile(prevState: any, formData: FormData) {
     .from("vendors")
     .update({
       address,
+      tin,
       contact_person,
       contact_email,
       contact_phone,

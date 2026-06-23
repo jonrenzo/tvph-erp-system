@@ -100,6 +100,15 @@ export function VendorProfileDetails({ vendor, documents }: { vendor: any, docum
               </p>
             </div>
 
+            <div>
+              <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                TIN
+              </label>
+              <p className="mt-1 text-slate-900 dark:text-slate-300 font-mono">
+                {vendor.tin || "Not provided"}
+              </p>
+            </div>
+
             <div className="grid grid-cols-2 gap-4 pt-6 relative">
               <div className="absolute -left-2 -top-2 bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide">
                 Primary
@@ -339,6 +348,18 @@ export function VendorProfileDetails({ vendor, documents }: { vendor: any, docum
                 name="address"
                 defaultValue={vendor.address}
                 className="w-full px-4 py-2.5 bg-slate-50 dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1 block">
+                TIN
+              </label>
+              <input
+                name="tin"
+                defaultValue={vendor.tin}
+                placeholder="000-000-000-000"
+                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm font-mono focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
               />
             </div>
 
