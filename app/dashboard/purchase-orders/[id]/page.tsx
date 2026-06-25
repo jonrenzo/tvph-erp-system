@@ -27,6 +27,7 @@ import { POProjectAssigner } from "@/components/dashboard/purchase-orders/po-pro
 import { RecentActivity } from "@/components/dashboard/shared/recent-activity";
 import { PODownloadDropdown } from "@/components/dashboard/purchase-orders/po-download-dropdown";
 import { PoResendButton } from "@/components/dashboard/purchase-orders/po-resend-button";
+import { PoIssueButton } from "@/components/dashboard/purchase-orders/po-issue-button";
 import { getCurrentProfile, hasCapability } from "@/lib/auth/permissions";
 
 export const unstable_instant = { 
@@ -192,23 +193,7 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
         </div>
 
         <div className="flex items-center gap-3 md:ml-auto">
-          {po.status === "draft" && (
-            <form
-              action={async () => {
-                "use server";
-                const { updatePOStatus } = await import("../actions");
-                await updatePOStatus(po.id, "issued");
-              }}
-            >
-              <button
-                type="submit"
-                className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm active:scale-95"
-              >
-                <Send className="h-4 w-4" />
-                Issue PO
-              </button>
-            </form>
-          )}
+          {po.status === "draft" && <PoIssueButton poId={po.id} />}
           {po.status !== "draft" && canSendEmail && (
             <PoResendButton poId={po.id} />
           )}

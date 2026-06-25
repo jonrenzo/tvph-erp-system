@@ -197,9 +197,11 @@ export async function updatePOStatus(poId: string, status: string) {
   if (status === 'issued') {
     const { data: po } = await supabase
       .from('purchase_orders')
-      .select('requirements_waived, waiver_approved')
+      .select('status, requirements_waived, waiver_approved')
       .eq('id', poId)
       .single();
+
+    if (po?.status === 'issued') return { success: true };
 
     if (po?.requirements_waived && !po?.waiver_approved) {
       return { error: 'Cannot issue: this PO has waived requirements pending executive approval.' };
