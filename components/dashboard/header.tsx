@@ -5,19 +5,19 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import {
   Menu,
-  Search,
-  Bell,
   LogOut,
   User,
   ChevronDown,
   PanelLeftClose,
   PanelLeftOpen,
+  History,
 } from "lucide-react";
 import { logout } from "@/app/login/actions";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { NotificationBell } from "@/components/dashboard/notification-bell";
 import { GlobalSearch } from "@/components/dashboard/global-search";
 import { ClockWidget } from "@/components/dashboard/clock";
+import { AuditLogDrawer } from "@/components/dashboard/audit-log-drawer";
 
 interface HeaderProps {
   userEmail: string;
@@ -37,6 +37,7 @@ export function Header({
   onCollapseToggle,
 }: HeaderProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [auditOpen, setAuditOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
@@ -92,6 +93,14 @@ export function Header({
         <ClockWidget />
         <ThemeToggle />
 
+        <button
+          onClick={() => setAuditOpen(true)}
+          className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+          title="Activity log"
+        >
+          <History className="h-5 w-5" />
+        </button>
+
         <NotificationBell />
 
         <div className="relative ml-2" ref={dropdownRef}>
@@ -145,6 +154,7 @@ export function Header({
           )}
         </div>
       </div>
+      <AuditLogDrawer isOpen={auditOpen} onClose={() => setAuditOpen(false)} />
     </header>
   );
 }

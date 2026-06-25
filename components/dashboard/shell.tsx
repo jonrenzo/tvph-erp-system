@@ -4,16 +4,9 @@ import { useState } from 'react'
 import dynamic from 'next/dynamic'
 import { Sidebar } from './sidebar'
 import { Header } from './header'
-import { Suspense } from 'react'
-import { usePathname } from 'next/navigation'
 // Lazy load — AI chat is heavy (AI SDK, markdown renderer) and rarely used on first load
 const AIChatBubble = dynamic(
   () => import('./ai/chat-bubble').then(mod => ({ default: mod.AIChatBubble })),
-  { ssr: false }
-)
-
-const AuditLogCard = dynamic(
-  () => import('./audit-log-card').then(mod => ({ default: mod.AuditLogCard })),
   { ssr: false }
 )
 
@@ -32,9 +25,6 @@ export function DashboardShell({
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
-  const pathname = usePathname()
-
-  const isEditorRoute = pathname?.endsWith('/editor') || pathname?.includes('/editor/')
 
   return (
     <div className="flex h-screen bg-slate-50 dark:bg-[#071F15] overflow-hidden text-slate-600 dark:text-slate-300">
@@ -67,13 +57,6 @@ export function DashboardShell({
         </div>
 
         <AIChatBubble />
-
-        {/* Contextual Audit Log Card */}
-        {!isEditorRoute && (
-          <div className="fixed bottom-6 right-6 z-[100]">
-            <AuditLogCard />
-          </div>
-        )}
       </div>
   )
 }
