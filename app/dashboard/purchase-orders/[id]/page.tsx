@@ -20,6 +20,8 @@ import {
   Pencil,
   ShieldAlert,
   ShieldCheck,
+  ClipboardCheck,
+  TrendingUp,
 } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
@@ -28,7 +30,9 @@ import { RecentActivity } from "@/components/dashboard/shared/recent-activity";
 import { PODownloadDropdown } from "@/components/dashboard/purchase-orders/po-download-dropdown";
 import { PoResendButton } from "@/components/dashboard/purchase-orders/po-resend-button";
 import { PoIssueButton } from "@/components/dashboard/purchase-orders/po-issue-button";
+import { PoCertUpload } from "@/components/dashboard/purchase-orders/po-cert-upload";
 import { getCurrentProfile, hasCapability } from "@/lib/auth/permissions";
+import { signDocUrls } from "@/utils/storage";
 
 export const unstable_instant = { 
   prefetch: 'static',
@@ -135,6 +139,36 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
     }
   }
 
+  // Fetch completion certificates for this PO
+  const { data: certs } = await supabase
+    .from('po_completion_certificates')
+    .select('id, percent_complete, status, file_url, file_name, notes, submitted_by, submitted_at, approved_by, approved_at')
+    .eq('po_id', po.id)
+    .order('submitted_at', { ascending: false });
+
+  // Resolve profile names for cert submitters/approvers
+  const certProfileIds = [...new Set([
+    ...(certs || []).map(c => c.submitted_by),
+    ...(certs || []).map(c => c.approved_by),
+  ].filter(Boolean))] as string[];
+
+  const certProfiles: Record<string, string> = {};
+  if (certProfileIds.length > 0) {
+    const { data: certProfileRows } = await supabase
+      .from('profiles')
+      .select('id, full_name')
+      .in('id', certProfileIds);
+    for (const p of certProfileRows || []) certProfiles[p.id] = p.full_name;
+  }
+
+  // Sign file URLs for certs
+  const signedCerts = await signDocUrls(supabase, 'vendor-documents', certs || []);
+
+  // Max approved completion % drives the billing ceiling
+  const maxApprovedPercent = (certs || [])
+    .filter(c => c.status === 'approved')
+    .reduce((max, c) => Math.max(max, Number(c.percent_complete)), 0) || null;
+
   const totalPaid =
     payments?.reduce((sum, p) => sum + Number(p.amount_paid), 0) || 0;
   const totalInvoiced =
@@ -144,6 +178,14 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
   const overpaidAmount = Math.max(0, totalPaid - poAmount);
   const progress = Math.min(100, Math.round((totalPaid / poAmount) * 100)) || 0;
   const isOverpaid = totalPaid > poAmount;
+
+  // Billing ceiling from approved cert (null = no cap beyond poAmount)
+  const billingCeiling = maxApprovedPercent !== null ? (maxApprovedPercent / 100) * poAmount : null;
+  const availableToBill = billingCeiling !== null ? Math.max(0, billingCeiling - totalInvoiced) : Math.max(0, poAmount - totalInvoiced);
+
+  // Cert permissions
+  const canSubmitCert = hasCapability(currentRole, 'po.write');
+  const canApproveCert = hasCapability(currentRole, 'po.approve_completion');
 
   // Waiver state
   const isPendingApproval = po.requirements_waived && !po.waiver_approved;
@@ -293,6 +335,91 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
         </div>
       )}
 
+      {/* Completion Certificates */}
+      {(signedCerts.length > 0 || canSubmitCert) && (
+        <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+          <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-[#0a0a0a]/50 flex items-center justify-between">
+            <h2 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+              <ClipboardCheck className="h-5 w-5 text-primary" /> Completion Certificates
+            </h2>
+            {maxApprovedPercent !== null && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800/50">
+                <TrendingUp className="h-3 w-3" /> {maxApprovedPercent}% Approved
+              </span>
+            )}
+          </div>
+          <div className="p-6 space-y-4">
+            {signedCerts.length > 0 ? (
+              <div className="space-y-3">
+                {signedCerts.map((cert) => {
+                  const isPendingCert = cert.status === 'submitted';
+                  const isApproved = cert.status === 'approved';
+                  const isRejected = cert.status === 'rejected';
+                  const canActOnCert = canApproveCert && isPendingCert && cert.submitted_by !== currentUser?.id;
+                  return (
+                    <div key={cert.id} className={`flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-xl border ${
+                      isApproved ? 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800/50'
+                      : isRejected ? 'bg-slate-50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-800 opacity-60'
+                      : 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800/50'
+                    }`}>
+                      <div className="flex-1 space-y-1">
+                        <div className="flex items-center gap-3">
+                          <span className="text-lg font-bold text-slate-900 dark:text-white">{Number(cert.percent_complete)}% Complete</span>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                            isApproved ? 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400'
+                            : isRejected ? 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400'
+                            : 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400'
+                          }`}>
+                            {cert.status.toUpperCase()}
+                          </span>
+                          {cert.file_url && (
+                            <a href={cert.file_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline font-medium">
+                              {cert.file_name || 'View File'}
+                            </a>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500">
+                          Submitted by {certProfiles[cert.submitted_by] || 'PM'} on {new Date(cert.submitted_at).toLocaleDateString(undefined, { dateStyle: 'medium' })}
+                          {isApproved && cert.approved_by && ` · Approved by ${certProfiles[cert.approved_by] || 'Admin'}`}
+                        </p>
+                        {cert.notes && <p className="text-xs text-slate-600 dark:text-slate-400 italic">{cert.notes}</p>}
+                      </div>
+                      {canActOnCert && (
+                        <div className="flex items-center gap-2 shrink-0">
+                          <form action={async () => {
+                            'use server';
+                            const { approveCompletionCertificate } = await import('../actions');
+                            await approveCompletionCertificate(cert.id);
+                          }}>
+                            <button type="submit" className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-all active:scale-95">
+                              <CheckCircle2 className="h-3.5 w-3.5" /> Approve
+                            </button>
+                          </form>
+                          <form action={async () => {
+                            'use server';
+                            const { rejectCompletionCertificate } = await import('../actions');
+                            await rejectCompletionCertificate(cert.id);
+                          }}>
+                            <button type="submit" className="inline-flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-all active:scale-95">
+                              <XCircle className="h-3.5 w-3.5" /> Reject
+                            </button>
+                          </form>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400 italic">No certificates submitted yet.</p>
+            )}
+            {canSubmitCert && (
+              <PoCertUpload poId={po.id} vendorId={po.vendor_id} />
+            )}
+          </div>
+        </div>
+      )}
+
       {/* New Intuitive Financial Dashboard */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Main Balance Ring/Card */}
@@ -419,12 +546,29 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
                   ₱{totalInvoiced.toLocaleString()}
                 </span>
               </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-slate-500">Unbilled PO Amount</span>
-                <span className="font-bold text-slate-900 dark:text-white">
-                  ₱{Math.max(0, poAmount - totalInvoiced).toLocaleString()}
-                </span>
-              </div>
+              {billingCeiling !== null ? (
+                <>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-slate-500">Approved Ceiling ({maxApprovedPercent}%)</span>
+                    <span className="font-bold text-emerald-700 dark:text-emerald-400">
+                      ₱{billingCeiling.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-slate-500">Available to Bill</span>
+                    <span className="font-bold text-slate-900 dark:text-white">
+                      ₱{availableToBill.toLocaleString()}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-slate-500">Unbilled PO Amount</span>
+                  <span className="font-bold text-slate-900 dark:text-white">
+                    ₱{Math.max(0, poAmount - totalInvoiced).toLocaleString()}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </div>

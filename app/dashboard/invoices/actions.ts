@@ -184,24 +184,37 @@ export async function createInvoice(prevState: any, formData: FormData) {
     .maybeSingle();
   if (existing) return { error: `An invoice with number ${invoice_number} already exists.` };
 
-  // PO Amount Guard
+  // PO Amount Guard (includes completion-certificate ceiling when one is approved)
   if (po_id) {
-    const [{ data: po }, { data: existingInvoices }] = await Promise.all([
+    const [{ data: po }, { data: existingInvoices }, { data: topCert }] = await Promise.all([
       supabase.from('purchase_orders').select('amount').eq('id', po_id).single(),
       supabase.from('service_invoices')
         .select('amount')
         .eq('po_id', po_id)
-        .is('deleted_at', null)
+        .is('deleted_at', null),
+      supabase.from('po_completion_certificates')
+        .select('percent_complete')
+        .eq('po_id', po_id)
+        .eq('status', 'approved')
+        .order('percent_complete', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
 
     if (po) {
+      const poAmount = Number(po.amount);
+      // If there is an approved cert, cap at that percentage of the PO; otherwise no cap beyond po.amount
+      const ceiling = topCert ? (topCert.percent_complete / 100) * poAmount : poAmount;
       const totalExisting = existingInvoices?.reduce((sum, inv) => sum + Number(inv.amount), 0) ?? 0;
       const newTotal = totalExisting + parseFloat(amount);
 
-      if (newTotal > Number(po.amount)) {
-        const remaining = Number(po.amount) - totalExisting;
+      if (newTotal > ceiling) {
+        const remaining = Math.max(0, ceiling - totalExisting);
+        const ceilingLabel = topCert
+          ? `${topCert.percent_complete}% approved completion (₱${ceiling.toLocaleString()})`
+          : `PO limit (₱${poAmount.toLocaleString()})`;
         return {
-          error: `Invoice amount exceeds PO limit. This PO has ₱${remaining.toLocaleString()} remaining capacity, but you entered ₱${parseFloat(amount).toLocaleString()}.`
+          error: `Invoice amount exceeds ${ceilingLabel}. Available to bill: ₱${remaining.toLocaleString()}.`
         };
       }
     }

@@ -50,6 +50,7 @@ export type Capability =
   | "asset.write"
   | "po.waive_requirements"
   | "po.approve_waiver"
+  | "po.approve_completion"
   | "client_po.write"
   | "client_invoice.write"
   | "client_invoice.pay";
@@ -87,6 +88,7 @@ export const CAPABILITY_ROLES = {
   "asset.write": ["superadmin", "admin", "operations"],
   "po.waive_requirements": ["superadmin", "admin", "operations"],
   "po.approve_waiver": ["superadmin", "admin"],
+  "po.approve_completion": ["superadmin", "admin"],
   "client_po.write": ["superadmin", "admin", "operations"],
   "client_invoice.write": ["superadmin", "admin", "finance"],
   "client_invoice.pay": ["superadmin", "admin", "finance"],

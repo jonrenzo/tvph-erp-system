@@ -321,6 +321,146 @@ export async function deletePurchaseOrder(poId: string) {
   return { success: true };
 }
 
+export async function submitCompletionCertificate(formData: FormData) {
+  const supabase = await createClient();
+  const { user, error: authError } = await requireCapability('po.write', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
+
+  const poId = formData.get('po_id') as string;
+  const vendorId = formData.get('vendor_id') as string;
+  const percentStr = formData.get('percent_complete') as string;
+  const notes = formData.get('notes') as string | null;
+  const file = formData.get('file') as File | null;
+
+  const percent = parseFloat(percentStr);
+  if (!poId || isNaN(percent) || percent <= 0 || percent > 100) {
+    return { error: 'Invalid input. Provide a PO and a completion percentage between 1–100.' };
+  }
+
+  let file_url: string | null = null;
+  let file_name: string | null = null;
+
+  if (file && file.size > 0) {
+    const ext = file.name.split('.').pop();
+    const filePath = `vendors/${vendorId}/certs/CERT_${poId}_${Date.now()}.${ext}`;
+    const { error: uploadError } = await supabase.storage
+      .from('vendor-documents')
+      .upload(filePath, file, { contentType: file.type, upsert: false });
+    if (!uploadError) {
+      const { data: { publicUrl } } = supabase.storage.from('vendor-documents').getPublicUrl(filePath);
+      file_url = publicUrl;
+      file_name = file.name;
+    }
+  }
+
+  const { data: cert, error } = await supabase
+    .from('po_completion_certificates')
+    .insert({
+      po_id: poId,
+      percent_complete: percent,
+      file_url,
+      file_name,
+      notes: notes || null,
+      status: 'submitted',
+      submitted_by: user.id,
+    })
+    .select('id')
+    .single();
+
+  if (error) return { error: error.message };
+
+  await recordAuditLog({
+    entity_type: 'purchase_order',
+    entity_id: poId,
+    action: 'UPDATE',
+    changes: { after: { completion_cert_submitted: true, percent_complete: percent } },
+    performed_by: user.id,
+  });
+
+  await createNotification({
+    type: 'po',
+    title: '📋 Completion Certificate Submitted',
+    message: `A certificate of completion at ${percent}% was submitted and awaits approval.`,
+    link: `/dashboard/purchase-orders/${poId}`,
+    created_by: user.id,
+  });
+
+  revalidatePath(`/dashboard/purchase-orders/${poId}`);
+  return { success: true };
+}
+
+export async function approveCompletionCertificate(certId: string) {
+  const supabase = await createClient();
+  const { user, error: authError } = await requireCapability('po.approve_completion', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
+
+  const { data: cert } = await supabase
+    .from('po_completion_certificates')
+    .select('po_id, status, submitted_by')
+    .eq('id', certId)
+    .single();
+
+  if (!cert || cert.status !== 'submitted') {
+    return { error: 'This certificate is not pending approval.' };
+  }
+
+  if (cert.submitted_by === user.id) {
+    return { error: 'You cannot approve a certificate you submitted.' };
+  }
+
+  const { error } = await supabase
+    .from('po_completion_certificates')
+    .update({ status: 'approved', approved_by: user.id, approved_at: new Date().toISOString() })
+    .eq('id', certId);
+
+  if (error) return { error: error.message };
+
+  await recordAuditLog({
+    entity_type: 'purchase_order',
+    entity_id: cert.po_id,
+    action: 'UPDATE',
+    changes: { after: { completion_cert_approved: true, cert_id: certId } },
+    performed_by: user.id,
+  });
+
+  revalidatePath(`/dashboard/purchase-orders/${cert.po_id}`);
+  return { success: true };
+}
+
+export async function rejectCompletionCertificate(certId: string) {
+  const supabase = await createClient();
+  const { user, error: authError } = await requireCapability('po.approve_completion', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
+
+  const { data: cert } = await supabase
+    .from('po_completion_certificates')
+    .select('po_id, status')
+    .eq('id', certId)
+    .single();
+
+  if (!cert || cert.status !== 'submitted') {
+    return { error: 'This certificate is not pending approval.' };
+  }
+
+  const { error } = await supabase
+    .from('po_completion_certificates')
+    .update({ status: 'rejected' })
+    .eq('id', certId);
+
+  if (error) return { error: error.message };
+
+  await recordAuditLog({
+    entity_type: 'purchase_order',
+    entity_id: cert.po_id,
+    action: 'UPDATE',
+    changes: { after: { completion_cert_rejected: true, cert_id: certId } },
+    performed_by: user.id,
+  });
+
+  revalidatePath(`/dashboard/purchase-orders/${cert.po_id}`);
+  return { success: true };
+}
+
 export async function approveWaiver(poId: string) {
   const supabase = await createClient();
   const { user, error: authError } = await requireCapability('po.approve_waiver', supabase);
