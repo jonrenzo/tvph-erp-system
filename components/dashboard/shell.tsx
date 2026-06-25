@@ -4,6 +4,7 @@ import { useState } from 'react'
 import dynamic from 'next/dynamic'
 import { Sidebar } from './sidebar'
 import { Header } from './header'
+import { AuditLogDrawer } from './audit-log-drawer'
 // Lazy load — AI chat is heavy (AI SDK, markdown renderer) and rarely used on first load
 const AIChatBubble = dynamic(
   () => import('./ai/chat-bubble').then(mod => ({ default: mod.AIChatBubble })),
@@ -25,6 +26,7 @@ export function DashboardShell({
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const [auditOpen, setAuditOpen] = useState(false)
 
   return (
     <div className="flex h-screen bg-slate-50 dark:bg-[#071F15] overflow-hidden text-slate-600 dark:text-slate-300">
@@ -46,6 +48,7 @@ export function DashboardShell({
             onSidebarToggle={() => setSidebarOpen(!sidebarOpen)}
             isCollapsed={isCollapsed}
             onCollapseToggle={() => setIsCollapsed(!isCollapsed)}
+            onAuditOpen={() => setAuditOpen(true)}
           />
           <main className="flex-1 overflow-auto bg-white dark:bg-[#0a0a0a]">
             <div className="min-h-full flex flex-col">
@@ -57,6 +60,7 @@ export function DashboardShell({
         </div>
 
         <AIChatBubble />
+        <AuditLogDrawer isOpen={auditOpen} onClose={() => setAuditOpen(false)} />
       </div>
   )
 }

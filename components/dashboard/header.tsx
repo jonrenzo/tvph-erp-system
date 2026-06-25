@@ -17,7 +17,6 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { NotificationBell } from "@/components/dashboard/notification-bell";
 import { GlobalSearch } from "@/components/dashboard/global-search";
 import { ClockWidget } from "@/components/dashboard/clock";
-import { AuditLogDrawer } from "@/components/dashboard/audit-log-drawer";
 
 interface HeaderProps {
   userEmail: string;
@@ -26,6 +25,7 @@ interface HeaderProps {
   onSidebarToggle: () => void;
   isCollapsed: boolean;
   onCollapseToggle: () => void;
+  onAuditOpen: () => void;
 }
 
 export function Header({
@@ -35,9 +35,9 @@ export function Header({
   onSidebarToggle,
   isCollapsed,
   onCollapseToggle,
+  onAuditOpen,
 }: HeaderProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [auditOpen, setAuditOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
@@ -94,7 +94,7 @@ export function Header({
         <ThemeToggle />
 
         <button
-          onClick={() => setAuditOpen(true)}
+          onClick={onAuditOpen}
           className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
           title="Activity log"
         >
@@ -154,7 +154,6 @@ export function Header({
           )}
         </div>
       </div>
-      <AuditLogDrawer isOpen={auditOpen} onClose={() => setAuditOpen(false)} />
     </header>
   );
 }
