@@ -33,7 +33,7 @@ export function ExportDropdown({ exportBaseUrl }: Props) {
       </button>
 
       {showExport && (
-        <div className="absolute right-0 mt-2 w-44 bg-white dark:bg-[#0a0a0a] border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+        <div className="absolute right-0 mt-2 w-44 bg-white dark:bg-[#0a0a0a] border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg overflow-hidden z-[var(--z-dropdown)] animate-in fade-in slide-in-from-top-2 duration-150">
           <a
             href={`${exportBaseUrl}?format=csv`}
             className="flex items-center gap-3 px-4 py-3 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"

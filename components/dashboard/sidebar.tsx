@@ -259,11 +259,11 @@ export function Sidebar({ userEmail, userRole, isOpen, onClose, isCollapsed }: S
   return (
     <>
       {isOpen && (
-        <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={onClose} />
+        <div className="fixed inset-0 z-[var(--z-sidebar-backdrop)] bg-black/50 lg:hidden" onClick={onClose} />
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex flex-col bg-slate-50 dark:bg-[#071F15] border-r border-slate-200 dark:border-slate-800 transition-all duration-300 lg:static ${
+        className={`fixed inset-y-0 left-0 z-[var(--z-sidebar)] flex flex-col bg-slate-50 dark:bg-[#071F15] border-r border-slate-200 dark:border-slate-800 transition-all duration-300 lg:static ${
           isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         } ${isCollapsed ? "w-[72px]" : "w-64"}`}
       >

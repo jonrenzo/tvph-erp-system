@@ -71,7 +71,7 @@ export function DocumentPreview({ document: doc, onClose }: DocumentPreviewProps
   }, [doc.file_url, isOffice, isImage]);
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 md:p-10 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-300">
+    <div className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center p-4 md:p-10 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-300">
       <div className="relative w-full h-full max-w-6xl flex flex-col bg-white dark:bg-[#071F15] rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-in zoom-in-95 duration-300">
         
         {/* Top Toolbar */}

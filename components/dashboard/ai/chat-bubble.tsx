@@ -153,7 +153,7 @@ export function AIChatBubble() {
   return (
     <div
       ref={containerRef}
-      className="fixed z-[100] flex flex-col items-start gap-3"
+      className="fixed z-[var(--z-dropdown)] flex flex-col items-start gap-3"
       style={{ left: pos.x, bottom: pos.y }}
     >
       {isOpen && (

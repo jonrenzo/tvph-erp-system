@@ -181,7 +181,7 @@ export function GlobalSearch() {
       </button>
 
       {mounted && isOpen && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-16 sm:pt-24 px-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[var(--z-search)] flex items-start justify-center pt-16 sm:pt-24 px-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="absolute inset-0" onClick={() => setIsOpen(false)} />
           
           <div className="relative w-full max-w-2xl bg-white dark:bg-[#071F15] rounded-2xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 animate-in slide-in-from-top-8 duration-200">

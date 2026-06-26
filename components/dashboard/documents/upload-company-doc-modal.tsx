@@ -100,7 +100,7 @@ export function UploadCompanyDocModal({
     <>
       {/* ── Backdrop & Modal Container ───────────────────────────────────── */}
       <div
-        className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300"
+        className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300"
         onClick={handleClose}
       >
         <div

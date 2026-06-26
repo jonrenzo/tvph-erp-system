@@ -29,7 +29,7 @@ export function PODownloadDropdown({ poId }: { poId: string }) {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-[#0a0a0a] rounded-xl border border-slate-200 dark:border-slate-800 shadow-lg py-1 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-[#0a0a0a] rounded-xl border border-slate-200 dark:border-slate-800 shadow-lg py-1 z-[var(--z-dropdown)] animate-in fade-in slide-in-from-top-2 duration-200">
           <a
             href={`/api/purchase-orders/${poId}/pdf`}
             target="_blank"

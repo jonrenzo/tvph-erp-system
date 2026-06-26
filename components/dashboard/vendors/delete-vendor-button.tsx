@@ -36,7 +36,7 @@ export function DeleteVendorButton({ vendorId, vendorName }: { vendorId: string;
 
       {showConfirm && mounted && createPortal(
         <div
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in"
+          className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in"
           onClick={() => { setShowConfirm(false); setError(null) }}
         >
           <div

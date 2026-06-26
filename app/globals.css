@@ -22,6 +22,17 @@
     --primary: #0a5c3b;
     --primary-light: #0c6a43;
     --primary-rgb: 10, 92, 59;
+
+    /* Z-index scale — single source of truth. Use z-[var(--z-*)] in Tailwind. */
+    --z-editor: 10;            /* DOCX editor (page content, not an overlay) */
+    --z-sidebar-backdrop: 45;  /* mobile sidebar dim backdrop */
+    --z-sidebar: 50;           /* sidebar panel */
+    --z-dropdown: 60;          /* header menus, notification bell, tooltips */
+    --z-drawer-backdrop: 110;
+    --z-drawer: 120;           /* slide-in drawers */
+    --z-modal: 200;            /* dialogs, previews, confirmations */
+    --z-search: 300;           /* global search palette */
+    --z-toast: 9999;           /* Sonner toaster — always on top */
 }
 
 [data-accent="default"] {

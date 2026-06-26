@@ -45,15 +45,15 @@ export function DocumentDrawer({ vendor, isOpen, onClose, userRole }: DocumentDr
     <>
       {/* Overlay */}
       <div 
-        className={`fixed inset-0 z-[110] bg-black/40 backdrop-blur-sm transition-opacity duration-300 ${
+        className={`fixed inset-0 z-[var(--z-drawer-backdrop)] bg-black/40 backdrop-blur-sm transition-opacity duration-300 ${
           isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
-        }`} 
+        }`}
         onClick={onClose}
       />
 
       {/* Drawer */}
-      <div 
-        className={`fixed inset-y-0 right-0 z-[120] w-full max-w-xl bg-white dark:bg-[#071F15] shadow-2xl border-l border-slate-200 dark:border-slate-800 transition-transform duration-500 ease-in-out transform ${
+      <div
+        className={`fixed inset-y-0 right-0 z-[var(--z-drawer)] w-full max-w-xl bg-white dark:bg-[#071F15] shadow-2xl border-l border-slate-200 dark:border-slate-800 transition-transform duration-500 ease-in-out transform ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >

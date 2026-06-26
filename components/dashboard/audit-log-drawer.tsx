@@ -144,7 +144,7 @@ export function AuditLogDrawer({ isOpen, onClose }: AuditLogDrawerProps) {
     <>
       {/* Overlay */}
       <div
-        className={`fixed inset-0 z-[110] bg-black/30 backdrop-blur-sm transition-opacity duration-300 ${
+        className={`fixed inset-0 z-[var(--z-drawer-backdrop)] bg-black/30 backdrop-blur-sm transition-opacity duration-300 ${
           isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
         }`}
         onClick={onClose}
@@ -152,7 +152,7 @@ export function AuditLogDrawer({ isOpen, onClose }: AuditLogDrawerProps) {
 
       {/* Drawer */}
       <div
-        className={`fixed inset-y-0 right-0 z-[120] w-full max-w-sm bg-white dark:bg-[#071F15] shadow-2xl border-l border-slate-200 dark:border-slate-800 transition-transform duration-300 ease-in-out ${
+        className={`fixed inset-y-0 right-0 z-[var(--z-drawer)] w-full max-w-sm bg-white dark:bg-[#071F15] shadow-2xl border-l border-slate-200 dark:border-slate-800 transition-transform duration-300 ease-in-out ${
           isOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >

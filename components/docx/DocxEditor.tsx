@@ -50,7 +50,7 @@ export function DocxEditor({ initialBuffer, poId }: DocxEditorProps) {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-6rem)] w-full border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden bg-white dark:bg-[#0a0a0a]">
+    <div className="relative z-[var(--z-editor)] flex flex-col h-[calc(100vh-6rem)] w-full border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden bg-white dark:bg-[#0a0a0a]">
       {/* Custom Toolbar / Header */}
       <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#071F15]">
         <div className="flex items-center gap-2">

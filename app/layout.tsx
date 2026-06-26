@@ -24,6 +24,7 @@ export const metadata: Metadata = {
 
 import { ThemeProvider } from "@/components/theme-provider";
 import { AccentProvider } from "@/components/accent-provider";
+import { Toaster } from "sonner";
 
 export default function RootLayout({
   children,
@@ -47,6 +48,7 @@ export default function RootLayout({
           <AccentProvider>
             {children}
           </AccentProvider>
+          <Toaster position="top-right" richColors toastOptions={{ style: { zIndex: 9999 } }} />
         </ThemeProvider>
       </body>
     </html>
