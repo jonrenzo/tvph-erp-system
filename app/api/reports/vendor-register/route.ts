@@ -39,11 +39,11 @@ export async function GET() {
       {
         table: {
           columns: [
-            { header: "Vendor", width: 26 },
+            { header: "Vendor", width: 28 },
             { header: "TIN", width: 16 },
             { header: "Contact", width: 22 },
             { header: "Terms", width: 18 },
-            { header: "Status", width: 14, align: "center" },
+            { header: "Status", width: 16, align: "center" },
           ],
           rows: list.map((v) => [
             v.name ?? "",
