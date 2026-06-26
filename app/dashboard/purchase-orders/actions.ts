@@ -8,51 +8,33 @@ import { recordAuditLog } from '@/utils/audit';
 import { requireCapability, hasCapability } from '@/lib/auth/permissions';
 import { sendPoIssuedEmail } from '@/lib/email/po';
 
-export async function createPurchaseOrder(prevState: any, formData: FormData) {
+type POLineItem = { item_code?: string; description: string; qty: number; uom?: string; unit_price: number };
+type POSiteDetail = { region: string; area_city: string; no_of_nodes: number; cable_length_km: number };
+
+interface CreatePOInput {
+  vendor_id: string;
+  line_items: POLineItem[];
+  site_details?: POSiteDetail[];
+  description?: string;
+  issued_date?: string;
+  due_date?: string;
+  dp_amount?: number;
+  waive_requirements?: boolean;
+}
+
+export async function createPurchaseOrderCore(input: CreatePOInput) {
   const supabase = await createClient();
   const { user, role, error: authError } = await requireCapability('po.create', supabase);
   if (authError || !user) return { error: authError || 'Unauthorized' };
 
-  const vendor_id = formData.get('vendor_id') as string;
-  const description = formData.get('description') as string;
-  const issued_date = formData.get('issued_date') as string;
-  const due_date = formData.get('due_date') as string;
-  const project_id = formData.get('project_id') as string;
-  const dp_amount = parseFloat(formData.get('dp_amount') as string) || 0;
-  const waive = formData.get('waive_requirements') === 'on';
+  const { vendor_id, line_items, site_details = [], description, due_date, dp_amount = 0, waive_requirements: waive = false } = input;
+  const issued_date = input.issued_date ?? new Date().toISOString().slice(0, 10);
 
-  // Parse line items and site details from serialized JSON
-  let lineItems: { item_code: string; description: string; qty: number; uom: string; unit_price: number }[] = [];
-  let siteDetails: { region: string; area_city: string; no_of_nodes: number; cable_length_km: number }[] = [];
+  if (!vendor_id) return { error: 'Vendor is required.' };
 
-  try {
-    const rawLineItems = formData.get('line_items') as string;
-    if (rawLineItems) lineItems = JSON.parse(rawLineItems);
-  } catch {
-    return { error: 'Invalid line items data.' };
-  }
+  const totalAmount = line_items.reduce((sum, li) => sum + (Number(li.qty) || 0) * (Number(li.unit_price) || 0), 0);
+  if (totalAmount <= 0) return { error: 'Total amount must be greater than zero. Add at least one line item with a price.' };
 
-  try {
-    const rawSites = formData.get('site_details') as string;
-    if (rawSites) siteDetails = JSON.parse(rawSites);
-  } catch {
-    return { error: 'Invalid site details data.' };
-  }
-
-  // Compute total from line items (or fallback to form amount)
-  const totalAmount = lineItems.length > 0
-    ? lineItems.reduce((sum, li) => sum + (Number(li.qty) || 0) * (Number(li.unit_price) || 0), 0)
-    : parseFloat(formData.get('amount') as string) || 0;
-
-  if (!vendor_id || !issued_date) {
-    return { error: 'Vendor and issued date are required.' };
-  }
-
-  if (totalAmount <= 0) {
-    return { error: 'Total amount must be greater than zero. Add at least one line item with a price.' };
-  }
-
-  // Check compliance gates — collect failures instead of hard-returning
   const { data: ndaDoc } = await supabase
     .from('vendor_documents')
     .select('status')
@@ -64,34 +46,18 @@ export async function createPurchaseOrder(prevState: any, formData: FormData) {
 
   const ndaFailed = !ndaDoc;
 
-  // Auto-assign the internal entity (subsidiary)
-  const { data: entity } = await supabase
-    .from('internal_entities')
-    .select('id')
-    .limit(1)
-    .single();
+  const { data: entity } = await supabase.from('internal_entities').select('id').limit(1).single();
 
-  // Fetch vendor status and currency
-  const { data: vendor } = await supabase
-    .from('vendors')
-    .select('status, currency')
-    .eq('id', vendor_id)
-    .single();
-
+  const { data: vendor } = await supabase.from('vendors').select('status, currency').eq('id', vendor_id).single();
   const statusFailed = !vendor || vendor.status !== 'active';
-
   const hasBlockers = ndaFailed || statusFailed;
 
   if (hasBlockers) {
     if (!waive) {
-      if (statusFailed) {
-        return { error: 'Cannot create PO: This vendor is not currently active. Vendors must be activated (Accredited) before purchase orders can be issued.' };
-      }
+      if (statusFailed) return { error: 'Cannot create PO: This vendor is not currently active. Vendors must be activated (Accredited) before purchase orders can be issued.' };
       return { error: 'Cannot create PO: This vendor does not have an approved Signed NDA on file. Please submit and have the NDA approved first.' };
     }
-    if (!hasCapability(role, 'po.waive_requirements')) {
-      return { error: 'You do not have permission to waive PO requirements.' };
-    }
+    if (!hasCapability(role, 'po.waive_requirements')) return { error: 'You do not have permission to waive PO requirements.' };
   }
 
   const currency = vendor?.currency || 'PHP';
@@ -101,11 +67,10 @@ export async function createPurchaseOrder(prevState: any, formData: FormData) {
     if (statusFailed) waivedRequirements.push('vendor_status');
   }
 
-  // po_number is auto-generated by the DB trigger
   const { data: newPO, error } = await supabase.from('purchase_orders').insert({
     vendor_id,
-    project_id: project_id || null,
-    description,
+    project_id: null,
+    description: description || null,
     amount: totalAmount,
     dp_amount,
     issued_date,
@@ -121,17 +86,16 @@ export async function createPurchaseOrder(prevState: any, formData: FormData) {
       waived_requirements: waivedRequirements,
       waiver_approved: false,
     } : {}),
-  }).select('id').single();
+  }).select('id, po_number').single();
 
   if (error) {
     console.error('Error creating PO:', error);
     return { error: error.message };
   }
 
-  // Insert line items
-  if (lineItems.length > 0) {
+  if (line_items.length > 0) {
     const { error: liError } = await supabase.from('po_line_items').insert(
-      lineItems.map((li, i) => ({
+      line_items.map((li, i) => ({
         po_id: newPO.id,
         line_no: i + 1,
         item_code: li.item_code || '',
@@ -142,13 +106,10 @@ export async function createPurchaseOrder(prevState: any, formData: FormData) {
         amount: (Number(li.qty) || 0) * (Number(li.unit_price) || 0),
       }))
     );
-    if (liError) {
-      console.error('Error inserting line items:', liError);
-    }
+    if (liError) console.error('Error inserting line items:', liError);
   }
 
-  // Insert site details (filter out empty rows)
-  const validSites = siteDetails.filter(
+  const validSites = site_details.filter(
     (s) => s.region || s.area_city || s.no_of_nodes > 0 || s.cable_length_km > 0
   );
   if (validSites.length > 0) {
@@ -162,18 +123,15 @@ export async function createPurchaseOrder(prevState: any, formData: FormData) {
         cable_length_km: Number(s.cable_length_km) || 0,
       }))
     );
-    if (siteError) {
-      console.error('Error inserting site details:', siteError);
-    }
+    if (siteError) console.error('Error inserting site details:', siteError);
   }
 
-  // Audit log
   await recordAuditLog({
     entity_type: 'purchase_order',
     entity_id: newPO.id,
     action: 'CREATE',
-    changes: { after: { vendor_id, amount: totalAmount, status: 'draft', currency, line_items_count: lineItems.length, sites_count: validSites.length, ...(waive && hasBlockers ? { requirements_waived: true, waived_requirements: waivedRequirements } : {}) } },
-    performed_by: user.id
+    changes: { after: { vendor_id, amount: totalAmount, status: 'draft', currency, line_items_count: line_items.length, sites_count: validSites.length, ...(waive && hasBlockers ? { requirements_waived: true, waived_requirements: waivedRequirements } : {}) } },
+    performed_by: user.id,
   });
 
   await createNotification({
@@ -181,11 +139,56 @@ export async function createPurchaseOrder(prevState: any, formData: FormData) {
     title: '📋 Purchase Order Created',
     message: `A new purchase order was drafted.`,
     link: `/dashboard/purchase-orders/${newPO.id}`,
-    created_by: user.id
+    created_by: user.id,
   });
 
   revalidatePath('/dashboard/purchase-orders');
-  redirect(`/dashboard/purchase-orders/${newPO.id}`);
+
+  return {
+    id: newPO.id,
+    po_number: newPO.po_number,
+    url: `/dashboard/purchase-orders/${newPO.id}`,
+    message: `Draft PO ${newPO.po_number} created successfully.`,
+  };
+}
+
+export async function createPurchaseOrder(prevState: any, formData: FormData) {
+  let lineItems: POLineItem[] = [];
+  let siteDetails: POSiteDetail[] = [];
+
+  try {
+    const raw = formData.get('line_items') as string;
+    if (raw) lineItems = JSON.parse(raw);
+  } catch {
+    return { error: 'Invalid line items data.' };
+  }
+
+  try {
+    const raw = formData.get('site_details') as string;
+    if (raw) siteDetails = JSON.parse(raw);
+  } catch {
+    return { error: 'Invalid site details data.' };
+  }
+
+  // Fallback: if no line items, try the legacy amount field so existing forms still work
+  const rawAmount = parseFloat(formData.get('amount') as string) || 0;
+  if (lineItems.length === 0 && rawAmount > 0) {
+    lineItems = [{ description: formData.get('description') as string || 'Service', qty: 1, unit_price: rawAmount }];
+  }
+
+  const result = await createPurchaseOrderCore({
+    vendor_id: formData.get('vendor_id') as string,
+    line_items: lineItems,
+    site_details: siteDetails,
+    description: formData.get('description') as string || undefined,
+    issued_date: formData.get('issued_date') as string || undefined,
+    due_date: formData.get('due_date') as string || undefined,
+    dp_amount: parseFloat(formData.get('dp_amount') as string) || 0,
+    waive_requirements: formData.get('waive_requirements') === 'on',
+  });
+
+  if ('error' in result) return { error: result.error };
+  redirect(result.url);
 }
 
 export async function updatePOStatus(poId: string, status: string) {

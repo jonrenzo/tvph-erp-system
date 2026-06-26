@@ -6,6 +6,7 @@ import { createClient } from "@/utils/supabase/server";
 import { recordAuditLog } from "@/utils/audit";
 import { createNotification } from "@/utils/notifications";
 import { importVendorsFromFile, importCustomersFromFile } from "@/utils/ai-import-processor";
+import { createPurchaseOrderCore } from "@/app/dashboard/purchase-orders/actions";
 
 const poStatusSchema = z.enum([
   "draft",
@@ -812,6 +813,38 @@ export const erpTools = {
         const message = geminiError instanceof Error ? geminiError.message : "Unknown Gemini error";
         return { error: `Failed to analyze document: ${message}` };
       }
+    },
+  }),
+
+  create_purchase_order: tool({
+    description:
+      "Create a DRAFT purchase order. REQUIRES user confirmation — present a full summary (vendor name, line items with qty × unit_price, computed total, issued date) and ask the user to confirm before calling. " +
+      "Use get_vendors first to resolve the vendor_id. Defaults to today's date if issued_date is omitted. " +
+      "If the vendor is not active or lacks an approved Signed NDA, the tool returns a compliance error. " +
+      "Only pass waive_requirements: true if the user explicitly asks to waive after being told the reason for the block — waiving requires the po.waive_requirements capability.",
+    inputSchema: z.object({
+      vendor_id: z.string().describe("UUID of the vendor for this PO"),
+      line_items: z.array(z.object({
+        item_code: z.string().optional().describe("Item code or SKU"),
+        description: z.string().describe("Line item description"),
+        qty: z.number().describe("Quantity"),
+        uom: z.string().optional().describe("Unit of measure, e.g. 'LOT', 'PCS', 'KM'"),
+        unit_price: z.number().describe("Unit price"),
+      })).min(1).describe("Line items — at least one required. Total is computed as sum of qty × unit_price."),
+      site_details: z.array(z.object({
+        region: z.string(),
+        area_city: z.string(),
+        no_of_nodes: z.number(),
+        cable_length_km: z.number(),
+      })).optional().describe("Optional telecom site details"),
+      description: z.string().optional().describe("Overall PO description or scope of work"),
+      issued_date: z.string().optional().describe("Issued date in YYYY-MM-DD format. Defaults to today if omitted."),
+      due_date: z.string().optional().describe("Due date in YYYY-MM-DD format"),
+      dp_amount: z.number().optional().describe("Down payment amount (defaults to 0)"),
+      waive_requirements: z.boolean().optional().describe("Waive NDA/vendor-status compliance gates. Only set true if user explicitly requests it after being informed of the blocker."),
+    }),
+    execute: async (input) => {
+      return createPurchaseOrderCore(input);
     },
   }),
 
