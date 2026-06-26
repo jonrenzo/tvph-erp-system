@@ -179,6 +179,10 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
   const progress = Math.min(100, Math.round((totalPaid / poAmount) * 100)) || 0;
   const isOverpaid = totalPaid > poAmount;
 
+  // Downpayment tranche split: PO is billed as DP + the balance after DP.
+  const dpTarget = Number(po.dp_amount || 0);
+  const balanceAfterDp = Math.max(0, poAmount - dpTarget);
+
   // Billing ceiling from approved cert (null = no cap beyond poAmount)
   const billingCeiling = maxApprovedPercent !== null ? (maxApprovedPercent / 100) * poAmount : null;
   const availableToBill = billingCeiling !== null ? Math.max(0, billingCeiling - totalInvoiced) : Math.max(0, poAmount - totalInvoiced);
@@ -479,6 +483,27 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
                 </div>
               </div>
             </div>
+
+            {dpTarget > 0 && (
+              <div className="grid grid-cols-2 gap-8">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+                    Downpayment
+                  </label>
+                  <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                    ₱{dpTarget.toLocaleString()}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+                    Balance after Downpayment
+                  </label>
+                  <div className="text-2xl font-bold text-slate-900 dark:text-white">
+                    ₱{balanceAfterDp.toLocaleString()}
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="pt-6 border-t border-slate-100 dark:border-slate-800/50">
               {isOverpaid ? (
