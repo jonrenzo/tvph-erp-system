@@ -322,6 +322,7 @@ export function CreatePOForm({
                 id="due_date"
                 name="due_date"
                 type="date"
+                defaultValue={new Date(Date.now() + 30 * 864e5).toISOString().split("T")[0]}
                 className="w-full pl-9 pr-4 py-2.5 bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
               />
             </div>
