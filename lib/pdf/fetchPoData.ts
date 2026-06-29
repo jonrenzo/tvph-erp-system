@@ -30,7 +30,7 @@ export async function fetchPoData(id: string): Promise<PoData | null> {
       projects (*),
       po_line_items (*),
       po_site_details (*),
-      profiles!purchase_orders_created_by_fkey (full_name)`,
+      profiles!created_by (full_name)`,
     )
     .eq('id', id)
     .single()
