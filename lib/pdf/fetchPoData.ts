@@ -29,7 +29,8 @@ export async function fetchPoData(id: string): Promise<PoData | null> {
       vendors (*),
       projects (*),
       po_line_items (*),
-      po_site_details (*)`,
+      po_site_details (*),
+      profiles!purchase_orders_created_by_fkey (full_name)`,
     )
     .eq('id', id)
     .single()
@@ -73,7 +74,7 @@ export async function fetchPoData(id: string): Promise<PoData | null> {
     mobilization_date: fmtSlashDate(po.mobilization_date),
     delivery_date: fmtSlashDate(po.delivery_date),
     pr_number: po.pr_number ?? '',
-    requisitioner: po.requisitioner ?? '',
+    requisitioner: (po.profiles as any)?.full_name ?? po.requisitioner ?? '',
     site_details: siteDetails,
     delivery_address_note: `Pls coordinate with Mae Bacayo / Teresa Beltran at Unit 1811, North Tower, Park Triangle Corporate Plaza, 32nd Street cor. 11th Ave, BGC, Taguig City. CP: 0961-4734695 / 0920-9680070`,
     incoterms: null,
