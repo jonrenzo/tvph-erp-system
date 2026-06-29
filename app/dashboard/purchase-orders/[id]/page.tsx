@@ -30,8 +30,10 @@ import { RecentActivity } from "@/components/dashboard/shared/recent-activity";
 import { PODownloadDropdown } from "@/components/dashboard/purchase-orders/po-download-dropdown";
 import { PoResendButton } from "@/components/dashboard/purchase-orders/po-resend-button";
 import { PoIssueButton } from "@/components/dashboard/purchase-orders/po-issue-button";
+import { PoApprovalActions } from "@/components/dashboard/purchase-orders/po-approval-actions";
 import { PoCertUpload } from "@/components/dashboard/purchase-orders/po-cert-upload";
 import { getCurrentProfile, hasCapability } from "@/lib/auth/permissions";
+import { isAdminOrAbove } from "@/lib/auth/roles";
 import { signDocUrls } from "@/utils/storage";
 
 export const unstable_instant = { 
@@ -113,6 +115,8 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
     .maybeSingle();
 
   const canSendEmail = hasCapability(currentRole, "email.send");
+  const isAdmin = isAdminOrAbove(currentRole);
+  const canApprovePO = hasCapability(currentRole, "po.approve");
 
   const invoiceIds = invoices?.map((i) => i.id) || [];
 
@@ -223,10 +227,12 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
                       ? "bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400"
                       : po.status === "issued"
                         ? "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400"
-                        : "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400"
+                        : po.status === "pending_approval"
+                          ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400"
+                          : "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400"
                 }`}
               >
-                {po.status.replace("_", " ").toUpperCase()}
+                {po.status.replace(/_/g, " ").toUpperCase()}
               </span>
             </div>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-2">
@@ -239,7 +245,9 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
         </div>
 
         <div className="flex items-center gap-3 md:ml-auto">
-          {po.status === "draft" && <PoIssueButton poId={po.id} />}
+          {po.status === "draft" && hasCapability(currentRole, "po.status") && (
+            <PoIssueButton poId={po.id} isAdmin={isAdmin} />
+          )}
           {po.status !== "draft" && canSendEmail && (
             <PoResendButton poId={po.id} />
           )}
@@ -265,6 +273,38 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
             <p className="text-xs text-amber-600/80 dark:text-amber-400/60 mt-1">
               {lastPoEmail.error || "The last attempt to email this PO to the vendor failed."}
               {canSendEmail ? " Use “Resend to Vendor” above to try again." : ""}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* PO Approval Banners */}
+      {po.status === "pending_approval" && (
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-2xl bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/50">
+          <div className="flex items-start gap-3 flex-1">
+            <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+                Awaiting Executive Approval
+              </p>
+              <p className="text-xs text-amber-600/80 dark:text-amber-400/60 mt-1">
+                This PO has been submitted for approval and <span className="font-semibold">cannot be sent to the vendor</span> until an admin approves it.
+              </p>
+            </div>
+          </div>
+          {canApprovePO && <PoApprovalActions poId={po.id} />}
+        </div>
+      )}
+
+      {po.status === "draft" && po.rejection_reason && (
+        <div className="flex items-start gap-3 p-4 rounded-2xl bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800/50">
+          <XCircle className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-red-700 dark:text-red-400">
+              Approval Rejected — Returned to Draft
+            </p>
+            <p className="text-xs text-red-600/80 dark:text-red-400/60 mt-1">
+              Reason: <span className="font-medium">{po.rejection_reason}</span>
             </p>
           </div>
         </div>
