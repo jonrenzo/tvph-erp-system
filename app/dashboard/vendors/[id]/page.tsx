@@ -90,7 +90,7 @@ async function VendorDetailContent({
       .order('name'),
   ]);
 
-  const projects = projectLinks?.map((link: any) => link.projects).filter(Boolean) || [];
+  const projects = projectLinks?.map((link: any) => link.projects).filter((p: any) => p && !p.deleted_at) || [];
   const userRole = userProfile?.role || null;
 
   if (error || !vendor) {

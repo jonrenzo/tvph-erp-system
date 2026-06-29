@@ -26,7 +26,7 @@ async function ProjectDetailLoader({ paramsPromise }: { paramsPromise: Promise<{
   const [{ data: project }, { data: pos }, { data: projectVendors }, { data: allVendors }, { data: allAccounts }] = await Promise.all([
     supabase
       .from('projects')
-      .select('*, crm_accounts(id, company_name)')
+      .select('*')
       .eq('id', params.id)
       .single(),
     supabase
@@ -54,7 +54,13 @@ async function ProjectDetailLoader({ paramsPromise }: { paramsPromise: Promise<{
 
   if (!project) notFound();
 
-  const signedProject = await signDocUrl(supabase, 'crm-documents', project);
+  // Derive the linked account from the already-fetched allAccounts list rather than
+  // using a PostgREST FK join — the join errors/hangs when account_id is null.
+  const crm_accounts = project.account_id
+    ? ((allAccounts || []).find((a: any) => a.id === project.account_id) ?? null)
+    : null;
+
+  const signedProject = await signDocUrl(supabase, 'crm-documents', { ...project, crm_accounts });
 
   const linkedVendors = (projectVendors || []).map((pv: any) => pv.vendors).filter(Boolean);
   const linkedVendorIds = linkedVendors.map((v: any) => v.id);
