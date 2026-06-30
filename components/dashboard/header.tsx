@@ -63,7 +63,7 @@ export function Header({
   };
 
   return (
-    <header className="relative flex h-16 shrink-0 items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-[#071F15]/80 px-6 backdrop-blur-md">
+    <header className="relative z-[var(--z-dropdown)] flex h-16 shrink-0 items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-[#071F15]/80 px-6 backdrop-blur-md">
       {/* Left Section */}
       <div className="flex flex-1 items-center gap-4">
         <button

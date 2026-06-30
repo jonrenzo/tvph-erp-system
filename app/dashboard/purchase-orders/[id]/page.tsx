@@ -22,6 +22,7 @@ import {
   ShieldCheck,
   ClipboardCheck,
   TrendingUp,
+  Settings,
 } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
@@ -184,9 +185,9 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
   const compPct = maxApprovedPercent || 0;
   const billingVariance = compPct - billingPct;
 
-  const remainingBalance = Math.max(0, poAmount - totalPaid);
+  const remainingBalance = Math.max(0, poAmount - dpAmount - totalPaid);
   const overpaidAmount = Math.max(0, totalPaid - poAmount);
-  const progress = Math.min(100, Math.round((totalPaid / poAmount) * 100)) || 0;
+  const progress = Math.min(100, billingPct);
   const isOverpaid = totalPaid > poAmount;
 
   // Downpayment tranche split: PO is billed as DP + the balance after DP.
@@ -583,9 +584,14 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
 
         {/* Invoicing Progress Card */}
         <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm space-y-6">
-          <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <FileText className="h-4 w-4 text-primary" /> Billing Health
-          </h3>
+          <div className="flex items-center justify-between">
+            <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <FileText className="h-4 w-4 text-primary" /> Billing Health
+            </h3>
+            <button type="button" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all">
+              <Settings className="h-3.5 w-3.5" />
+            </button>
+          </div>
           <div className="space-y-4">
             {/* Completion vs Billing */}
             <div>
@@ -667,7 +673,7 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
                   <div className="flex justify-between items-center text-sm">
                     <span className="text-slate-500">Available to Bill</span>
                     <span className="font-bold text-slate-900 dark:text-white">
-                      ₱{availableToBill.toLocaleString()}
+                      ₱{availableToBill.toLocaleString()} ({Math.max(0, compPct - billingPct)}%)
                     </span>
                   </div>
                 </>

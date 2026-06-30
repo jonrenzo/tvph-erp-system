@@ -48,19 +48,6 @@ export async function getProjectProgress(supabase: SupabaseClient): Promise<Proj
 
   if (!projects?.length) return [];
 
-  // Best-effort fetch of completion_pct (column may not exist yet — fall back to cert-based calc)
-  const projectPct = new Map<string, number>();
-  try {
-    const { data: pctRows } = await supabase.from("projects").select("id, completion_pct").is("deleted_at", null);
-    if (pctRows) {
-      for (const row of pctRows) {
-        if (row.completion_pct != null) projectPct.set(row.id, Number(row.completion_pct));
-      }
-    }
-  } catch {
-    // column doesn't exist — cert-weighted calculation will be used as fallback
-  }
-
   const poIds = new Set((pos ?? []).map(po => po.id));
 
   // Map po_id → project_id
@@ -111,18 +98,18 @@ export async function getProjectProgress(supabase: SupabaseClient): Promise<Proj
     invoicedTotal.set(projId, (invoicedTotal.get(projId) ?? 0) + Number(inv.amount));
   }
 
-  // Completion certs: max approved % per PO, weighted by PO amount
+  // Completion certs: max approved % per PO, straight sum across POs, capped at 100
   const certPO = new Map<string, number>();
   for (const cert of certs ?? []) {
     const curr = certPO.get(cert.po_id) ?? 0;
     certPO.set(cert.po_id, Math.max(curr, Number(cert.percent_complete)));
   }
 
-  const weightedCompSum = new Map<string, number>();
+  const completionSum = new Map<string, number>();
   for (const po of pos ?? []) {
     if (!po.project_id) continue;
     const comp = certPO.get(po.id) ?? 0;
-    weightedCompSum.set(po.project_id, (weightedCompSum.get(po.project_id) ?? 0) + Number(po.amount) * comp);
+    completionSum.set(po.project_id, (completionSum.get(po.project_id) ?? 0) + comp);
   }
 
   return projects
@@ -134,10 +121,7 @@ export async function getProjectProgress(supabase: SupabaseClient): Promise<Proj
       const inv = invoicedTotal.get(p.id) ?? 0;
       const effectiveBilled = inv + dp;
       const billingPct = c > 0 ? Math.round((effectiveBilled / c) * 100) : 0;
-      const weightedSum = weightedCompSum.get(p.id) ?? 0;
-      const certPct = c > 0 ? Math.round(weightedSum / c) : 0;
-      const projectComp = projectPct.get(p.id);
-      const completionPct = projectComp != null ? Math.round(projectComp) : certPct;
+      const completionPct = Math.min(100, Math.round(completionSum.get(p.id) ?? 0));
       const variance = completionPct - billingPct;
       return {
         id: p.id,

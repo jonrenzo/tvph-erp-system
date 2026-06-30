@@ -486,6 +486,52 @@ export async function deletePurchaseOrder(poId: string) {
   return { success: true };
 }
 
+/** Check if adding a cert's percent would push the project over the 100% completion cap. */
+async function checkProjectCompletionLimit(supabase: Awaited<ReturnType<typeof createClient>>, poId: string, newPercent: number): Promise<string | null> {
+  const { data: po } = await supabase
+    .from('purchase_orders')
+    .select('project_id')
+    .eq('id', poId)
+    .single();
+
+  if (!po?.project_id) return null; // no project linked — no cap to enforce
+
+  // Get all approved certs for all POs in this project
+  const { data: projectPOs } = await supabase
+    .from('purchase_orders')
+    .select('id')
+    .eq('project_id', po.project_id)
+    .is('deleted_at', null);
+
+  const projectPoIds = (projectPOs ?? []).map(p => p.id);
+
+  if (projectPoIds.length === 0) return null;
+
+  const { data: approvedCerts } = await supabase
+    .from('po_completion_certificates')
+    .select('po_id, percent_complete')
+    .eq('status', 'approved')
+    .in('po_id', projectPoIds);
+
+  // Max approved % per PO, then straight sum
+  const maxPerPO = new Map<string, number>();
+  for (const c of approvedCerts ?? []) {
+    const curr = maxPerPO.get(c.po_id) ?? 0;
+    maxPerPO.set(c.po_id, Math.max(curr, Number(c.percent_complete)));
+  }
+
+  let currentSum = 0;
+  for (const pct of maxPerPO.values()) currentSum += pct;
+
+  const projected = currentSum + newPercent;
+  if (projected > 100) {
+    const remaining = Math.max(0, 100 - currentSum).toFixed(2);
+    return `This submission would bring the project completion to ${projected.toFixed(2)}%, exceeding the 100% limit. Only ${remaining}% remaining.`;
+  }
+
+  return null;
+}
+
 export async function submitCompletionCertificate(formData: FormData) {
   const supabase = await createClient();
   const { user, error: authError } = await requireCapability('po.write', supabase);
@@ -501,6 +547,10 @@ export async function submitCompletionCertificate(formData: FormData) {
   if (!poId || isNaN(percent) || percent <= 0 || percent > 100) {
     return { error: 'Invalid input. Provide a PO and a completion percentage between 1–100.' };
   }
+
+  // Hard-block if this cert would push the project over 100%
+  const limitError = await checkProjectCompletionLimit(supabase, poId, percent);
+  if (limitError) return { error: limitError };
 
   let file_url: string | null = null;
   let file_name: string | null = null;
@@ -561,7 +611,7 @@ export async function approveCompletionCertificate(certId: string) {
 
   const { data: cert } = await supabase
     .from('po_completion_certificates')
-    .select('po_id, status, submitted_by')
+    .select('po_id, percent_complete, status, submitted_by')
     .eq('id', certId)
     .single();
 
@@ -572,6 +622,10 @@ export async function approveCompletionCertificate(certId: string) {
   if (cert.submitted_by === user.id) {
     return { error: 'You cannot approve a certificate you submitted.' };
   }
+
+  // Hard-block if approving this cert would push the project over 100%
+  const limitError = await checkProjectCompletionLimit(supabase, cert.po_id, Number(cert.percent_complete));
+  if (limitError) return { error: limitError };
 
   const { error } = await supabase
     .from('po_completion_certificates')

@@ -9,7 +9,6 @@ import {
 } from "lucide-react";
 import { updateProject, uploadContractDocument } from "@/app/dashboard/projects/actions";
 import { linkVendorToProject, removeVendorFromProject } from "@/app/dashboard/projects/actions";
-import { getCompletionOverride, setCompletionOverride } from "@/lib/completion-override";
 import Link from "next/link";
 
 type Account = { id: string; company_name: string };
@@ -88,28 +87,12 @@ export function ProjectDetailContent({
   const [removingVendorId, setRemovingVendorId] = useState<string | null>(null);
   const [contractUploading, setContractUploading] = useState(false);
   const contractInputRef = useRef<HTMLInputElement>(null);
-  // TEMPORARY: completion % is stored client-side only (localStorage) for testing,
-  // since the projects.completion_pct DB column does not exist yet. See lib/completion-override.
-  const [manualCompletionPct, setManualCompletionPct] = useState<number | null>(
-    project.completion_pct ?? null
-  );
 
   const [updateState, updateAction, isUpdating] = useActionState(updateProject, null);
 
   useEffect(() => {
     if (updateState?.success) setIsEditing(false);
   }, [updateState]);
-
-  // Hydrate the manual completion % from the local (testing-only) override on mount.
-  useEffect(() => {
-    const override = getCompletionOverride(project.id);
-    if (override !== null) setManualCompletionPct(override);
-  }, [project.id]);
-
-  const updateCompletionPct = (pct: number | null) => {
-    setManualCompletionPct(pct);
-    setCompletionOverride(project.id, pct); // local-only persistence (testing)
-  };
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -164,7 +147,6 @@ export function ProjectDetailContent({
 
   const totalPOValue = pos.reduce((sum, po) => sum + Number(po.amount), 0);
   const client = project.crm_accounts;
-  const effectiveCompletionPct = manualCompletionPct ?? billingSummary.completionPct;
 
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -323,10 +305,10 @@ export function ProjectDetailContent({
               <div className="w-32">
                 <div className="flex justify-between text-[10px] text-slate-500 mb-0.5">
                   <span>Complete</span>
-                  <span>{effectiveCompletionPct}%</span>
+                  <span>{billingSummary.completionPct}%</span>
                 </div>
                 <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${Math.min(100, effectiveCompletionPct)}%` }}></div>
+                  <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${Math.min(100, billingSummary.completionPct)}%` }}></div>
                 </div>
               </div>
             </div>
@@ -361,35 +343,16 @@ export function ProjectDetailContent({
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
                   Completion %
                 </label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={manualCompletionPct ?? ''}
-                    placeholder={String(billingSummary.completionPct || 0)}
-                    onChange={(e) => updateCompletionPct(e.target.value ? Math.min(100, Math.max(0, Number(e.target.value))) : null)}
-                    className="w-20 px-3 py-1.5 bg-slate-50 dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-lg text-sm font-bold text-emerald-700 dark:text-emerald-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                  />
-                  <span className="text-sm text-slate-500">/ 100</span>
-                  {manualCompletionPct !== null && (
-                    <button
-                      onClick={() => updateCompletionPct(null)}
-                      className="text-[10px] text-slate-400 hover:text-red-500 underline"
-                    >
-                      Clear
-                    </button>
-                  )}
+                <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
+                  {billingSummary.completionPct}%
                 </div>
-                <p className="mt-1.5 text-[10px] text-slate-400">Saved locally for testing only (not persisted to the database).</p>
               </div>
             </div>
 
-            {/* Variance — uses manual completion when set */}
+            {/* Variance */}
             <div className="shrink-0 flex flex-col justify-center">
               {(() => {
-                const effectiveComp = manualCompletionPct ?? billingSummary.completionPct;
-                const effVariance = effectiveComp - billingSummary.billingPct;
+                const effVariance = billingSummary.completionPct - billingSummary.billingPct;
                 return effVariance > 0 ? (
                   <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50 rounded-2xl text-center">
                     <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">Need to Pay</p>
@@ -431,8 +394,7 @@ export function ProjectDetailContent({
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
                     {billingSummary.poDetails.map((d) => {
-                      const effectiveComp = manualCompletionPct ?? d.completionPct;
-                      const poVar = effectiveComp - d.billingPct;
+                      const poVar = d.completionPct - d.billingPct;
                       return (
                         <tr key={d.poId} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors">
                           <td className="py-2.5 pr-4">
