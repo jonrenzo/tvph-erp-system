@@ -2,12 +2,13 @@
 
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
-import { MessageSquare, X, Send, Sparkles, User, Bot, Loader2, Maximize2, Minimize2, Paperclip } from "lucide-react";
+import { MessageSquare, X, Send, Sparkles, User, Bot, Loader2, Maximize2, Minimize2, Paperclip, Trash2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { usePathname } from 'next/navigation';
 import { uploadChatFile, type UploadedFileInfo } from "@/app/actions/chat-upload";
+import { getChatHistory, saveMessages, clearChatHistory } from "@/app/actions/chat-history";
 
 type ToolInvocationView = {
   toolCallId: string;
@@ -48,7 +49,7 @@ export function AIChatBubble() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { messages, status, sendMessage } = useChat({
+  const { messages, status, sendMessage, setMessages } = useChat({
     transport: new DefaultChatTransport({
       api: '/api/chat',
       body: () => ({ contextUrl: pathname }),
@@ -56,6 +57,46 @@ export function AIChatBubble() {
   });
 
   const isLoading = status === 'submitted' || status === 'streaming';
+
+  const savedIdsRef = useRef(new Set<string>());
+  const prevStatusRef = useRef(status);
+
+  useEffect(() => {
+    getChatHistory()
+      .then(msgs => {
+        if (msgs.length > 0) {
+          setMessages(msgs);
+          msgs.forEach(m => savedIdsRef.current.add(m.id));
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load chat history:', err);
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const prev = prevStatusRef.current;
+    prevStatusRef.current = status;
+    if (prev !== 'ready' && status === 'ready' && messages.length > 0) {
+      const unsaved = messages.filter(m => !savedIdsRef.current.has(m.id));
+      if (unsaved.length > 0) {
+        saveMessages(unsaved)
+          .then(() => {
+            unsaved.forEach(m => savedIdsRef.current.add(m.id));
+          })
+          .catch((err) => {
+            console.error('Failed to save chat messages:', err);
+          });
+      }
+    }
+  }, [status, messages]);
+
+  const handleClear = () => {
+    setMessages([]);
+    savedIdsRef.current.clear();
+    clearChatHistory();
+  };
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -177,6 +218,9 @@ export function AIChatBubble() {
               </div>
             </div>
             <div className="flex items-center gap-1">
+               <button onClick={handleClear} title="Clear conversation" className="p-2 text-slate-400 hover:text-red-500 transition-colors">
+                 <Trash2 className="h-4 w-4" />
+               </button>
                <button onClick={() => setIsExpanded(!isExpanded)} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
                  {isExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
                </button>
