@@ -1,5 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
-import { Mail, Download, CheckCircle2, XCircle } from "lucide-react";
+import { Mail, Download, CheckCircle2, XCircle, MailCheck, MailOpen, MailX } from "lucide-react";
 import { docTypeLabel } from "@/lib/vendors/document-types";
 
 interface EmailLogRow {
@@ -15,6 +15,41 @@ interface EmailLogRow {
   meta: Record<string, unknown> | null;
   created_at: string;
   created_by: string | null;
+  delivered_at: string | null;
+  opened_at: string | null;
+  bounced_at: string | null;
+}
+
+function fmt(ts: string) {
+  return new Date(ts).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+function StatusBadge({ row }: { row: EmailLogRow }) {
+  if (row.bounced_at) return (
+    <span title={`Bounced · ${fmt(row.bounced_at)}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400">
+      <MailX className="h-3 w-3" /> BOUNCED
+    </span>
+  );
+  if (row.opened_at) return (
+    <span title={`Opened · ${fmt(row.opened_at)} · Best-effort: pixel tracking may be inaccurate`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-900/20 dark:text-violet-400">
+      <MailOpen className="h-3 w-3" /> OPENED~
+    </span>
+  );
+  if (row.delivered_at) return (
+    <span title={`Delivered · ${fmt(row.delivered_at)}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400">
+      <MailCheck className="h-3 w-3" /> DELIVERED
+    </span>
+  );
+  if (row.status === "sent") return (
+    <span title="Handed to mail provider; awaiting delivery confirmation" className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400">
+      <CheckCircle2 className="h-3 w-3" /> SENT
+    </span>
+  );
+  return (
+    <span title={row.error || undefined} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400">
+      <XCircle className="h-3 w-3" /> FAILED
+    </span>
+  );
 }
 
 const KIND_LABELS: Record<EmailLogRow["kind"], string> = {
@@ -48,7 +83,7 @@ export async function VendorEmailHistory({ vendorId }: { vendorId: string }) {
   const { data: rows } = await supabase
     .from("email_log")
     .select(
-      "id, kind, ref_id, to_addresses, cc_addresses, subject, status, resend_id, error, meta, created_at, created_by",
+      "id, kind, ref_id, to_addresses, cc_addresses, subject, status, resend_id, error, meta, created_at, created_by, delivered_at, opened_at, bounced_at",
     )
     .eq("vendor_id", vendorId)
     .order("created_at", { ascending: false })
@@ -133,18 +168,7 @@ export async function VendorEmailHistory({ vendorId }: { vendorId: string }) {
                     <span className="line-clamp-2">{row.subject || "—"}</span>
                   </td>
                   <td className="px-6 py-4">
-                    {row.status === "sent" ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400">
-                        <CheckCircle2 className="h-3 w-3" /> SENT
-                      </span>
-                    ) : (
-                      <span
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400"
-                        title={row.error || undefined}
-                      >
-                        <XCircle className="h-3 w-3" /> FAILED
-                      </span>
-                    )}
+                    <StatusBadge row={row} />
                   </td>
                   <td className="px-6 py-4 font-mono text-xs text-slate-400">
                     {row.resend_id || "—"}
