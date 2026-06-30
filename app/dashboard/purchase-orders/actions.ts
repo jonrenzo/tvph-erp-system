@@ -14,6 +14,7 @@ type POSiteDetail = { region: string; area_city: string; no_of_nodes: number; ca
 
 interface CreatePOInput {
   vendor_id: string;
+  project_id?: string;
   line_items: POLineItem[];
   site_details?: POSiteDetail[];
   description?: string;
@@ -28,7 +29,7 @@ export async function createPurchaseOrderCore(input: CreatePOInput) {
   const { user, role, error: authError } = await requireCapability('po.create', supabase);
   if (authError || !user) return { error: authError || 'Unauthorized' };
 
-  const { vendor_id, line_items, site_details = [], description, due_date, dp_amount = 0, waive_requirements: waive = false } = input;
+  const { vendor_id, project_id, line_items, site_details = [], description, due_date, dp_amount = 0, waive_requirements: waive = false } = input;
   const issued_date = input.issued_date ?? new Date().toISOString().slice(0, 10);
 
   if (!vendor_id) return { error: 'Vendor is required.' };
@@ -70,7 +71,7 @@ export async function createPurchaseOrderCore(input: CreatePOInput) {
 
   const { data: newPO, error } = await supabase.from('purchase_orders').insert({
     vendor_id,
-    project_id: null,
+    project_id: project_id || null,
     description: description || null,
     amount: totalAmount,
     dp_amount,
@@ -179,6 +180,7 @@ export async function createPurchaseOrder(prevState: any, formData: FormData) {
 
   const result = await createPurchaseOrderCore({
     vendor_id: formData.get('vendor_id') as string,
+    project_id: formData.get('project_id') as string || undefined,
     line_items: lineItems,
     site_details: siteDetails,
     description: formData.get('description') as string || undefined,
