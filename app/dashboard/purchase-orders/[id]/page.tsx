@@ -248,7 +248,7 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
           {po.status === "draft" && hasCapability(currentRole, "po.status") && (
             <PoIssueButton poId={po.id} isAdmin={isAdmin} />
           )}
-          {po.status !== "draft" && canSendEmail && (
+          {["issued", "paid", "overpaid"].includes(po.status) && canSendEmail && (
             <PoResendButton poId={po.id} />
           )}
           <PODownloadDropdown poId={po.id} />
