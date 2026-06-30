@@ -4,488 +4,263 @@
  */
 
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AIChatBubble } from '@/components/dashboard/ai/chat-bubble';
 import { getChatHistory, saveMessages, clearChatHistory } from '@/app/actions/chat-history';
 import { useChat } from '@ai-sdk/react';
 import type { UIMessage } from 'ai';
 
-// Mock dependencies
 jest.mock('@/app/actions/chat-history');
 jest.mock('@ai-sdk/react');
 jest.mock('react-markdown', () => ({
   __esModule: true,
   default: ({ children }: any) => <div>{children}</div>,
 }));
-jest.mock('next/navigation', () => ({
-  usePathname: () => '/test-path',
-}));
+jest.mock('next/navigation', () => ({ usePathname: () => '/test-path' }));
 jest.mock('next/image', () => ({
   __esModule: true,
   default: (props: any) => <img {...props} />,
 }));
 
+const mockMsg = (id: string, role: 'user' | 'assistant', text: string): UIMessage =>
+  ({ id, role, parts: [{ type: 'text', text }] }) as unknown as UIMessage;
+
+const mockMessages = [mockMsg('1', 'user', 'Hello'), mockMsg('2', 'assistant', 'Hi there')];
+
 describe('AIChatBubble', () => {
-  const mockMessages: UIMessage[] = [
-    { id: '1', role: 'user', content: 'Hello' },
-    { id: '2', role: 'assistant', content: 'Hi there' },
-  ];
+  let capturedOnFinish: ((opts: { messages: UIMessage[] }) => void) | undefined;
 
   const defaultUseChatReturn = {
-    messages: [],
+    messages: [] as UIMessage[],
     status: 'ready' as const,
     sendMessage: jest.fn(),
     setMessages: jest.fn(),
   };
 
   beforeEach(() => {
+    capturedOnFinish = undefined;
     jest.clearAllMocks();
     (getChatHistory as jest.Mock).mockResolvedValue([]);
     (saveMessages as jest.Mock).mockResolvedValue(undefined);
     (clearChatHistory as jest.Mock).mockResolvedValue(undefined);
-    (useChat as jest.Mock).mockReturnValue(defaultUseChatReturn);
+    (useChat as jest.Mock).mockImplementation((opts: any) => {
+      capturedOnFinish = opts?.onFinish;
+      return defaultUseChatReturn;
+    });
   });
 
   describe('chat history loading', () => {
     it('calls getChatHistory on mount', async () => {
       render(<AIChatBubble />);
-
-      await waitFor(() => {
-        expect(getChatHistory).toHaveBeenCalled();
-      });
+      await waitFor(() => expect(getChatHistory).toHaveBeenCalled());
     });
 
-    it('loads chat history and populates messages on mount', async () => {
+    it('populates messages via setMessages when history exists', async () => {
       const mockSetMessages = jest.fn();
       (getChatHistory as jest.Mock).mockResolvedValue(mockMessages);
-      (useChat as jest.Mock).mockReturnValue({
-        ...defaultUseChatReturn,
-        setMessages: mockSetMessages,
+      (useChat as jest.Mock).mockImplementation((opts: any) => {
+        capturedOnFinish = opts?.onFinish;
+        return { ...defaultUseChatReturn, setMessages: mockSetMessages };
       });
 
       render(<AIChatBubble />);
-
-      await waitFor(() => {
-        expect(mockSetMessages).toHaveBeenCalledWith(mockMessages);
-      });
+      await waitFor(() => expect(mockSetMessages).toHaveBeenCalledWith(mockMessages));
     });
 
     it('does not call setMessages when history is empty', async () => {
       const mockSetMessages = jest.fn();
-      (getChatHistory as jest.Mock).mockResolvedValue([]);
-      (useChat as jest.Mock).mockReturnValue({
-        ...defaultUseChatReturn,
-        setMessages: mockSetMessages,
+      (useChat as jest.Mock).mockImplementation((opts: any) => {
+        capturedOnFinish = opts?.onFinish;
+        return { ...defaultUseChatReturn, setMessages: mockSetMessages };
       });
 
       render(<AIChatBubble />);
-
-      await waitFor(() => {
-        expect(getChatHistory).toHaveBeenCalled();
-      });
-
+      await waitFor(() => expect(getChatHistory).toHaveBeenCalled());
       expect(mockSetMessages).not.toHaveBeenCalled();
     });
 
-    it('marks loaded message IDs as saved in savedIdsRef', async () => {
+    it('marks loaded message IDs as saved so onFinish does not re-save them', async () => {
       const mockSetMessages = jest.fn();
       (getChatHistory as jest.Mock).mockResolvedValue(mockMessages);
-      (useChat as jest.Mock).mockReturnValue({
-        ...defaultUseChatReturn,
-        setMessages: mockSetMessages,
+      (useChat as jest.Mock).mockImplementation((opts: any) => {
+        capturedOnFinish = opts?.onFinish;
+        return { ...defaultUseChatReturn, setMessages: mockSetMessages };
       });
 
       render(<AIChatBubble />);
+      await waitFor(() => expect(mockSetMessages).toHaveBeenCalledWith(mockMessages));
 
-      await waitFor(() => {
-        expect(mockSetMessages).toHaveBeenCalled();
-      });
-
-      // Verify that after loading, the component would not re-save these messages
-      // This is verified by checking saveMessages is not called when status changes
-      // We'll test this in the next test
+      // onFinish fires with the same messages that were loaded — none should be saved
+      capturedOnFinish!({ messages: mockMessages });
+      expect(saveMessages).not.toHaveBeenCalled();
     });
   });
 
-  describe('message persistence', () => {
-    it('saves unsaved messages when status transitions to ready', async () => {
-      const newMessage: UIMessage = {
-        id: 'new-msg-1',
-        role: 'user',
-        content: 'New message',
-      };
-
-      const mockSetMessages = jest.fn();
-      let useChatState = {
-        ...defaultUseChatReturn,
-        messages: [],
-        status: 'submitted' as const,
-        setMessages: mockSetMessages,
-      };
-
-      const useChatMock = jest.fn(() => useChatState);
-      (useChat as jest.Mock).mockImplementation(useChatMock);
-      (getChatHistory as jest.Mock).mockResolvedValue([]);
-
-      const { rerender } = render(<AIChatBubble />);
-
-      await waitFor(() => {
-        expect(getChatHistory).toHaveBeenCalled();
-      });
-
-      // Simulate status change to 'ready' with a new message
-      useChatState = {
-        ...useChatState,
-        messages: [newMessage],
-        status: 'ready',
-      };
-      useChatMock.mockReturnValue(useChatState);
-
-      rerender(<AIChatBubble />);
-
-      await waitFor(() => {
-        expect(saveMessages).toHaveBeenCalledWith([newMessage]);
-      });
+  describe('message persistence via onFinish', () => {
+    it('passes onFinish callback to useChat', () => {
+      render(<AIChatBubble />);
+      expect(capturedOnFinish).toBeInstanceOf(Function);
     });
 
-    it('does not save messages that were already loaded from history', async () => {
-      const mockSetMessages = jest.fn();
-      let useChatState = {
-        ...defaultUseChatReturn,
-        messages: mockMessages,
-        status: 'ready' as const,
-        setMessages: mockSetMessages,
-      };
+    it('saves new messages when onFinish fires', async () => {
+      render(<AIChatBubble />);
+      await waitFor(() => expect(getChatHistory).toHaveBeenCalled());
 
-      const useChatMock = jest.fn(() => useChatState);
-      (useChat as jest.Mock).mockImplementation(useChatMock);
-      (getChatHistory as jest.Mock).mockResolvedValue(mockMessages);
+      const newMsg = mockMsg('new-1', 'user', 'New message');
+      capturedOnFinish!({ messages: [newMsg] });
+
+      await waitFor(() => expect(saveMessages).toHaveBeenCalledWith([newMsg]));
+    });
+
+    it('saves only unsaved messages — skips messages already loaded from history', async () => {
+      const loaded = mockMsg('old', 'user', 'Old');
+      const fresh = mockMsg('fresh', 'assistant', 'Fresh');
+      const mockSetMessages = jest.fn();
+
+      (getChatHistory as jest.Mock).mockResolvedValue([loaded]);
+      (useChat as jest.Mock).mockImplementation((opts: any) => {
+        capturedOnFinish = opts?.onFinish;
+        return { ...defaultUseChatReturn, setMessages: mockSetMessages };
+      });
 
       render(<AIChatBubble />);
+      await waitFor(() => expect(mockSetMessages).toHaveBeenCalledWith([loaded]));
 
-      await waitFor(() => {
-        expect(mockSetMessages).toHaveBeenCalledWith(mockMessages);
+      // onFinish fires with both old + new
+      capturedOnFinish!({ messages: [loaded, fresh] });
+
+      await waitFor(() => expect(saveMessages).toHaveBeenCalledWith([fresh]));
+      // loaded message should not appear in the save call
+      expect(saveMessages).not.toHaveBeenCalledWith(expect.arrayContaining([loaded]));
+    });
+
+    it('does not call saveMessages when all messages are already saved', async () => {
+      (getChatHistory as jest.Mock).mockResolvedValue(mockMessages);
+      const mockSetMessages = jest.fn();
+      (useChat as jest.Mock).mockImplementation((opts: any) => {
+        capturedOnFinish = opts?.onFinish;
+        return { ...defaultUseChatReturn, setMessages: mockSetMessages };
       });
 
-      // Status is already 'ready', so no transition should trigger a save
+      render(<AIChatBubble />);
+      await waitFor(() => expect(mockSetMessages).toHaveBeenCalledWith(mockMessages));
+
+      capturedOnFinish!({ messages: mockMessages });
       expect(saveMessages).not.toHaveBeenCalled();
     });
 
-    it('saves only unsaved messages on status transition to ready', async () => {
-      const savedMessage: UIMessage = {
-        id: '1',
-        role: 'user',
-        content: 'Old message',
-      };
-      const newMessage: UIMessage = {
-        id: 'new',
-        role: 'assistant',
-        content: 'New message',
-      };
+    it('handles saveMessages rejection gracefully', async () => {
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+      (saveMessages as jest.Mock).mockRejectedValue(new Error('Save failed'));
 
-      const mockSetMessages = jest.fn();
-      let useChatState = {
-        ...defaultUseChatReturn,
-        messages: [],
-        status: 'submitted' as const,
-        setMessages: mockSetMessages,
-      };
+      render(<AIChatBubble />);
+      await waitFor(() => expect(getChatHistory).toHaveBeenCalled());
 
-      const useChatMock = jest.fn(() => useChatState);
-      (useChat as jest.Mock).mockImplementation(useChatMock);
-      (getChatHistory as jest.Mock).mockResolvedValue([savedMessage]);
+      capturedOnFinish!({ messages: [mockMsg('x', 'user', 'Test')] });
 
-      const { rerender } = render(<AIChatBubble />);
-
-      await waitFor(() => {
-        expect(mockSetMessages).toHaveBeenCalledWith([savedMessage]);
-      });
-
-      // Transition to ready with both old and new message
-      useChatState = {
-        ...useChatState,
-        messages: [savedMessage, newMessage],
-        status: 'ready',
-      };
-      useChatMock.mockReturnValue(useChatState);
-
-      rerender(<AIChatBubble />);
-
-      await waitFor(() => {
-        // Should only save the new message, not the one loaded from history
-        expect(saveMessages).toHaveBeenCalledWith([newMessage]);
-      });
-    });
-
-    it('does not save empty message array on status transition', async () => {
-      const mockSetMessages = jest.fn();
-      let useChatState = {
-        ...defaultUseChatReturn,
-        messages: [],
-        status: 'submitted' as const,
-        setMessages: mockSetMessages,
-      };
-
-      const useChatMock = jest.fn(() => useChatState);
-      (useChat as jest.Mock).mockImplementation(useChatMock);
-      (getChatHistory as jest.Mock).mockResolvedValue([]);
-
-      const { rerender } = render(<AIChatBubble />);
-
-      await waitFor(() => {
-        expect(getChatHistory).toHaveBeenCalled();
-      });
-
-      // Transition to ready with no messages
-      useChatState = {
-        ...useChatState,
-        status: 'ready',
-        messages: [],
-      };
-      useChatMock.mockReturnValue(useChatState);
-
-      rerender(<AIChatBubble />);
-
-      // saveMessages should not be called if there are no new messages
-      expect(saveMessages).not.toHaveBeenCalled();
+      await waitFor(() =>
+        expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to save chat messages:', expect.any(Error))
+      );
+      // Component still renders
+      expect(screen.getByRole('button', { name: /chat assistant/i })).toBeInTheDocument();
+      consoleErrorSpy.mockRestore();
     });
   });
 
   describe('clear chat history', () => {
     it('renders clear button in header', async () => {
-      (useChat as jest.Mock).mockReturnValue({
-        ...defaultUseChatReturn,
-        messages: mockMessages,
+      (useChat as jest.Mock).mockImplementation((opts: any) => {
+        capturedOnFinish = opts?.onFinish;
+        return { ...defaultUseChatReturn, messages: mockMessages };
       });
 
       render(<AIChatBubble />);
-
-      // Open the chat bubble
       const toggleButton = screen.getByRole('button', { name: /chat assistant/i });
       await userEvent.click(toggleButton);
 
-      // Look for the trash icon button or element with clear title
-      const clearButton = screen.getByTitle('Clear conversation');
-      expect(clearButton).toBeInTheDocument();
+      expect(screen.getByTitle('Clear conversation')).toBeInTheDocument();
     });
 
     it('calls clearChatHistory when clear button is clicked', async () => {
-      const mockSetMessages = jest.fn();
-      (useChat as jest.Mock).mockReturnValue({
-        ...defaultUseChatReturn,
-        messages: mockMessages,
-        setMessages: mockSetMessages,
+      (useChat as jest.Mock).mockImplementation((opts: any) => {
+        capturedOnFinish = opts?.onFinish;
+        return { ...defaultUseChatReturn, messages: mockMessages };
       });
 
       render(<AIChatBubble />);
+      await userEvent.click(screen.getByRole('button', { name: /chat assistant/i }));
+      await userEvent.click(screen.getByTitle('Clear conversation'));
 
-      // Open the chat bubble
-      const toggleButton = screen.getByRole('button', { name: /chat assistant/i });
-      await userEvent.click(toggleButton);
-
-      // Click the clear button
-      const clearButton = screen.getByTitle('Clear conversation');
-      await userEvent.click(clearButton);
-
-      await waitFor(() => {
-        expect(clearChatHistory).toHaveBeenCalled();
-      });
+      await waitFor(() => expect(clearChatHistory).toHaveBeenCalled());
     });
 
-    it('resets messages when clear button is clicked', async () => {
+    it('resets messages via setMessages([]) when clear is clicked', async () => {
       const mockSetMessages = jest.fn();
-      (useChat as jest.Mock).mockReturnValue({
-        ...defaultUseChatReturn,
-        messages: mockMessages,
-        setMessages: mockSetMessages,
+      (useChat as jest.Mock).mockImplementation((opts: any) => {
+        capturedOnFinish = opts?.onFinish;
+        return { ...defaultUseChatReturn, messages: mockMessages, setMessages: mockSetMessages };
       });
 
       render(<AIChatBubble />);
+      await userEvent.click(screen.getByRole('button', { name: /chat assistant/i }));
+      await userEvent.click(screen.getByTitle('Clear conversation'));
 
-      // Open the chat bubble
-      const toggleButton = screen.getByRole('button', { name: /chat assistant/i });
-      await userEvent.click(toggleButton);
-
-      // Click the clear button
-      const clearButton = screen.getByTitle('Clear conversation');
-      await userEvent.click(clearButton);
-
-      await waitFor(() => {
-        expect(mockSetMessages).toHaveBeenCalledWith([]);
-      });
+      await waitFor(() => expect(mockSetMessages).toHaveBeenCalledWith([]));
     });
 
-    it('clears savedIdsRef when clear button is clicked', async () => {
+    it('allows new messages to be saved after clearing', async () => {
       const mockSetMessages = jest.fn();
-      (useChat as jest.Mock).mockReturnValue({
-        ...defaultUseChatReturn,
-        messages: mockMessages,
-        setMessages: mockSetMessages,
-      });
       (getChatHistory as jest.Mock).mockResolvedValue(mockMessages);
-
-      const { rerender } = render(<AIChatBubble />);
-
-      await waitFor(() => {
-        expect(mockSetMessages).toHaveBeenCalledWith(mockMessages);
+      (useChat as jest.Mock).mockImplementation((opts: any) => {
+        capturedOnFinish = opts?.onFinish;
+        return { ...defaultUseChatReturn, messages: mockMessages, setMessages: mockSetMessages };
       });
 
-      // Open the chat bubble
-      const toggleButton = screen.getByRole('button', { name: /chat assistant/i });
-      await userEvent.click(toggleButton);
+      render(<AIChatBubble />);
+      await waitFor(() => expect(mockSetMessages).toHaveBeenCalledWith(mockMessages));
 
-      // Click the clear button
-      const clearButton = screen.getByTitle('Clear conversation');
-      await userEvent.click(clearButton);
+      // Clear the conversation
+      await userEvent.click(screen.getByRole('button', { name: /chat assistant/i }));
+      await userEvent.click(screen.getByTitle('Clear conversation'));
+      await waitFor(() => expect(clearChatHistory).toHaveBeenCalled());
 
-      await waitFor(() => {
-        expect(clearChatHistory).toHaveBeenCalled();
-      });
-
-      // After clearing, if status transitions to ready with new message,
-      // it should not be marked as saved anymore
-      const newMessage: UIMessage = {
-        id: 'new-msg',
-        role: 'user',
-        content: 'After clear',
-      };
-
-      let useChatState = {
-        ...defaultUseChatReturn,
-        messages: [newMessage],
-        status: 'submitted' as const,
-        setMessages: mockSetMessages,
-      };
-
-      const useChatMock = jest.fn(() => useChatState);
-      (useChat as jest.Mock).mockImplementation(useChatMock);
-
-      rerender(<AIChatBubble />);
-
-      // Reset mock to start fresh for this phase
+      // After clearing, a new message sent via onFinish should be saved
       (saveMessages as jest.Mock).mockClear();
+      const newMsg = mockMsg('post-clear', 'user', 'Fresh start');
+      capturedOnFinish!({ messages: [newMsg] });
 
-      // Transition to ready
-      useChatState.status = 'ready';
-      useChatMock.mockReturnValue(useChatState);
-
-      rerender(<AIChatBubble />);
-
-      await waitFor(() => {
-        expect(saveMessages).toHaveBeenCalledWith([newMessage]);
-      });
+      await waitFor(() => expect(saveMessages).toHaveBeenCalledWith([newMsg]));
     });
   });
 
   describe('component initialization', () => {
-    it('renders toggle button', () => {
+    it('renders the toggle button', () => {
       render(<AIChatBubble />);
-
-      // The toggle button should always be rendered
-      const toggleButton = screen.getByRole('button', {
-        name: /chat assistant/i,
-      });
-      expect(toggleButton).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /chat assistant/i })).toBeInTheDocument();
     });
 
     it('opens chat bubble when toggle button is clicked', async () => {
-      const mockSetMessages = jest.fn();
-      (useChat as jest.Mock).mockReturnValue({
-        ...defaultUseChatReturn,
-        setMessages: mockSetMessages,
-      });
-
       render(<AIChatBubble />);
-
       expect(screen.queryByPlaceholderText(/ask your assistant/i)).not.toBeInTheDocument();
 
-      const toggleButton = screen.getByRole('button', { name: /chat assistant/i });
-      await userEvent.click(toggleButton);
-
-      await waitFor(() => {
-        expect(screen.getByPlaceholderText(/ask your assistant/i)).toBeInTheDocument();
-      });
+      await userEvent.click(screen.getByRole('button', { name: /chat assistant/i }));
+      await waitFor(() =>
+        expect(screen.getByPlaceholderText(/ask your assistant/i)).toBeInTheDocument()
+      );
     });
-  });
 
-  describe('edge cases', () => {
     it('handles getChatHistory rejection gracefully', async () => {
-      const mockSetMessages = jest.fn();
       const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-
       (getChatHistory as jest.Mock).mockRejectedValue(new Error('Load failed'));
-      (useChat as jest.Mock).mockReturnValue({
-        ...defaultUseChatReturn,
-        setMessages: mockSetMessages,
-      });
 
       render(<AIChatBubble />);
+      await waitFor(() => expect(getChatHistory).toHaveBeenCalled());
 
-      await waitFor(() => {
-        expect(getChatHistory).toHaveBeenCalled();
-      });
-
-      // Component should still render
       expect(screen.getByRole('button', { name: /chat assistant/i })).toBeInTheDocument();
-
-      // Error should be logged
-      await waitFor(() => {
-        expect(consoleErrorSpy).toHaveBeenCalledWith(
-          'Failed to load chat history:',
-          expect.any(Error)
-        );
-      });
-
-      consoleErrorSpy.mockRestore();
-    });
-
-    it('handles saveMessages rejection gracefully', async () => {
-      const mockSetMessages = jest.fn();
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-
-      const newMessage: UIMessage = {
-        id: 'msg-1',
-        role: 'user',
-        content: 'Test',
-      };
-
-      let useChatState = {
-        ...defaultUseChatReturn,
-        messages: [],
-        status: 'submitted' as const,
-        setMessages: mockSetMessages,
-      };
-
-      const useChatMock = jest.fn(() => useChatState);
-      (useChat as jest.Mock).mockImplementation(useChatMock);
-      (getChatHistory as jest.Mock).mockResolvedValue([]);
-      (saveMessages as jest.Mock).mockRejectedValue(new Error('Save failed'));
-
-      const { rerender } = render(<AIChatBubble />);
-
-      await waitFor(() => {
-        expect(getChatHistory).toHaveBeenCalled();
-      });
-
-      // Transition to ready
-      useChatState = {
-        ...useChatState,
-        messages: [newMessage],
-        status: 'ready',
-      };
-      useChatMock.mockReturnValue(useChatState);
-
-      rerender(<AIChatBubble />);
-
-      // Error should be logged
-      await waitFor(() => {
-        expect(consoleErrorSpy).toHaveBeenCalledWith(
-          'Failed to save chat messages:',
-          expect.any(Error)
-        );
-      });
-
+      await waitFor(() =>
+        expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to load chat history:', expect.any(Error))
+      );
       consoleErrorSpy.mockRestore();
     });
   });

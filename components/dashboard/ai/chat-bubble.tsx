@@ -49,17 +49,24 @@ export function AIChatBubble() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const savedIdsRef = useRef(new Set<string>());
+
   const { messages, status, sendMessage, setMessages } = useChat({
     transport: new DefaultChatTransport({
       api: '/api/chat',
       body: () => ({ contextUrl: pathname }),
     }),
+    onFinish: ({ messages: finalMessages }) => {
+      const unsaved = finalMessages.filter(m => !savedIdsRef.current.has(m.id));
+      if (unsaved.length > 0) {
+        saveMessages(unsaved)
+          .then(() => unsaved.forEach(m => savedIdsRef.current.add(m.id)))
+          .catch(err => console.error('Failed to save chat messages:', err));
+      }
+    },
   });
 
   const isLoading = status === 'submitted' || status === 'streaming';
-
-  const savedIdsRef = useRef(new Set<string>());
-  const prevStatusRef = useRef(status);
 
   useEffect(() => {
     getChatHistory()
@@ -69,28 +76,9 @@ export function AIChatBubble() {
           msgs.forEach(m => savedIdsRef.current.add(m.id));
         }
       })
-      .catch((err) => {
-        console.error('Failed to load chat history:', err);
-      });
+      .catch(err => console.error('Failed to load chat history:', err));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => {
-    const prev = prevStatusRef.current;
-    prevStatusRef.current = status;
-    if (prev !== 'ready' && status === 'ready' && messages.length > 0) {
-      const unsaved = messages.filter(m => !savedIdsRef.current.has(m.id));
-      if (unsaved.length > 0) {
-        saveMessages(unsaved)
-          .then(() => {
-            unsaved.forEach(m => savedIdsRef.current.add(m.id));
-          })
-          .catch((err) => {
-            console.error('Failed to save chat messages:', err);
-          });
-      }
-    }
-  }, [status, messages]);
 
   const handleClear = () => {
     setMessages([]);

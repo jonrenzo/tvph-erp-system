@@ -9,6 +9,10 @@ import { getChatHistory, saveMessages, clearChatHistory } from '@/app/actions/ch
 import { createClient } from '@/utils/supabase/server';
 import type { UIMessage } from 'ai';
 
+// UIMessage uses parts[], not content — cast opaque blobs for DB layer tests
+const mockMsg = (id: string, role: 'user' | 'assistant', text: string): UIMessage =>
+  ({ id, role, parts: [{ type: 'text', text }] }) as unknown as UIMessage;
+
 jest.mock('@/utils/supabase/server');
 
 describe('chat-history server actions', () => {
@@ -20,9 +24,9 @@ describe('chat-history server actions', () => {
     describe('happy path', () => {
       it('returns messages in chronological order (oldest first)', async () => {
         const mockMessages = [
-          { message: { id: '3', role: 'user', content: 'Latest' } as UIMessage },
-          { message: { id: '2', role: 'assistant', content: 'Middle' } as UIMessage },
-          { message: { id: '1', role: 'user', content: 'Oldest' } as UIMessage },
+          { message: mockMsg('3', 'user', 'Latest') },
+          { message: mockMsg('2', 'assistant', 'Middle') },
+          { message: mockMsg('1', 'user', 'Oldest') },
         ];
 
         const mockSupabase = {
@@ -56,11 +60,7 @@ describe('chat-history server actions', () => {
       });
 
       it('returns messages with correct UIMessage structure', async () => {
-        const mockMessage: UIMessage = {
-          id: 'msg-1',
-          role: 'user',
-          content: 'Hello',
-        };
+        const mockMessage = mockMsg('msg-1', 'user', 'Hello');
 
         const mockSupabase = {
           auth: {
@@ -278,10 +278,7 @@ describe('chat-history server actions', () => {
   describe('saveMessages', () => {
     describe('happy path', () => {
       it('upserts messages with correct shape', async () => {
-        const messages: UIMessage[] = [
-          { id: 'msg-1', role: 'user', content: 'Hello' },
-          { id: 'msg-2', role: 'assistant', content: 'Hi there' },
-        ];
+        const messages = [mockMsg('msg-1', 'user', 'Hello'), mockMsg('msg-2', 'assistant', 'Hi there')];
 
         const mockSupabase = {
           auth: {
@@ -309,14 +306,7 @@ describe('chat-history server actions', () => {
       });
 
       it('preserves full UIMessage structure in upsert', async () => {
-        const messages: UIMessage[] = [
-          {
-            id: 'msg-1',
-            role: 'user',
-            content: 'Test content',
-            createdAt: new Date(),
-          },
-        ];
+        const messages = [mockMsg('msg-1', 'user', 'Test content')];
 
         const mockSupabase = {
           auth: {
@@ -338,11 +328,8 @@ describe('chat-history server actions', () => {
       });
 
       it('handles multiple messages', async () => {
-        const messages: UIMessage[] = Array.from({ length: 10 }, (_, i) => ({
-          id: `msg-${i}`,
-          role: i % 2 === 0 ? 'user' : 'assistant',
-          content: `Message ${i}`,
-        }));
+        const messages = Array.from({ length: 10 }, (_, i) =>
+          mockMsg(`msg-${i}`, i % 2 === 0 ? 'user' : 'assistant', `Message ${i}`));
 
         const mockSupabase = {
           auth: {
@@ -366,9 +353,7 @@ describe('chat-history server actions', () => {
 
     describe('edge cases', () => {
       it('returns early when user is not authenticated', async () => {
-        const messages: UIMessage[] = [
-          { id: 'msg-1', role: 'user', content: 'Hello' },
-        ];
+        const messages = [mockMsg('msg-1', 'user', 'Hello')];
 
         const mockSupabase = {
           auth: {
@@ -410,10 +395,7 @@ describe('chat-history server actions', () => {
 
       it('includes user_id for each message', async () => {
         const userId = 'specific-user-id';
-        const messages: UIMessage[] = [
-          { id: 'msg-1', role: 'user', content: 'Hello' },
-          { id: 'msg-2', role: 'assistant', content: 'Hi' },
-        ];
+        const messages = [mockMsg('msg-1', 'user', 'Hello'), mockMsg('msg-2', 'assistant', 'Hi')];
 
         const mockSupabase = {
           auth: {
