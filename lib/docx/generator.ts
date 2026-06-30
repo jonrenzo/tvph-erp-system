@@ -127,10 +127,15 @@ function expandLoop<T>(
   const endIdx = processedXml.indexOf(closeTag);
   if (startIdx === -1 || endIdx === -1) return processedXml;
 
-  const TR_OPEN = "<w:tr ";
   const TR_CLOSE = "</w:tr>";
+  // ponytail: handle both <w:tr> (no attrs) and <w:tr ...> (with attrs)
+  const findRowStart = (xml: string, before: number) => {
+    const a = xml.lastIndexOf("<w:tr>", before);
+    const b = xml.lastIndexOf("<w:tr ", before);
+    return Math.max(a, b);
+  };
 
-  const rowStartIdx = processedXml.lastIndexOf(TR_OPEN, startIdx);
+  const rowStartIdx = findRowStart(processedXml, startIdx);
   let rowEndIdx = processedXml.indexOf(TR_CLOSE, endIdx);
   if (rowEndIdx !== -1) rowEndIdx += TR_CLOSE.length;
   else return processedXml;
@@ -202,10 +207,17 @@ export async function generatePurchaseOrderDocx(poId: string): Promise<Buffer> {
   xml = expandLoop(xml, "site_details", poData.site_details, (site) => ({
     "{sn}": String(site.sn),
     "{region}": site.region,
-    "{area_city}": site.area_city,
-    "{no_of_nodes}": String(site.no_of_nodes),
-    "{estimated_strand_km}": formatNumber(site.estimated_strand_km),
+    "{area}": site.area_city,
+    "{nodes}": String(site.no_of_nodes),
+    "{est_km}": formatNumber(site.estimated_strand_km),
   }));
+
+  const totalNodes = poData.site_details.reduce((s, r) => s + r.no_of_nodes, 0);
+  const totalCable = poData.site_details.reduce((s, r) => s + r.estimated_strand_km, 0);
+  xml = replaceInPlace(xml, {
+    "{total_nodes}": String(totalNodes),
+    "{total_cable}": formatNumber(totalCable),
+  });
 
   zip.file("word/document.xml", xml);
 

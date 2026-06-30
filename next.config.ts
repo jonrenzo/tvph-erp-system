@@ -38,6 +38,13 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async redirects() {
+    // Serve the static user guide (public/docs/index.html) at /docs. The
+    // redirect to the index keeps the guide's relative img/ paths resolving.
+    return [
+      { source: "/docs", destination: "/docs/index.html", permanent: false },
+    ];
+  },
 };
 
 export default nextConfig;

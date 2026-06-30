@@ -43,6 +43,9 @@ next-env.d.ts
 # scratch files
 scratch/
 
+# SharePoint vendor migration working data (contains extracted TINs, bank info, raw docs)
+/sharepoint-import-work/
+
 # supabase local CLI metadata
 supabase/.temp/
 
@@ -51,3 +54,6 @@ supabase/.temp/
 
 # opencode AI workspace metadata
 .opencode/
+
+# Playwright capture session token (user guide)
+scripts/.auth.json

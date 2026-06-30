@@ -2,22 +2,22 @@
 
 <img src="/public/banner.png" alt="TelcoVantage ERP Banner" />
 
-<br/>
+<br />
 
-**The Intelligent Command Surface for TelcoVantage Philippines.**
+**Internal operations platform for TelcoVantage Philippines.**
 
-*Vendor management. Financial intelligence. Project oversight. AI-powered.*
+Vendor accreditation, procurement, CRM, projects, finance, HR, assets, documents, reports, and AI-assisted workflows in one audited system.
 
-<br/>
+<br />
 
 [![Next.js](https://img.shields.io/badge/Next.js-16.2-black?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org)
 [![React](https://img.shields.io/badge/React-19.2-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://react.dev)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-007ACC?style=for-the-badge&logo=typescript&logoColor=white)](https://typescriptlang.org)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4.0-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-007ACC?style=for-the-badge&logo=typescript&logoColor=white)](https://typescriptlang.org)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com)
 [![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)](https://supabase.com)
-[![Gemini AI](https://img.shields.io/badge/Gemini_2.5_Flash-AI-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev)
+[![Gemini](https://img.shields.io/badge/Gemini_2.5_Flash-AI-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev)
 
-<br/>
+<br />
 
 ![TelcoVantage ERP](/public/screenshot.png)
 
@@ -25,289 +25,401 @@
 
 ---
 
-## ⚡ What is TelcoVantage ERP?
+## Overview
 
-TelcoVantage ERP is a **full-stack enterprise operations platform** purpose-built for the telecom industry in the Philippines. It replaces spreadsheets, disconnected tools, and manual compliance tracking with a single intelligent system — unified, auditable, and AI-augmented.
+TelcoVantage ERP is a Next.js and Supabase enterprise resource planning system built for telecom operations in the Philippines. The application consolidates vendor accreditation, purchase order governance, supplier payables, customer CRM, customer billing, project tracking, HR records, asset inventory, document management, reporting, audit logs, notifications, and an authenticated Gemini assistant.
 
-Built on a **server-first Next.js 16** architecture with React Server Components, Supabase RLS, and Google Gemini AI powering an in-app assistant that actually understands your business data.
+The app is server-first: most data loading happens in React Server Components, mutations are handled through Server Actions, API integrations are implemented as App Router Route Handlers, and Supabase provides Auth, PostgreSQL, Row Level Security, Storage, and Realtime notifications.
 
----
+## Product Scope
 
-## 🗺️ Table of Contents
+### Command Center
 
-- [Core Modules](#-core-modules)
-- [Technology Stack](#-technology-stack)
-- [Getting Started](#-getting-started)
-- [Architecture Deep-Dive](#-architecture-deep-dive)
-- [Roles & Permissions](#-roles--permissions)
-- [Troubleshooting](#-troubleshooting)
+The dashboard at `/dashboard` gives executives and operators a live operations snapshot:
 
----
+- Outstanding liability, active PO count, pending vendors, and expiring documents.
+- Near-due supplier invoices and near-due purchase orders.
+- Cash-flow trends across AP paid and AR collected.
+- Payment overview, project progress, compliance health, and recent activity.
+- Global search and notifications in the dashboard shell.
 
-## 🧩 Core Modules
+### Vendor Management and Accreditation
 
-### 🖥️ Command Center
-> *The pulse of your operations.*
+The vendor module covers vendor onboarding, compliance review, portal document collection, email history, and vendor-project relationships.
 
-Your real-time operational dashboard. Surfaces key metrics at a glance — **Current Liability**, **Active POs**, **Pending Vendors**, and **Expiring Documents** — alongside a unified audit log and AI-generated daily operational summaries. Everything important, one screen.
+- Vendor profiles include registration data, TIN, address, currency, payment terms, primary and secondary contacts, and banking details.
+- Vendor statuses are managed through the application, with capability checks around status updates and destructive actions.
+- The accreditation library tracks TelcoVantage's 14-point vendor requirement:
+  - Signed NDA
+  - Statement of Commitment
+  - Company Profile and Client References
+  - List of Products or Services
+  - Vendor Information Summary
+  - Latest General Information Sheet
+  - Audited Financial Statements
+  - SEC Registration / Articles
+  - Secretary Certificate
+  - Safety & Drug Free Policy
+  - ISO Certification
+  - PCAB License
+  - DOLE 174
+  - Other Licenses or Permits
+- Vendor documents support submitted, approved, expired, archived, and custom-document flows.
+- Magic-link upload portals let vendors submit requested documents without staff sharing dashboard access.
 
----
+### Procurement and Purchase Orders
 
-### 🏢 Vendor Management
-> *Full lifecycle. Zero surprises.*
+Purchase orders are governed by compliance gates, structured line items, site details, approval controls, document generation, and email delivery.
 
-End-to-end vendor lifecycle management with:
-- Complete vendor profiles: banking details, TIN, primary & secondary contacts
-- Status pipeline: `pending → active → inactive`
-- Multi-currency support: **PHP / USD**
-- Compliance health visibility at every touchpoint
+- Draft POs are created with vendor, line items, UOM, unit prices, site details, due date, down payment, and currency.
+- PO numbers are generated by the database.
+- The default gate requires an active vendor and an approved Signed NDA.
+- Authorized users can request requirement waivers; executive approval is required before a waived PO can be issued.
+- PO statuses include draft, issued, partially paid, paid, overpaid, and cancelled.
+- Issuing a PO sends a vendor email through Resend and logs send history.
+- DOCX and PDF routes generate and serve purchase order documents from the stored PO data.
+- A browser-based PO editor can save customized DOCX output back to the system.
+- Completion certificates can be submitted with percentage complete, files, notes, and approval/rejection workflow.
 
----
+### Supplier Invoices, Payments, and Accounting
 
-### 🛡️ 14-Point Compliance Hub
-> *The most dangerous word in compliance is "I think it's still valid."*
+The AP side connects service invoices to supplier purchase orders and tracks payment state.
 
-Advanced accreditation tracking across 14 critical vendor documents:
+- Service invoices can be created against vendor POs.
+- Invoice OCR upload uses Gemini-assisted extraction where configured.
+- Invoice amount guards prevent overbilling beyond the PO and approved completion-certificate percentage.
+- Payments support full and partial payment history.
+- Payment voucher and proof-of-payment files are stored with payment records.
+- Accounting reports compute paid expenses, outstanding payables, AP aging buckets, VAT totals, EWT totals, and expense categories.
 
-| Document | Document | Document |
-|----------|----------|----------|
-| NDA | SEC Registration | PCAB License |
-| ISO Certification | DOLE 174 | BIR Certificate |
-| PhilHealth | SSS | Pag-IBIG |
-| DTI/Business Permit | Mayor's Permit | Contractor's License |
-| COE / Track Record | Insurance Certificate | |
+### CRM, Customer POs, and Client Invoices
 
-Each document tracks through: `not_submitted → submitted → approved → expired`
+The CRM module handles the customer side of the business.
 
-The **Accreditation Matrix** gives you a bird's-eye compliance grid across your entire vendor ecosystem — instantly spot what's at risk.
+- Customer accounts include company information, registered address, TIN, status, notes, and contacts.
+- Customer profile pages show documents, customer projects, client purchase orders, and client invoices.
+- Customer documents support version history and rollback.
+- CRM opportunities can become tracked projects.
+- Client POs track customer-side commitments.
+- Client invoices and client payments track receivables and collection history.
 
----
+### Projects and Contracts
 
-### 📋 Projects & Contracts
-> *One source of truth for everything in the field.*
+Project pages consolidate commercial and delivery information.
 
-- Create and manage projects with status tracking and full contract references
-- **Vendor-Project Linking** with safety guards — cannot unlink a vendor while open POs or unpaid invoices exist
-- **Master Contract Repository**: full lifecycle tracking with start/end dates, total value, file attachments, and status
+- Projects can link customers, vendors, contract references, contract files, status, and progress context.
+- Vendor-project linking is managed in the project and vendor detail surfaces.
+- Vendor contracts have a dedicated registry under `/dashboard/vendors/contracts`.
+- Project detail pages show linked vendors, related purchase orders, contract preview, and recent activity.
 
----
+### Document Management
 
-### 📦 Purchase Orders
-> *PO-YYYY-XXXX. Numbered. Governed. Trackable.*
+The document center at `/dashboard/documents` has three layers:
 
-Rigorous PO management with built-in guardrails:
+- Company Library: internal legal, HR, financial, and template documents.
+- Vendor Vault: vendor accreditation files and custom vendor documents.
+- Customer Vault: CRM account documents with versioning.
 
-| Feature | Detail |
-|---------|--------|
-| Auto-numbering | `PO-YYYY-XXXX` via database trigger |
-| NDA Gate | Requires approved NDA before any PO can be issued |
-| Project Assignment | Link POs to projects and internal entities |
-| Status Workflow | `draft → issued → partially_paid → paid / overpaid / cancelled` |
+Document previews support common browser-viewable files and Office documents through viewer links where applicable. Company, vendor, customer, employee, payment, and PO documents are stored in Supabase Storage buckets.
 
----
+### HR and Assets
 
-### 💰 Financial Management
-> *Know where every peso is.*
+The system includes internal administration modules beyond procurement and finance.
 
-- **Service Invoices** linked to a single PO with automatic balance calculation
-- **PO Amount Guard** — prevents invoice amounts from exceeding remaining PO capacity
-- **Payment Monitoring** — full/installment/down payment recording with auto-status updates
-- **Overpayment Detection** — red warning banners with authorized override capability
-- **Billing Health Visualization** — progress rings and percentage bars showing invoiced vs. PO amounts
+- HR directory stores employee profiles.
+- Employee detail pages include a 201 File Vault backed by the `employee-documents` storage bucket.
+- Asset registry tracks categories, purchase information, assignments, asset status, purchase value, and maintenance logs.
+- Asset statuses include in use, available, in storage, in repair, disposed, and lost.
 
----
+### Reports
 
-### 🤖 AI Assistant (Gemini 2.5 Flash)
-> *Ask anything. Get answers with deep-links.*
+The reports page generates formatted PDF reports from live operational data:
 
-An AI assistant that understands your ERP's entire context — not a generic chatbot.
+- Operations Summary
+- Accounts Payable Aging
+- Vendor Compliance Status
+- Vendor Register
 
-| Capability | Description |
-|------------|-------------|
-| **Document Analysis** | Upload a PDF and interrogate it — summaries, key terms, obligations |
-| **Proactive Navigation** | Ask about vendor status → get direct deep-links and compliance insights |
-| **Intelligent Search** | 8 custom tools: vendors, POs, compliance, financials, documents |
-| **Natural Language Queries** | "Which vendors have expiring NDAs this month?" — just ask. |
+Report calculations are shared with dashboard modules through `lib/reports/*` to avoid duplicated business logic.
 
----
+### AI Assistant and Import Tools
 
-### 📁 Document Repository
-> *One vault. Two layers.*
+The Gemini assistant is available from the dashboard shell and is authenticated before use.
 
-- **Company Library** — 4 organized folders: Legal & Compliance, HR & Staffing, Financials, Company Templates
-- **Vendor Vault** — Per-vendor document grid with compliance health indicators and full-screen preview support (PDF, images, and Office files via Google Docs viewer)
+Current AI tool coverage includes:
 
----
+- Listing vendors, customers, purchase orders, company documents, and vendor documents.
+- Compliance and financial summaries.
+- Creating and updating vendors or customers after explicit user confirmation.
+- Creating draft purchase orders after explicit user confirmation.
+- Upload routing for vendor, customer, and company documents.
+- PDF/document analysis.
+- CSV and Excel import for vendors and customers with Gemini-assisted column mapping.
 
-### 📜 Audit Logs
-> *Every action. Every actor. Every timestamp.*
+### Email, Cron, Telegram, Audit, and Notifications
 
-- Comprehensive `CREATE / UPDATE / DELETE` tracking across all entities
-- Dedicated audit log page with filters by action type and entity
-- Contextual inline audit log cards with infinite scroll on all relevant pages
+- Resend powers PO-issued emails, document request emails, and document expiry reminders.
+- `/api/cron/document-reminders` sends vendor renewal reminders and internal notifications for expiring documents.
+- The cron migration uses `pg_cron`, `pg_net`, and Supabase Vault secrets for the app base URL and cron secret.
+- Telegram bot integration can notify admins when a Microsoft SSO user signs in for the first time and can assign roles through inline buttons.
+- Every major mutation records an audit log entry.
+- Supabase Realtime backs the notification bell and dashboard notification experience.
 
----
+## Technology Stack
 
-### 🔔 Global Search & Real-time Notifications
+| Layer | Technology |
+| --- | --- |
+| Application | Next.js 16.2 App Router, React 19.2, TypeScript 5 |
+| UI | Tailwind CSS 4, Lucide icons, Recharts, Sonner, next-themes |
+| Backend | Supabase Auth, PostgreSQL, RLS, Storage, Realtime |
+| AI | Vercel AI SDK, `@ai-sdk/google`, Gemini 2.5 Flash |
+| Documents | DOCX editor, Mammoth, PizZip, pdf-lib, pdfkit, pdf-parse |
+| Email | Resend, React Email |
+| Testing | Jest 30, Testing Library, jsdom, ts-jest |
 
-- **`Cmd+K` Search Modal** — keyboard-navigable, searches across vendors, POs, invoices, projects, payments, and documents
-- **Supabase Realtime** — 6 notification types, notification bell dropdown, mark-all-read, 30-day auto-cleanup
+## Repository Map
 
----
-
-## 💻 Technology Stack
-
+```text
+app/
+  api/                         App Router route handlers for reports, exports, AI chat, cron, Telegram, PDFs, DOCX, OCR
+  auth/                        Supabase callback and password reset routes
+  dashboard/                   Server-rendered ERP modules and Server Actions
+  login/                       Email/password login flow
+  portal/upload/[token]/       External upload portal for vendor/customer documents
+components/
+  dashboard/                   Feature UI for modules, shell, search, notifications, reports, AI chat
+  docx/                        Browser DOCX editor integration
+  ui/                          Shared small UI primitives
+lib/
+  auth/                        Role and capability model
+  chat/                        Gemini assistant tools
+  docx/                        DOCX generation and normalization helpers
+  email/                       Resend sender and React Email templates
+  pdf/                         PO and report PDF rendering
+  portal/                      Magic-link URL helpers
+  reports/                     Shared report calculations
+  telegram/                    Telegram bot client and role assignment service
+  vendors/                     Vendor document taxonomy
+supabase/migrations/           Database schema, RLS, storage buckets, indexes, cron, and feature migrations
+utils/
+  supabase/                    Browser, server, and service-role Supabase clients
+  audit.ts                     Audit log helper
+  notifications.ts             Notification helper
+  ai-import-processor.ts       AI-assisted import execution
+  import-export.ts             CSV/XLSX import and export helpers
+scripts/                       Operational scripts for DB purge, placeholder docs, Telegram webhook, SharePoint import
+__tests__/                     Jest and Testing Library coverage
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         FRONTEND                                │
-│  Next.js 16.2.4 (App Router)  ·  React 19.2.4  ·  TypeScript 5 │
-│  Tailwind CSS 4  ·  Framer Motion  ·  Lucide Icons              │
-├─────────────────────────────────────────────────────────────────┤
-│                      BACKEND-AS-A-SERVICE                       │
-│  Supabase — Auth · PostgreSQL · Realtime · Storage · RLS        │
-├─────────────────────────────────────────────────────────────────┤
-│                         INTELLIGENCE                            │
-│  Google Gemini 2.5 Flash  ·  Vercel AI SDK (@ai-sdk/google)     │
-├─────────────────────────────────────────────────────────────────┤
-│                        DOCUMENT LAYER                           │
-│  pdf-lib (PO generation with fillable templates)  ·  Zod 4      │
-└─────────────────────────────────────────────────────────────────┘
-```
 
-### 🔮 Roadmap
+## Roles and Permissions
 
-| Feature | Status |
-|---------|--------|
-| Daily cron jobs for compliance expiry checks | 🚧 Coming Soon |
-| Transactional email alerts via Resend | 🚧 Coming Soon |
-| Overdue invoice reminders | 🚧 Coming Soon |
+Application-level capabilities live in `lib/auth/roles.ts`.
 
----
+| Role | Intended use |
+| --- | --- |
+| `superadmin` | Developer/root role with every capability, including destructive audit/vendor/PO actions. |
+| `admin` | Business admin/director role with broad management access except superadmin-only destructive controls. |
+| `finance` | Supplier invoices, payments, accounting, reports, and client invoice/payment workflows. |
+| `operations` | Vendors, compliance, POs, projects, CRM, contracts, assets, and operational workflows. |
+| `viewer` | Read-focused role for low-risk access. |
 
-## 🚀 Getting Started
+Capabilities are checked in Server Actions and Route Handlers with `requireCapability()`. The UI also hides role-restricted navigation items, but server-side capability checks are the enforcement boundary.
+
+## Architecture Notes
+
+- `app/` uses the Next.js App Router with React Server Components by default.
+- Mutations live mainly in module-specific `actions.ts` files and use `"use server"`.
+- API-style integrations use `app/api/**/route.ts`.
+- `middleware.ts` refreshes Supabase sessions and redirects unauthenticated dashboard requests to `/login`. The bundled Next.js 16 docs now describe `proxy.ts` as the newer convention, but this repository currently implements the working auth guard in `middleware.ts`.
+- `utils/supabase/server.ts` creates the cookie-aware SSR Supabase client.
+- `utils/supabase/service.ts` creates a service-role client for privileged server-only tasks.
+- `lib/auth/permissions.ts` loads the current profile and enforces capabilities.
+- `utils/audit.ts` records mutation history across modules.
+- `next.config.ts` enables `cacheComponents`, configures a 12 MB Server Actions body limit, externalizes `pdfkit`, sets Turbopack root, and applies common security headers.
+
+## Getting Started
 
 ### Prerequisites
 
-- **Node.js** 20+
-- A **Supabase** project
-- A **Google Gemini API** key ([Get one here](https://aistudio.google.com))
+- Node.js 20+
+- npm
+- A Supabase project
+- A Google AI Studio key for Gemini-backed features
+- Optional: Resend account for email delivery
+- Optional: Telegram bot for role-assignment notifications
 
-### Installation
+### Install
 
-**1. Clone the repo**
-```bash
-git clone https://github.com/jonrenzo/tvph-erp-system.git
-cd tvph-erp-system
-```
-
-**2. Install dependencies**
 ```bash
 npm install
 ```
 
-**3. Configure environment variables**
+### Environment
 
-Create `.env.local` at the project root:
+Create `.env.local` in the project root.
+
 ```env
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
-GOOGLE_GENERATIVE_AI_API_KEY=your_gemini_key
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+
+GOOGLE_GENERATIVE_AI_API_KEY=your_google_ai_studio_key
+
+NEXT_PUBLIC_SITE_URL=http://localhost:3000
+
+RESEND_API_KEY=your_resend_key
+EMAIL_FROM="TelcoVantage ERP <noreply@example.com>"
+EMAIL_REPLY_TO=ops@example.com
+EMAIL_CC_INTERNAL=true
+
+CRON_SECRET=choose_a_long_random_secret
+
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+TELEGRAM_ADMIN_CHAT_ID=your_admin_chat_id
+TELEGRAM_WEBHOOK_SECRET=choose_a_long_random_secret
 ```
 
-**4. Initialize the database**
+Required for a basic local login flow:
 
-> ⚠️ Run this on a **fresh** Supabase project to avoid table conflicts.
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 
-```bash
-# Copy the contents of:
-# supabase/migrations/20250514_initial_schema.sql
-# Paste and execute in your Supabase project's SQL Editor.
+Required for admin tasks, profile sync, password reset metadata updates, uploads that bypass RLS, and operational scripts:
+
+- `SUPABASE_SERVICE_ROLE_KEY`
+
+Required for AI chat, OCR, and AI import mapping:
+
+- `GOOGLE_GENERATIVE_AI_API_KEY`
+
+Required for production email and scheduled reminders:
+
+- `RESEND_API_KEY`
+- `EMAIL_FROM`
+- `NEXT_PUBLIC_SITE_URL`
+- `CRON_SECRET`
+
+### Database
+
+Apply every SQL file in `supabase/migrations/` in filename order to a fresh Supabase project. The initial schema is not enough by itself; later migrations add CRM, document versioning, RBAC consolidation, HR, assets, client POs, client invoices, email logs, cron, indexes, payment documents, vendor markdown, and PO completion certificates.
+
+If using Supabase SQL Editor, run the files from oldest to newest. If using Supabase CLI, initialize/link the project first, then apply the migrations with your normal Supabase workflow.
+
+For scheduled document reminders, also create the Vault secrets described in `supabase/migrations/20260609_email_reminders_cron.sql`:
+
+```sql
+select vault.create_secret('https://your-app-domain.com', 'app_base_url');
+select vault.create_secret('<same value as CRON_SECRET env var>', 'cron_secret');
 ```
 
-**5. Start the development server**
+### Authentication
+
+The login page supports email/password sign-in through Supabase Auth. The callback route also supports Microsoft/Azure OAuth profile sync when that provider is configured in Supabase.
+
+New Microsoft SSO users are created as `viewer` by default. If Telegram is configured, the admin chat receives a role-assignment prompt.
+
+### Run Locally
+
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) — you'll be redirected to `/login`. Authenticate and land on `/dashboard`.
+Open `http://localhost:3000`. The root route redirects to `/login`; authenticated users are redirected into `/dashboard`.
 
----
+## Scripts
 
-## 🏗️ Architecture Deep-Dive
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start the Next.js development server. |
+| `npm run build` | Build the production app. |
+| `npm run start` | Start the production build. |
+| `npm run lint` | Run ESLint. |
+| `npm run test` | Run Jest tests. |
+| `npm run test:watch` | Run Jest in watch mode. |
+| `npm run test:coverage` | Run Jest with coverage. |
+| `node scripts/register-telegram-webhook.mjs <https-url>` | Register the Telegram webhook for an environment. |
+| `node scripts/register-telegram-webhook.mjs --delete` | Remove the Telegram webhook. |
 
+Operational scripts such as `scripts/purge-db.ts` and `scripts/seed-placeholder-docs.ts` require Supabase environment variables and should be used deliberately.
+
+## API and Route Handler Summary
+
+| Route | Purpose |
+| --- | --- |
+| `/api/chat` | Authenticated Gemini assistant stream. |
+| `/api/cron/document-reminders` | Bearer-token-protected scheduled document reminder job. |
+| `/api/telegram/webhook` | Telegram Bot API webhook for role assignment. |
+| `/api/export/*` | CSV-style exports for vendors, CRM, projects, and purchase orders. |
+| `/api/reports/*` | PDF reports for operations, AP aging, compliance, and vendor register. |
+| `/api/purchase-orders/[id]/pdf` | Render PO PDF. |
+| `/api/purchase-orders/[id]/docx` | Generate PO DOCX. |
+| `/api/purchase-orders/[id]/save-docx` | Save edited PO DOCX output. |
+| `/api/audit-logs/recent` | Fetch recent audit log entries. |
+| `/api/hr/invite` | Admin-only user creation/invitation endpoint. |
+| `/api/vendors/[id]/email-log` | Vendor email history. |
+
+## Testing and Quality Checks
+
+Run these before shipping changes:
+
+```bash
+npm run lint
+npm run test
+npm run build
 ```
-Request
-  │
-  ▼
-proxy.ts ──── Unauthenticated? ──► /login
-  │
-  │ Authenticated
-  ▼
-/dashboard/* (RSC-first, Server Actions)
-  │
-  ├─── lib/chat/tools.ts ──── 8 Gemini tools ──── Supabase (RLS-enforced)
-  ├─── utils/audit.ts ──────── recordAuditLog() on every mutation
-  └─── Supabase Realtime ───── notification bell / live updates
+
+Current tests cover purchase order creation, PO issue controls, completion certificates, invoice amount guards, layout/toaster behavior, tooltips, and selected dashboard components.
+
+## Troubleshooting
+
+### Supabase connection errors
+
+Check `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` against Supabase Project Settings -> API. A malformed URL or anon key will break login and all server queries.
+
+### Admin actions fail with missing service key
+
+Set `SUPABASE_SERVICE_ROLE_KEY`. User invitations, password reset metadata updates, profile sync, some storage flows, and scripts rely on the service-role client.
+
+### AI features fail
+
+Set `GOOGLE_GENERATIVE_AI_API_KEY`. AI chat, OCR, and AI-assisted import mapping use Gemini 2.5 Flash through the Vercel AI SDK.
+
+### Emails do not send
+
+Set `RESEND_API_KEY` and `EMAIL_FROM`. For production links inside emails, set `NEXT_PUBLIC_SITE_URL` to the public deployment URL.
+
+### Document reminders are not firing
+
+Verify all of the following:
+
+- `CRON_SECRET` is set in the app environment.
+- Supabase Vault contains `app_base_url` and `cron_secret`.
+- The migration creating `public.trigger_document_reminders()` and the `document-expiry-reminders` cron job has run.
+- The deployment URL can receive POST requests at `/api/cron/document-reminders`.
+
+### Telegram role assignment does not respond
+
+Verify `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ADMIN_CHAT_ID`, and `TELEGRAM_WEBHOOK_SECRET`, then register the webhook:
+
+```bash
+node scripts/register-telegram-webhook.mjs https://your-app-domain.com
 ```
 
-| Pillar | Implementation |
-|--------|---------------|
-| **Server-First** | Heavy use of React Server Components (RSC) and Server Actions — minimal client JS, maximum performance |
-| **AI Tooling** | 8 AI tools in `lib/chat/tools.ts` let Gemini securely query the database through defined API boundaries |
-| **Security** | RLS enabled on all tables; role-based access checks (`admin`, `finance`, `procurement`, `project_manager`) in Server Actions |
-| **Auth Flow** | `proxy.ts` handles session refresh, root redirects, and protects all `/dashboard/*` routes |
-| **Audit Trail** | Every mutation calls `recordAuditLog()` — full traceability, no exceptions |
+### Stale styles or route artifacts
 
----
+Clear the Next.js build cache and restart:
 
-## 👥 Roles & Permissions
-
-| Role | Capabilities |
-|------|-------------|
-| `admin` | Full access — all modules, destructive actions, user management |
-| `finance` | Invoice and payment management, financial reports |
-| `procurement` | PO creation, vendor management, compliance tracking |
-| `project_manager` | Project and contract management, vendor-project linking |
-
----
-
-## 🐛 Troubleshooting
-
-<details>
-<summary><strong>Supabase connection errors on startup</strong></summary>
-
-Ensure `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env.local` match exactly what's shown in your Supabase dashboard under **Project Settings → API**. Missing or malformed keys are the most common cause.
-</details>
-
-<details>
-<summary><strong>Database migration is failing</strong></summary>
-
-Run `supabase/migrations/20250514_initial_schema.sql` only on a **fresh** Supabase project. If tables already exist from a previous attempt, reset the database under **Database → Reset** in the Supabase dashboard before re-running the migration.
-</details>
-
-<details>
-<summary><strong>AI features throwing rate limit or timeout errors</strong></summary>
-
-The Gemini API (`gemini-2.5-flash`) enforces rate limits on the free tier. Check your quota in [Google AI Studio](https://aistudio.google.com). Also verify `GOOGLE_GENERATIVE_AI_API_KEY` is correctly set in `.env.local`.
-</details>
-
-<details>
-<summary><strong>Stale styles or module resolution failures</strong></summary>
-
-Next.js caches aggressively. Clear the cache and restart:
 ```bash
 rm -rf .next
 npm run dev
 ```
-</details>
 
 ---
 
 <div align="center">
 
-**TelcoVantage ERP** · Internal Project · TelcoVantage Philippines
+**TelcoVantage ERP** - Internal Project - TelcoVantage Philippines
 
-*All Rights Reserved.*
+All rights reserved.
 
 </div>

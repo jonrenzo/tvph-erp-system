@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation';
 import { createNotification } from '@/utils/notifications';
 import { recordAuditLog } from '@/utils/audit';
 import { requireCapability, hasCapability } from '@/lib/auth/permissions';
+import { isAdminOrAbove } from '@/lib/auth/roles';
 import { sendPoIssuedEmail } from '@/lib/email/po';
 
 type POLineItem = { item_code?: string; description: string; qty: number; uom?: string; unit_price: number };
@@ -191,6 +192,160 @@ export async function createPurchaseOrder(prevState: any, formData: FormData) {
   redirect(result.url);
 }
 
+export async function submitPOForApproval(poId: string) {
+  const supabase = await createClient();
+  const { user, role, error: authError } = await requireCapability('po.status', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
+
+  if (isAdminOrAbove(role)) {
+    return { error: 'Admins can issue POs directly — use "Issue PO" instead.' };
+  }
+
+  const { data: po } = await supabase
+    .from('purchase_orders')
+    .select('status')
+    .eq('id', poId)
+    .single();
+
+  if (po?.status !== 'draft') {
+    return { error: 'Only draft POs can be submitted for approval.' };
+  }
+
+  const { error } = await supabase
+    .from('purchase_orders')
+    .update({
+      status: 'pending_approval',
+      submitted_for_approval_by: user.id,
+      submitted_for_approval_at: new Date().toISOString(),
+      rejection_reason: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', poId);
+
+  if (error) return { error: error.message };
+
+  await recordAuditLog({
+    entity_type: 'purchase_order',
+    entity_id: poId,
+    action: 'UPDATE',
+    changes: { after: { status: 'pending_approval', submitted_by: user.id } },
+    performed_by: user.id,
+  });
+
+  await createNotification({
+    type: 'po',
+    title: '📋 PO Awaiting Approval',
+    message: 'A purchase order has been submitted and requires executive approval before issuing.',
+    link: `/dashboard/purchase-orders/${poId}`,
+    created_by: user.id,
+  });
+
+  revalidatePath(`/dashboard/purchase-orders/${poId}`);
+  revalidatePath('/dashboard/purchase-orders');
+  return { success: true };
+}
+
+export async function approvePO(poId: string) {
+  const supabase = await createClient();
+  const { user, error: authError } = await requireCapability('po.approve', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
+
+  const { data: po } = await supabase
+    .from('purchase_orders')
+    .select('status, requirements_waived, waiver_approved')
+    .eq('id', poId)
+    .single();
+
+  if (po?.status !== 'pending_approval') {
+    return { error: 'This PO is not pending approval.' };
+  }
+
+  if (po.requirements_waived && !po.waiver_approved) {
+    return { error: 'Cannot issue: this PO has waived requirements pending executive approval.' };
+  }
+
+  const { error } = await supabase
+    .from('purchase_orders')
+    .update({ status: 'issued', updated_at: new Date().toISOString() })
+    .eq('id', poId);
+
+  if (error) return { error: error.message };
+
+  await recordAuditLog({
+    entity_type: 'purchase_order',
+    entity_id: poId,
+    action: 'UPDATE',
+    changes: { after: { status: 'issued', approved_by: user.id } },
+    performed_by: user.id,
+  });
+
+  const emailResult = await sendPoIssuedEmail(poId, { actorId: user.id });
+  let emailWarning: string | undefined;
+  if (emailResult.status === 'failed') {
+    emailWarning = emailResult.error || 'The PO was issued but the email could not be sent.';
+    await createNotification({
+      type: 'po',
+      title: '⚠️ PO email not sent',
+      message: `${emailWarning} Open the PO to resend it to the vendor.`,
+      link: `/dashboard/purchase-orders/${poId}`,
+      created_by: user.id,
+    });
+  }
+
+  revalidatePath(`/dashboard/purchase-orders/${poId}`);
+  revalidatePath('/dashboard/purchase-orders');
+  return { success: true, emailWarning };
+}
+
+export async function rejectPO(poId: string, reason: string) {
+  const supabase = await createClient();
+  const { user, error: authError } = await requireCapability('po.approve', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
+
+  if (!reason?.trim()) return { error: 'A rejection reason is required.' };
+
+  const { data: po } = await supabase
+    .from('purchase_orders')
+    .select('status')
+    .eq('id', poId)
+    .single();
+
+  if (po?.status !== 'pending_approval') {
+    return { error: 'This PO is not pending approval.' };
+  }
+
+  const { error } = await supabase
+    .from('purchase_orders')
+    .update({
+      status: 'draft',
+      rejection_reason: reason.trim(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', poId);
+
+  if (error) return { error: error.message };
+
+  await recordAuditLog({
+    entity_type: 'purchase_order',
+    entity_id: poId,
+    action: 'UPDATE',
+    changes: { after: { status: 'draft', rejected_by: user.id, rejection_reason: reason.trim() } },
+    performed_by: user.id,
+  });
+
+  await createNotification({
+    type: 'po',
+    title: '❌ PO Approval Rejected',
+    message: `The purchase order was sent back to draft. Reason: ${reason.trim()}`,
+    link: `/dashboard/purchase-orders/${poId}`,
+    created_by: user.id,
+  });
+
+  revalidatePath(`/dashboard/purchase-orders/${poId}`);
+  revalidatePath('/dashboard/purchase-orders');
+  return { success: true };
+}
+
 export async function updatePOStatus(poId: string, status: string) {
   const supabase = await createClient();
   const { user, error: authError } = await requireCapability('po.status', supabase);
@@ -205,6 +360,11 @@ export async function updatePOStatus(poId: string, status: string) {
       .single();
 
     if (po?.status === 'issued') return { success: true };
+
+    // pending_approval POs must go through approvePO, not direct status update
+    if (po?.status === 'pending_approval') {
+      return { error: 'This PO is awaiting approval. Use the approval action to issue it.' };
+    }
 
     if (po?.requirements_waived && !po?.waiver_approved) {
       return { error: 'Cannot issue: this PO has waived requirements pending executive approval.' };

@@ -14,13 +14,7 @@ export async function GET(
 
     const { id } = await params
 
-    const rendered = await renderPoPdf(id)
-
-    if (!rendered) {
-      return new Response('Purchase order not found', { status: 404 })
-    }
-
-    const { buffer, filename } = rendered
+    const { buffer, filename } = await renderPoPdf(id)
 
     return new Response(buffer as unknown as BodyInit, {
       status: 200,
@@ -33,7 +27,7 @@ export async function GET(
   } catch (error: any) {
     console.error('PO PDF generation error:', error)
     return new Response(
-      JSON.stringify({ error: 'Failed to generate PDF' }),
+      JSON.stringify({ error: error?.message || 'Failed to generate PDF' }),
       { status: 500, headers: { 'Content-Type': 'application/json' } },
     )
   }

@@ -1,0 +1,2645 @@
+<!doctype html>
+<html lang="en" data-role="all">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TelcoVantage ERP — User Guide</title>
+    <script>
+      // Set theme before paint to avoid a flash.
+      (function () {
+        var t =
+          localStorage.getItem("guideTheme") ||
+          (window.matchMedia("(prefers-color-scheme: light)").matches
+            ? "light"
+            : "dark");
+        document.documentElement.setAttribute("data-theme", t);
+      })();
+    </script>
+    <style>
+      :root {
+        --green: #0a5c3b;
+        --green-2: #1f9d63;
+        --bg: #0d1117;
+        --bg-2: #161b22;
+        --panel: #11171f;
+        --line: rgba(255, 255, 255, 0.08);
+        --text: #e6edf3;
+        --muted: #8b97a6;
+        --muted-2: #5d6876;
+        --amber: #d9a23a;
+        --red: #e5484d;
+        --blue: #4f9dde;
+        --radius: 16px;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        font-family:
+          "Inter",
+          system-ui,
+          -apple-system,
+          Segoe UI,
+          Roboto,
+          sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.6;
+        background-image:
+          radial-gradient(
+            1200px 600px at 80% -10%,
+            rgba(10, 92, 59, 0.25),
+            transparent
+          ),
+          radial-gradient(
+            900px 500px at -10% 20%,
+            rgba(31, 157, 99, 0.1),
+            transparent
+          );
+        background-attachment: fixed;
+      }
+      h1,
+      h2,
+      h3,
+      h4 {
+        font-family: "Plus Jakarta Sans", Inter, sans-serif;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        line-height: 1.25;
+      }
+      a {
+        color: var(--green-2);
+        text-decoration: none;
+      }
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.85em;
+        background: rgba(255, 255, 255, 0.06);
+        padding: 0.12em 0.45em;
+        border-radius: 6px;
+      }
+
+      /* ---- light mode ---- */
+      :root[data-theme="light"] {
+        --green-2: #15894f;
+        --bg: #f6f8fa;
+        --bg-2: #ffffff;
+        --panel: #ffffff;
+        --line: rgba(2, 8, 20, 0.1);
+        --text: #0f172a;
+        --muted: #4b5563;
+        --muted-2: #94a3b8;
+      }
+      [data-theme="light"] body {
+        background-image:
+          radial-gradient(
+            1200px 600px at 80% -10%,
+            rgba(10, 92, 59, 0.1),
+            transparent
+          ),
+          radial-gradient(
+            900px 500px at -10% 20%,
+            rgba(31, 157, 99, 0.06),
+            transparent
+          );
+      }
+      [data-theme="light"] .side {
+        background: linear-gradient(
+          180deg,
+          rgba(10, 92, 59, 0.06),
+          rgba(246, 248, 250, 0.6)
+        );
+      }
+      [data-theme="light"] .rolebar {
+        background: rgba(246, 248, 250, 0.86);
+      }
+      [data-theme="light"] .card {
+        background: #ffffff;
+        box-shadow:
+          0 1px 2px rgba(2, 8, 20, 0.04),
+          0 10px 26px rgba(2, 8, 20, 0.05);
+      }
+      [data-theme="light"] .pill {
+        background: #ffffff;
+      }
+      [data-theme="light"] .pill:hover {
+        border-color: rgba(2, 8, 20, 0.22);
+      }
+      [data-theme="light"] .nav a:hover {
+        background: rgba(2, 8, 20, 0.04);
+      }
+      [data-theme="light"] .nav a.active {
+        background: rgba(31, 157, 99, 0.14);
+        color: #0a5c3b;
+      }
+      [data-theme="light"] table.perm tbody tr:hover {
+        background: rgba(2, 8, 20, 0.025);
+      }
+      [data-theme="light"] th.rolecol.hl,
+      [data-theme="light"] td.cell.hl {
+        background: rgba(31, 157, 99, 0.12);
+      }
+      [data-theme="light"] code {
+        background: rgba(2, 8, 20, 0.06);
+      }
+      [data-theme="light"] figure img {
+        box-shadow: 0 12px 34px rgba(2, 8, 20, 0.12);
+      }
+      [data-theme="light"] dialog.lb::backdrop {
+        background: rgba(2, 8, 20, 0.7);
+      }
+
+      .theme-toggle {
+        margin-left: 10px;
+        border: 1px solid var(--line);
+        background: transparent;
+        color: var(--muted);
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: 15px;
+        display: grid;
+        place-items: center;
+        transition: 0.15s;
+        flex: 0 0 auto;
+      }
+      .theme-toggle:hover {
+        color: var(--text);
+        border-color: rgba(255, 255, 255, 0.25);
+      }
+      [data-theme="light"] .theme-toggle:hover {
+        border-color: rgba(2, 8, 20, 0.25);
+      }
+
+      /* layout */
+      .shell {
+        display: grid;
+        grid-template-columns: 264px 1fr;
+        min-height: 100vh;
+      }
+      .side {
+        position: sticky;
+        top: 0;
+        height: 100vh;
+        overflow-y: auto;
+        border-right: 1px solid var(--line);
+        background: linear-gradient(
+          180deg,
+          rgba(10, 92, 59, 0.18),
+          rgba(13, 17, 23, 0.4)
+        );
+        padding: 22px 14px;
+        backdrop-filter: blur(8px);
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 6px 10px 18px;
+      }
+      .brand .logo {
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        background: linear-gradient(135deg, var(--green), var(--green-2));
+        display: grid;
+        place-items: center;
+        font-weight: 800;
+        font-family: "Plus Jakarta Sans";
+        color: #fff;
+      }
+      .brand b {
+        font-family: "Plus Jakarta Sans";
+        font-size: 15px;
+      }
+      .brand span {
+        display: block;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .nav {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        margin-top: 6px;
+      }
+      .nav a {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 12px;
+        border-radius: 10px;
+        color: var(--muted);
+        font-size: 13.5px;
+        font-weight: 500;
+        transition: 0.15s;
+      }
+      .nav a:hover {
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--text);
+      }
+      .nav a.active {
+        background: rgba(31, 157, 99, 0.16);
+        color: #dff5e9;
+      }
+      .nav a .ico {
+        width: 18px;
+        text-align: center;
+        opacity: 0.85;
+      }
+      .nav .grp {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--muted-2);
+        padding: 16px 12px 6px;
+      }
+
+      main {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 34px 40px 120px;
+        width: 100%;
+      }
+
+      /* role bar */
+      .rolebar {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        margin: -34px -40px 30px;
+        padding: 14px 40px;
+        background: rgba(13, 17, 23, 0.82);
+        backdrop-filter: blur(12px);
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        flex-wrap: wrap;
+      }
+      .rolebar .lbl {
+        font-size: 12px;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .pills {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      .pill {
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.03);
+        color: var(--muted);
+        padding: 6px 14px;
+        border-radius: 999px;
+        font-size: 12.5px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: 0.15s;
+      }
+      .pill:hover {
+        color: var(--text);
+        border-color: rgba(255, 255, 255, 0.2);
+      }
+      .pill.on {
+        background: linear-gradient(135deg, var(--green), var(--green-2));
+        color: #fff;
+        border-color: transparent;
+        box-shadow: 0 4px 14px rgba(10, 92, 59, 0.4);
+      }
+      .rolebar .hint {
+        font-size: 11.5px;
+        color: var(--muted-2);
+        margin-left: auto;
+      }
+
+      /* hero */
+      .hero h1 {
+        font-size: 34px;
+      }
+      .hero p.sub {
+        color: var(--muted);
+        font-size: 15px;
+        margin-top: 8px;
+        max-width: 640px;
+      }
+
+      section.module {
+        display: none;
+        animation: fade 0.25s ease;
+      }
+      section.module.show {
+        display: block;
+      }
+      @keyframes fade {
+        from {
+          opacity: 0;
+          transform: translateY(6px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      .crumb {
+        font-size: 12px;
+        color: var(--muted-2);
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        font-weight: 600;
+        margin-bottom: 8px;
+      }
+      .module h2.title {
+        font-size: 27px;
+        margin-bottom: 6px;
+      }
+      .lead {
+        color: var(--muted);
+        font-size: 14.5px;
+        margin-bottom: 26px;
+        max-width: 680px;
+      }
+
+      .card {
+        background: linear-gradient(
+          180deg,
+          rgba(255, 255, 255, 0.035),
+          rgba(255, 255, 255, 0.012)
+        );
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 22px 24px;
+        margin: 18px 0;
+      }
+      .card h3 {
+        font-size: 16px;
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+      }
+      .card h3 .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--green-2);
+        box-shadow: 0 0 10px var(--green-2);
+      }
+
+      /* permission table */
+      table.perm {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13.5px;
+      }
+      table.perm th,
+      table.perm td {
+        padding: 11px 12px;
+        text-align: left;
+        border-bottom: 1px solid var(--line);
+      }
+      table.perm thead th {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      table.perm tbody tr:hover {
+        background: rgba(255, 255, 255, 0.025);
+      }
+      table.perm td.act {
+        color: var(--text);
+        font-weight: 500;
+      }
+      .yes {
+        color: var(--green-2);
+        font-weight: 700;
+      }
+      .no {
+        color: var(--muted-2);
+      }
+      th.rolecol,
+      td.cell {
+        text-align: center;
+        width: 92px;
+      }
+      th.rolecol.hl,
+      td.cell.hl {
+        background: rgba(31, 157, 99, 0.09);
+      }
+
+      /* steps */
+      .steps {
+        counter-reset: s;
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        margin-top: 6px;
+      }
+      .steps > li {
+        position: relative;
+        padding-left: 46px;
+        counter-increment: s;
+      }
+      .steps > li::before {
+        content: counter(s);
+        position: absolute;
+        left: 0;
+        top: -2px;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--green), var(--green-2));
+        color: #fff;
+        font-weight: 700;
+        font-size: 14px;
+        display: grid;
+        place-items: center;
+        font-family: "Plus Jakarta Sans";
+      }
+      .steps > li b {
+        color: var(--text);
+      }
+      .steps > li p {
+        color: var(--muted);
+        font-size: 13.5px;
+        margin-top: 2px;
+      }
+
+      figure {
+        margin: 16px 0;
+      }
+      figure img {
+        width: 100%;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        display: block;
+        cursor: zoom-in;
+        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+      }
+      figcaption {
+        font-size: 12px;
+        color: var(--muted-2);
+        margin-top: 8px;
+        text-align: center;
+      }
+
+      /* callouts */
+      .callout {
+        border-radius: 12px;
+        padding: 14px 16px 14px 16px;
+        margin: 14px 0;
+        font-size: 13.5px;
+        border: 1px solid;
+        position: relative;
+        padding-left: 46px;
+      }
+      .callout .ic {
+        position: absolute;
+        left: 15px;
+        top: 14px;
+        font-size: 16px;
+      }
+      .callout b {
+        display: block;
+        margin-bottom: 2px;
+        font-size: 13.5px;
+      }
+      .callout.rule {
+        background: rgba(217, 162, 58, 0.07);
+        border-color: rgba(217, 162, 58, 0.3);
+      }
+      .callout.rule b {
+        color: var(--amber);
+      }
+      .callout.block {
+        background: rgba(229, 72, 77, 0.07);
+        border-color: rgba(229, 72, 77, 0.3);
+      }
+      .callout.block b {
+        color: var(--red);
+      }
+      .callout.tip {
+        background: rgba(79, 157, 222, 0.07);
+        border-color: rgba(79, 157, 222, 0.3);
+      }
+      .callout.tip b {
+        color: var(--blue);
+      }
+      .callout p,
+      .callout span {
+        color: var(--muted);
+      }
+
+      .roletag {
+        display: inline-block;
+        font-size: 10.5px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        padding: 2px 8px;
+        border-radius: 6px;
+        background: rgba(31, 157, 99, 0.16);
+        color: #9fe7c2;
+        margin-left: 8px;
+        vertical-align: middle;
+      }
+
+      [data-roles] {
+        transition: 0.2s;
+      }
+      .roff {
+        display: none !important;
+      }
+
+      .placeholder {
+        text-align: center;
+        color: var(--muted-2);
+        padding: 80px 20px;
+        font-size: 14px;
+      }
+      .placeholder .big {
+        font-size: 40px;
+        margin-bottom: 14px;
+        opacity: 0.5;
+      }
+
+      /* lightbox */
+      dialog.lb {
+        border: none;
+        background: transparent;
+        max-width: 94vw;
+        max-height: 94vh;
+        padding: 0;
+      }
+      dialog.lb::backdrop {
+        background: rgba(0, 0, 0, 0.85);
+        backdrop-filter: blur(3px);
+      }
+      dialog.lb img {
+        max-width: 94vw;
+        max-height: 94vh;
+        border-radius: 10px;
+      }
+
+      @media (max-width: 880px) {
+        .shell {
+          grid-template-columns: 1fr;
+        }
+        .side {
+          display: none;
+        }
+        main {
+          padding: 24px 18px 90px;
+        }
+        .rolebar {
+          margin: -24px -18px 22px;
+          padding: 12px 18px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <!-- SIDEBAR -->
+      <aside class="side">
+        <div class="brand">
+          <div class="logo">T</div>
+          <div><b>TelcoVantage ERP</b><span>User Guide</span></div>
+        </div>
+        <nav class="nav" id="nav">
+          <span class="grp">Start here</span>
+          <a data-mod="getting-started"
+            ><span class="ico">▸</span> Getting Started</a
+          >
+          <span class="grp">Procurement</span>
+          <a data-mod="vendors"><span class="ico">▸</span> Vendors</a>
+          <a data-mod="compliance"><span class="ico">▸</span> Compliance</a>
+          <a data-mod="purchase-orders" class="active"
+            ><span class="ico">▸</span> Purchase Orders</a
+          >
+          <span class="grp">Finance</span>
+          <a data-mod="invoices"
+            ><span class="ico">▸</span> Invoices &amp; Payments</a
+          >
+          <a data-mod="client-pos"><span class="ico">▸</span> Client POs</a>
+          <a data-mod="client-invoices"
+            ><span class="ico">▸</span> Client Invoices</a
+          >
+          <a data-mod="accounting"
+            ><span class="ico">▸</span> Accounting &amp; Reports</a
+          >
+          <span class="grp">Operations</span>
+          <a data-mod="projects"
+            ><span class="ico">▸</span> Projects &amp; Contracts</a
+          >
+          <a data-mod="crm"><span class="ico">▸</span> CRM</a>
+          <a data-mod="assets"><span class="ico">▸</span> Assets</a>
+          <span class="grp">People &amp; Docs</span>
+          <a data-mod="hr"><span class="ico">▸</span> HR</a>
+          <a data-mod="documents"><span class="ico">▸</span> Documents</a>
+          <span class="grp">More</span>
+          <a data-mod="ai"><span class="ico">▸</span> AI Assistant</a>
+          <a data-mod="settings"><span class="ico">▸</span> Settings</a>
+          <a data-mod="vendor-portal"
+            ><span class="ico">▸</span> Vendor Portal</a
+          >
+        </nav>
+      </aside>
+
+      <!-- MAIN -->
+      <main>
+        <div class="rolebar">
+          <span class="lbl">I am a:</span>
+          <div class="pills" id="pills">
+            <span class="pill on" data-role="all">Everyone</span>
+            <span class="pill" data-role="admin">Admin</span>
+            <span class="pill" data-role="finance">Finance</span>
+            <span class="pill" data-role="operations">Operations</span>
+            <span class="pill" data-role="viewer">Viewer</span>
+            <span class="pill" data-role="vendor">Vendor</span>
+          </div>
+          <span class="hint">Pick your role to grey out what you can't do</span>
+          <button
+            class="theme-toggle"
+            id="themeBtn"
+            title="Toggle light / dark"
+            aria-label="Toggle light or dark theme"
+          >
+            🌙
+          </button>
+        </div>
+
+        <!-- ===================== PURCHASE ORDERS ===================== -->
+        <section class="module show" id="purchase-orders">
+          <div class="crumb">Procurement</div>
+          <h2 class="title">Purchase Orders</h2>
+          <p class="lead">
+            A Purchase Order (PO) is the formal commitment to buy goods or
+            services from a vendor. This module covers raising a PO, getting it
+            approved, issuing it to the vendor, and tracking work completion and
+            payments.
+          </p>
+
+          <!-- PURPOSE / WHO -->
+          <div class="card">
+            <h3><span class="dot"></span> Who can do what</h3>
+            <table class="perm">
+              <thead>
+                <tr>
+                  <th>Action</th>
+                  <th class="rolecol" data-rc="admin">Admin</th>
+                  <th class="rolecol" data-rc="finance">Finance</th>
+                  <th class="rolecol" data-rc="operations">Operations</th>
+                  <th class="rolecol" data-rc="viewer">Viewer</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="act">View purchase orders</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="yes">✓</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="act">Create &amp; edit a PO</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="no">—</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="act">Update payment status</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="no">—</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="act">Approve &amp; issue PO to vendor</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="no">—</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="act">Waive NDA / active-vendor requirement</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="no">—</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="act">Approve a waiver / completion certificate</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="no">—</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="act">Delete a PO</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="no">dev only</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="no">—</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p style="font-size: 12px; color: var(--muted-2); margin-top: 10px">
+              Deleting a PO is restricted to the Superadmin (developer) role.
+            </p>
+          </div>
+
+          <!-- THE LIST -->
+          <div class="card">
+            <h3><span class="dot"></span> The Purchase Orders screen</h3>
+            <p style="color: var(--muted); font-size: 13.5px">
+              Open <b>Vendors → Purchase Orders</b> from the sidebar. The top
+              cards show how many POs exist and the total open (unpaid) amount.
+              Use the search box and the <b>Status</b>, <b>Vendor</b>, and
+              <b>Project</b> filters to narrow the list. Each row shows the PO
+              number, vendor, linked project, amount, and current status. Click
+              any row to open it; use the download icon to grab the PDF.
+            </p>
+            <figure>
+              <img src="img/po-01-list.png" alt="Purchase Orders list" />
+              <figcaption>
+                The Purchase Orders list with KPI cards, filters, and status
+                badges.
+              </figcaption>
+            </figure>
+          </div>
+
+          <!-- WORKFLOW 1: CREATE -->
+          <div class="card" data-roles="admin operations">
+            <h3>
+              <span class="dot"></span> Workflow — Create a purchase order
+              <span class="roletag">Admin · Operations</span>
+            </h3>
+            <ol class="steps">
+              <li>
+                <b>Click “Create PO”</b>
+                <p>
+                  Top-right of the Purchase Orders screen. This opens the Create
+                  Purchase Order form.
+                </p>
+              </li>
+              <li>
+                <b>Select the vendor</b>
+                <p>
+                  Only vendors with an approved Signed NDA who are Active appear
+                  ready to go. Optionally link a Project.
+                </p>
+              </li>
+              <li>
+                <b>Describe the order &amp; set dates</b>
+                <p>
+                  Add a description/subject, the Issued Date, and an optional
+                  Due Date and Down Payment amount.
+                </p>
+              </li>
+              <li>
+                <b>Add line items</b>
+                <p>
+                  Each row has an item code, description, quantity, unit of
+                  measure, and unit price. The amount totals automatically. The
+                  PO total must be greater than zero.
+                </p>
+              </li>
+              <li>
+                <b>Submit</b>
+                <p>
+                  The PO is created as a <b>Draft</b> and then enters the
+                  approval flow below.
+                </p>
+              </li>
+            </ol>
+            <figure>
+              <img
+                src="img/po-02-create.png"
+                alt="Create Purchase Order form"
+              />
+              <figcaption>
+                The Create Purchase Order form — vendor, project, dates, and
+                line items.
+              </figcaption>
+            </figure>
+            <div class="callout block">
+              <span class="ic">⛔</span
+              ><b>Two gates before a PO can be raised</b>
+              <span
+                >The vendor must (1) have an <b>approved Signed NDA</b> on file
+                and (2) be <b>Active (Accredited)</b>. If either is missing, the
+                system blocks creation with a clear message.</span
+              >
+            </div>
+            <div class="callout rule" data-roles="admin operations">
+              <span class="ic">⚠️</span><b>Waiving the gates</b>
+              <span
+                >Admin and Operations can tick <b>Waive requirements</b> to
+                raise a PO anyway (e.g. urgent work). A waived PO is flagged and
+                <b
+                  >cannot be issued to the vendor until an Admin approves the
+                  waiver</b
+                >.</span
+              >
+            </div>
+          </div>
+
+          <!-- WORKFLOW 2: APPROVE & ISSUE -->
+          <div class="card">
+            <h3>
+              <span class="dot"></span> Workflow — Approve &amp; issue to the
+              vendor
+              <span class="roletag" data-roles="admin">Admin approves</span>
+            </h3>
+            <p
+              style="color: var(--muted); font-size: 13.5px; margin-bottom: 6px"
+            >
+              Opening a PO shows its full detail: status, the approval banner,
+              completion certificates, and a financial summary (commitment, down
+              payment, paid-to-date, balance, billing health).
+            </p>
+            <ol class="steps">
+              <li>
+                <b>PO sits in “Pending Approval”</b>
+                <p>
+                  After creation it awaits executive sign-off. It
+                  <b>cannot be sent to the vendor</b> in this state.
+                </p>
+              </li>
+              <li data-roles="admin">
+                <b>An Admin reviews and clicks “Approve &amp; Issue”</b>
+                <p>
+                  This moves the PO to <b>Issued</b> — it can now be downloaded
+                  and sent to the vendor. Or click <b>Reject</b> to send it
+                  back.
+                </p>
+              </li>
+              <li>
+                <b>Download or edit the document</b>
+                <p>
+                  Use <b>Download</b> for the PDF, or <b>Edit DOCX</b> to
+                  fine-tune the document before issuing.
+                </p>
+              </li>
+            </ol>
+            <figure>
+              <img
+                src="img/po-03-detail.png"
+                alt="Purchase Order detail with approval banner"
+              />
+              <figcaption>
+                PO detail — the executive-approval banner, completion
+                certificates, and financial summary.
+              </figcaption>
+            </figure>
+            <div class="callout rule">
+              <span class="ic">⚠️</span><b>Approval is mandatory</b>
+              <span
+                >No PO reaches a vendor without an Admin approving it first.
+                This is the executive control layer over all outgoing
+                commitments.</span
+              >
+            </div>
+          </div>
+
+          <!-- WORKFLOW 3: COMPLETION & PAYMENT -->
+          <div class="card">
+            <h3>
+              <span class="dot"></span> Workflow — Track completion &amp;
+              payments
+            </h3>
+            <ol class="steps">
+              <li>
+                <b>Vendor work is logged as a Completion Certificate</b>
+                <p>
+                  Each certificate records a % complete and an optional uploaded
+                  file and notes.
+                </p>
+              </li>
+              <li data-roles="admin">
+                <b>An Admin approves or rejects each certificate</b>
+                <p>
+                  Approved certificates confirm progress (e.g. 50% complete)
+                  against the PO.
+                </p>
+              </li>
+              <li>
+                <b>Payments flow in from invoices</b>
+                <p>
+                  The financial summary tracks original commitment, down
+                  payment, total paid-to-date, remaining balance, and
+                  invoiced-vs-PO billing health. As invoices are recorded and
+                  paid, the PO status advances (Partially Paid → Paid).
+                </p>
+              </li>
+            </ol>
+            <div class="callout tip">
+              <span class="ic">💡</span><b>Where payments come from</b>
+              <span
+                >You don’t mark a PO “Paid” by hand — recording a payment
+                against its <b>invoice</b> cascades back and updates the PO
+                automatically. See the
+                <a data-jump="invoices">Invoices &amp; Payments</a>
+                module.</span
+              >
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================== GETTING STARTED ===================== -->
+        <section class="module" id="getting-started">
+          <div class="crumb">Start here</div>
+          <h2 class="title">Getting Started</h2>
+          <p class="lead">
+            TelcoVantage ERP is the single place to run procurement, finance,
+            projects, and people. This page covers signing in and finding your
+            way around — everything here applies to every role.
+          </p>
+
+          <div class="card">
+            <h3><span class="dot"></span> Signing in</h3>
+            <ol class="steps">
+              <li>
+                <b>Go to the login page</b>
+                <p>Open the ERP URL. You’ll see the sign-in screen.</p>
+              </li>
+              <li>
+                <b>Sign in with Microsoft</b>
+                <p>
+                  Click <b>Sign in with Microsoft</b> to use your company
+                  account — the recommended way. Or enter your email and
+                  password if you have a local account.
+                </p>
+              </li>
+              <li>
+                <b>You land on the Command Center</b>
+                <p>
+                  The dashboard that opens depends on your role: you only ever
+                  see the modules your role is allowed to use.
+                </p>
+              </li>
+            </ol>
+            <div class="callout tip">
+              <span class="ic">💡</span><b>Forgot your password?</b
+              ><span
+                >Use the reset link on the login screen. Microsoft sign-in users
+                don’t need a password at all.</span
+              >
+            </div>
+          </div>
+
+          <div class="card">
+            <h3><span class="dot"></span> The Command Center dashboard</h3>
+            <p style="color: var(--muted); font-size: 13.5px">
+              The home dashboard is your operational pulse: near-due invoices
+              and POs (within 7 days), current liability, active POs, pending
+              vendors, active projects, expiring documents, AR outstanding, and
+              a 6-month cash-flow trend. The <b>New PO</b> and
+              <b>Record Invoice</b> quick-actions are top-right.
+            </p>
+            <figure>
+              <img src="img/gs-dashboard.png" alt="Command Center dashboard" />
+              <figcaption>
+                The Command Center — KPIs, near-due items, and cash-flow trend.
+              </figcaption>
+            </figure>
+          </div>
+
+          <div class="card">
+            <h3><span class="dot"></span> Finding your way around</h3>
+            <ul class="steps" style="counter-reset: none">
+              <li style="padding-left: 5">
+                <b>⌘K / Ctrl-K search</b>
+                <p>
+                  Press <code>⌘K</code> (or click “Search everything…”) to jump
+                  to any vendor, PO, invoice, project, or customer instantly.
+                </p>
+              </li>
+              <li style="padding-left: 5">
+                <b>Notification bell</b>
+                <p>
+                  The bell (top bar) shows alerts — approvals waiting, expiring
+                  docs, near-due items.
+                </p>
+              </li>
+              <li style="padding-left: 5">
+                <b>Theme toggle</b>
+                <p>
+                  Switch between light and dark mode with the moon/sun icon.
+                </p>
+              </li>
+              <li style="padding-left: 5">
+                <b>Profile menu</b>
+                <p>
+                  Top-right shows your name and role. Open it for your profile
+                  and to sign out.
+                </p>
+              </li>
+              <li style="padding-left: 5">
+                <b>AI Assistant</b>
+                <p>
+                  The floating button (bottom-left) opens the assistant — see
+                  the <a data-jump="ai">AI Assistant</a> section.
+                </p>
+              </li>
+            </ul>
+          </div>
+
+          <div class="card">
+            <h3><span class="dot"></span> The five roles</h3>
+            <table class="perm">
+              <thead>
+                <tr>
+                  <th>Role</th>
+                  <th>What they do</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="act">Admin</td>
+                  <td style="color: var(--muted)">
+                    The director — runs the business. Can do almost everything,
+                    including approvals.
+                  </td>
+                </tr>
+                <tr>
+                  <td class="act">Finance</td>
+                  <td style="color: var(--muted)">
+                    Invoices, payments, accounting, and client billing.
+                  </td>
+                </tr>
+                <tr>
+                  <td class="act">Operations</td>
+                  <td style="color: var(--muted)">
+                    Vendors, POs, projects, CRM, contracts, and assets.
+                  </td>
+                </tr>
+                <tr>
+                  <td class="act">Viewer</td>
+                  <td style="color: var(--muted)">
+                    Read-only access across the system.
+                  </td>
+                </tr>
+                <tr>
+                  <td class="act">Vendor (external)</td>
+                  <td style="color: var(--muted)">
+                    Not a login — vendors use a one-time
+                    <a data-jump="vendor-portal">portal link</a> to upload
+                    documents.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p style="font-size: 12px; color: var(--muted-2); margin-top: 10px">
+              Throughout this guide, pick your role at the top to grey out
+              anything you can’t do.
+            </p>
+          </div>
+        </section>
+
+        <!-- ===================== VENDORS ===================== -->
+        <section class="module" id="vendors">
+          <div class="crumb">Procurement</div>
+          <h2 class="title">Vendors</h2>
+          <p class="lead">
+            The vendor directory is the master record for every supplier — their
+            company details, banking, accreditation documents, linked projects,
+            POs, and invoices.
+          </p>
+
+          <div class="card">
+            <h3><span class="dot"></span> Who can do what</h3>
+            <table class="perm">
+              <thead>
+                <tr>
+                  <th>Action</th>
+                  <th class="rolecol" data-rc="admin">Admin</th>
+                  <th class="rolecol" data-rc="finance">Finance</th>
+                  <th class="rolecol" data-rc="operations">Operations</th>
+                  <th class="rolecol" data-rc="viewer">Viewer</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="act">View vendors</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="yes">✓</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="act">Add &amp; edit vendors</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="no">—</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="act">Activate / deactivate a vendor</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="no">—</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="act">Generate a portal link</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="no">—</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="act">Export vendor list</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="no">—</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="act">Delete a vendor</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="no">dev only</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="no">—</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card">
+            <h3><span class="dot"></span> The vendor directory</h3>
+            <p style="color: var(--muted); font-size: 13.5px">
+              Open <b>Vendors → All Vendors</b>. Search and filter the list,
+              then click a vendor to open its profile. Use <b>Export</b> to
+              download the list, or import vendors in bulk.
+            </p>
+            <figure>
+              <img src="img/vendors-list.png" alt="Vendor directory" />
+              <figcaption>The vendor directory.</figcaption>
+            </figure>
+          </div>
+
+          <div class="card">
+            <h3><span class="dot"></span> The vendor profile (6 tabs)</h3>
+            <p style="color: var(--muted); font-size: 13.5px">
+              A vendor profile is organised into tabs:
+              <b>Profile Overview</b> (company details, banking &amp; terms, NDA
+              status), <b>Projects</b>, <b>Accreditation Docs</b>,
+              <b>Purchase Orders</b>, <b>Invoices</b>, and <b>Email History</b>.
+              The status dot and badge (Active / Pending / Inactive) sit next to
+              the name.
+            </p>
+            <figure>
+              <img src="img/vendors-detail.png" alt="Vendor profile" />
+              <figcaption>
+                Vendor profile — overview tab with NDA status and banking
+                details.
+              </figcaption>
+            </figure>
+            <div class="callout rule" data-roles="admin operations">
+              <span class="ic">⚠️</span><b>NDA &amp; Active status matter</b
+              ><span
+                >A vendor needs an <b>approved Signed NDA</b> and
+                <b>Active</b> status before you can raise a
+                <a data-jump="purchase-orders">Purchase Order</a> for
+                them.</span
+              >
+            </div>
+            <div class="callout tip" data-roles="admin operations">
+              <span class="ic">💡</span><b>Generate Portal Link</b
+              ><span
+                >Click <b>Generate Portal Link</b> (top-right of the profile) to
+                create a one-time link the vendor uses to upload accreditation
+                documents — no login needed. See
+                <a data-jump="vendor-portal">Vendor Portal</a>.</span
+              >
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================== COMPLIANCE ===================== -->
+        <section class="module" id="compliance">
+          <div class="crumb">Procurement</div>
+          <h2 class="title">Compliance</h2>
+          <p class="lead">
+            The Compliance hub tracks vendor accreditation — the 14 required
+            documents per vendor, their approval status, and overall readiness
+            across all suppliers.
+          </p>
+
+          <div class="card">
+            <h3><span class="dot"></span> Who can do what</h3>
+            <table class="perm">
+              <thead>
+                <tr>
+                  <th>Action</th>
+                  <th class="rolecol" data-rc="admin">Admin</th>
+                  <th class="rolecol" data-rc="finance">Finance</th>
+                  <th class="rolecol" data-rc="operations">Operations</th>
+                  <th class="rolecol" data-rc="viewer">Viewer</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="act">View compliance status</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="yes">✓</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="act">Approve / reject a document</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="no">—</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card">
+            <h3><span class="dot"></span> The accreditation matrix</h3>
+            <p style="color: var(--muted); font-size: 13.5px">
+              Open <b>Compliance</b> from the sidebar. You’ll see each vendor’s
+              progress against the 14 accreditation requirements, with summary
+              metrics up top and a per-document status (Approved / Missing /
+              Pending).
+            </p>
+            <figure>
+              <img src="img/compliance.png" alt="Compliance hub" />
+              <figcaption>
+                The compliance hub and accreditation matrix.
+              </figcaption>
+            </figure>
+          </div>
+
+          <div class="card">
+            <h3><span class="dot"></span> The 14 accreditation documents</h3>
+            <p style="color: var(--muted); font-size: 13.5px">
+              Signed NDA · Statement of Commitment · Company Profile · Products
+              &amp; Services List · Vendor Information Summary · General
+              Information Sheet · Audited Financial Statements · SEC
+              Registration · Secretary Certificate · Safety &amp; Drug Policy ·
+              ISO Certification · PCAB License · DOLE 174 Registration · Other
+              Licenses &amp; Permits.
+            </p>
+            <div class="callout tip">
+              <span class="ic">💡</span><b>How documents arrive</b
+              ><span
+                >Vendors upload these themselves through the
+                <a data-jump="vendor-portal">portal link</a>. Each upload
+                appears here for an Admin or Operations user to approve or
+                reject.</span
+              >
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================== INVOICES ===================== -->
+        <section class="module" id="invoices">
+          <div class="crumb">Finance</div>
+          <h2 class="title">Invoices &amp; Payments</h2>
+          <p class="lead">
+            This is accounts payable: record vendor invoices against a PO, then
+            record payments. Payments cascade back to update the PO’s status
+            automatically.
+          </p>
+
+          <div class="card">
+            <h3><span class="dot"></span> Who can do what</h3>
+            <table class="perm">
+              <thead>
+                <tr>
+                  <th>Action</th>
+                  <th class="rolecol" data-rc="admin">Admin</th>
+                  <th class="rolecol" data-rc="finance">Finance</th>
+                  <th class="rolecol" data-rc="operations">Operations</th>
+                  <th class="rolecol" data-rc="viewer">Viewer</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="act">View invoices</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="yes">✓</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="act">Record an invoice</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="no">—</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="act">Record a payment</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="no">—</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card">
+            <h3><span class="dot"></span> The invoices screen</h3>
+            <p style="color: var(--muted); font-size: 13.5px">
+              Open <b>Invoices</b> from the sidebar. The list shows each
+              invoice, its vendor, linked PO, amount, and payment status. Filter
+              by status or vendor; click a row to open the detail.
+            </p>
+            <figure>
+              <img src="img/invoices-list.png" alt="Invoices list" />
+              <figcaption>The invoices (accounts payable) list.</figcaption>
+            </figure>
+          </div>
+
+          <div class="card" data-roles="admin finance">
+            <h3>
+              <span class="dot"></span> Workflow — Record an invoice
+              <span class="roletag">Admin · Finance</span>
+            </h3>
+            <ol class="steps">
+              <li>
+                <b>Click “Record Invoice”</b>
+                <p>From the dashboard quick-action or the Invoices screen.</p>
+              </li>
+              <li>
+                <b>Pick the vendor and PO</b>
+                <p>Link the invoice to the purchase order it bills against.</p>
+              </li>
+              <li>
+                <b>Enter the invoice number, amount, and date</b>
+                <p>Optionally attach the invoice file (max 10MB).</p>
+              </li>
+              <li>
+                <b>Save</b>
+                <p>The invoice is recorded against the PO.</p>
+              </li>
+            </ol>
+            <figure>
+              <img src="img/invoices-detail.png" alt="Invoice detail" />
+              <figcaption>
+                An invoice detail with its payment record.
+              </figcaption>
+            </figure>
+            <div class="callout block">
+              <span class="ic">⛔</span><b>Amount guard</b
+              ><span
+                >The total invoiced against a PO
+                <b>cannot exceed the PO amount</b>. If an approved completion
+                certificate exists, the ceiling is capped at that percentage of
+                the PO (e.g. 50% complete → you can only bill up to 50% of the
+                PO).</span
+              >
+            </div>
+          </div>
+
+          <div class="card" data-roles="admin finance">
+            <h3>
+              <span class="dot"></span> Workflow — Record a payment
+              <span class="roletag">Admin · Finance</span>
+            </h3>
+            <ol class="steps">
+              <li>
+                <b>Open the invoice and click “Record Payment”</b>
+                <p>Enter the amount paid and the date.</p>
+              </li>
+              <li>
+                <b>Save</b>
+                <p>The invoice updates to Partially Paid or Paid.</p>
+              </li>
+            </ol>
+            <div class="callout tip">
+              <span class="ic">💡</span><b>Auto-cascade</b
+              ><span
+                >You never set a PO to “Paid” by hand. Recording payments
+                against its invoices cascades back and advances the
+                <a data-jump="purchase-orders">PO</a> status automatically
+                (Issued → Partially Paid → Paid).</span
+              >
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================== CLIENT POs ===================== -->
+        <section class="module" id="client-pos">
+          <div class="crumb">Finance</div>
+          <h2 class="title">Client POs</h2>
+          <p class="lead">
+            The other side of the business: purchase orders your
+            <b>clients</b> issue to you. These are what you bill against with
+            client invoices (accounts receivable).
+          </p>
+
+          <div class="card">
+            <h3><span class="dot"></span> Who can do what</h3>
+            <table class="perm">
+              <thead>
+                <tr>
+                  <th>Action</th>
+                  <th class="rolecol" data-rc="admin">Admin</th>
+                  <th class="rolecol" data-rc="finance">Finance</th>
+                  <th class="rolecol" data-rc="operations">Operations</th>
+                  <th class="rolecol" data-rc="viewer">Viewer</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="act">View client POs</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="yes">✓</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="act">Create &amp; edit client POs</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="no">—</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card">
+            <h3><span class="dot"></span> The client PO screen</h3>
+            <p style="color: var(--muted); font-size: 13.5px">
+              Open <b>Client POs</b>. Each record captures the client (a CRM
+              account), the PO amount, and the invoices billed against it. Click
+              a row to open the detail and see remaining billable balance.
+            </p>
+            <figure>
+              <img src="img/client-pos-list.png" alt="Client POs list" />
+              <figcaption>The client purchase orders list.</figcaption>
+            </figure>
+            <figure>
+              <img src="img/client-pos-detail.png" alt="Client PO detail" />
+              <figcaption>
+                A client PO detail with its billing summary.
+              </figcaption>
+            </figure>
+          </div>
+        </section>
+
+        <!-- ===================== CLIENT INVOICES ===================== -->
+        <section class="module" id="client-invoices">
+          <div class="crumb">Finance</div>
+          <h2 class="title">Client Invoices</h2>
+          <p class="lead">
+            Accounts receivable: the invoices you raise to clients against their
+            Client POs, and the collection status of each.
+          </p>
+
+          <div class="card">
+            <h3><span class="dot"></span> Who can do what</h3>
+            <table class="perm">
+              <thead>
+                <tr>
+                  <th>Action</th>
+                  <th class="rolecol" data-rc="admin">Admin</th>
+                  <th class="rolecol" data-rc="finance">Finance</th>
+                  <th class="rolecol" data-rc="operations">Operations</th>
+                  <th class="rolecol" data-rc="viewer">Viewer</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="act">View client invoices</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="yes">✓</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="act">Raise a client invoice</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="no">—</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="act">Record collection / payment</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="no">—</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card">
+            <h3><span class="dot"></span> The client invoices screen</h3>
+            <p style="color: var(--muted); font-size: 13.5px">
+              Open <b>Client Invoices</b>. Raise an invoice against a Client PO,
+              track its status, and record collections. (The example system has
+              no client invoices yet, so the list shows its empty state.)
+            </p>
+            <figure>
+              <img
+                src="img/client-invoices-list.png"
+                alt="Client invoices list"
+              />
+              <figcaption>
+                The client invoices (accounts receivable) screen.
+              </figcaption>
+            </figure>
+            <div class="callout block" data-roles="admin finance">
+              <span class="ic">⛔</span><b>Billing ceiling</b
+              ><span
+                >The sum of client invoices against a Client PO
+                <b>cannot exceed that PO’s amount</b>. The system shows how much
+                has already been billed and blocks anything over the
+                limit.</span
+              >
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================== ACCOUNTING ===================== -->
+        <section class="module" id="accounting">
+          <div class="crumb">Finance</div>
+          <h2 class="title">Accounting &amp; Reports</h2>
+          <p class="lead">
+            The financial control room: AP/AR dashboards, aging, tax preparation
+            (BIR 2307), and the reports center for exporting financial data.
+          </p>
+
+          <div class="card">
+            <h3><span class="dot"></span> Who can do what</h3>
+            <table class="perm">
+              <thead>
+                <tr>
+                  <th>Action</th>
+                  <th class="rolecol" data-rc="admin">Admin</th>
+                  <th class="rolecol" data-rc="finance">Finance</th>
+                  <th class="rolecol" data-rc="operations">Operations</th>
+                  <th class="rolecol" data-rc="viewer">Viewer</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="act">View accounting dashboards</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="no">—</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="act">Manage accounting entries</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="no">—</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="act">Export financial reports</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="no">—</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p style="font-size: 12px; color: var(--muted-2); margin-top: 10px">
+              Accounting is restricted to Admin and Finance. Operations and
+              Viewer don’t see this module.
+            </p>
+          </div>
+
+          <div class="card">
+            <h3><span class="dot"></span> The accounting dashboard</h3>
+            <p style="color: var(--muted); font-size: 13.5px">
+              Open <b>Accounting</b>. KPI cards summarise payables and
+              receivables, an AP aging table breaks down what’s due, and the
+              tax-preparation area helps assemble BIR 2307 figures.
+            </p>
+            <figure>
+              <img src="img/accounting.png" alt="Accounting dashboard" />
+              <figcaption>
+                The accounting dashboard with AP aging and tax prep.
+              </figcaption>
+            </figure>
+          </div>
+
+          <div class="card">
+            <h3><span class="dot"></span> Reports center</h3>
+            <p style="color: var(--muted); font-size: 13.5px">
+              Open <b>Reports</b> to generate and export financial and
+              operational reports for a chosen period.
+            </p>
+            <figure>
+              <img src="img/reports.png" alt="Reports center" />
+              <figcaption>The reports center.</figcaption>
+            </figure>
+          </div>
+        </section>
+
+        <!-- ===================== PROJECTS ===================== -->
+        <section class="module" id="projects">
+          <div class="crumb">Operations</div>
+          <h2 class="title">Projects &amp; Contracts</h2>
+          <p class="lead">
+            Projects group the work you do for a client, link the vendors and
+            POs involved, and track status from active to on-hold to complete.
+          </p>
+
+          <div class="card">
+            <h3><span class="dot"></span> Who can do what</h3>
+            <table class="perm">
+              <thead>
+                <tr>
+                  <th>Action</th>
+                  <th class="rolecol" data-rc="admin">Admin</th>
+                  <th class="rolecol" data-rc="finance">Finance</th>
+                  <th class="rolecol" data-rc="operations">Operations</th>
+                  <th class="rolecol" data-rc="viewer">Viewer</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="act">View projects</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="yes">✓</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="act">Create &amp; edit projects</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="no">—</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card">
+            <h3><span class="dot"></span> The projects board</h3>
+            <p style="color: var(--muted); font-size: 13.5px">
+              Open <b>Projects</b>. Each project card shows its client, linked
+              vendors, connected POs, and status (Active / On Hold / Complete).
+              Filter by client, or click <b>View Details</b> to open a project.
+            </p>
+            <figure>
+              <img src="img/projects-list.png" alt="Projects board" />
+              <figcaption>
+                The projects board with status and connected POs.
+              </figcaption>
+            </figure>
+          </div>
+
+          <div class="card" data-roles="admin operations">
+            <h3>
+              <span class="dot"></span> Workflow — Create a project
+              <span class="roletag">Admin · Operations</span>
+            </h3>
+            <ol class="steps">
+              <li>
+                <b>Click “New Project”</b>
+                <p>Top-right of the projects board.</p>
+              </li>
+              <li>
+                <b>Name it and pick the client</b>
+                <p>
+                  Link the project to a CRM account (or leave it clientless).
+                </p>
+              </li>
+              <li>
+                <b>Set status and details</b>
+                <p>
+                  Add a description; the project starts tracking linked vendors
+                  and POs.
+                </p>
+              </li>
+            </ol>
+            <figure>
+              <img src="img/projects-detail.png" alt="Project detail" />
+              <figcaption>
+                A project detail with linked vendors and POs.
+              </figcaption>
+            </figure>
+            <div class="callout tip">
+              <span class="ic">💡</span><b>Contracts</b
+              ><span
+                >Master contracts live under <b>Vendors → Contracts</b> and can
+                be associated with the projects and vendors they govern.</span
+              >
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================== CRM ===================== -->
+        <section class="module" id="crm">
+          <div class="crumb">Operations</div>
+          <h2 class="title">CRM</h2>
+          <p class="lead">
+            The customer side: your client accounts, their contacts and details,
+            and the opportunity pipeline that feeds projects and client POs.
+          </p>
+
+          <div class="card">
+            <h3><span class="dot"></span> Who can do what</h3>
+            <table class="perm">
+              <thead>
+                <tr>
+                  <th>Action</th>
+                  <th class="rolecol" data-rc="admin">Admin</th>
+                  <th class="rolecol" data-rc="finance">Finance</th>
+                  <th class="rolecol" data-rc="operations">Operations</th>
+                  <th class="rolecol" data-rc="viewer">Viewer</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="act">View customers &amp; pipeline</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="yes">✓</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="act">Add &amp; edit customers</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="no">—</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="act">Export CRM data</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="no">—</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card">
+            <h3><span class="dot"></span> The customer directory</h3>
+            <p style="color: var(--muted); font-size: 13.5px">
+              Open <b>CRM</b>. Browse client accounts, open a customer to see
+              its details and linked projects/POs, and manage the opportunity
+              pipeline. Customers can be imported in bulk.
+            </p>
+            <figure>
+              <img src="img/crm-list.png" alt="CRM directory" />
+              <figcaption>The customer directory.</figcaption>
+            </figure>
+            <figure>
+              <img src="img/crm-detail.png" alt="Customer detail" />
+              <figcaption>A customer detail with linked records.</figcaption>
+            </figure>
+          </div>
+        </section>
+
+        <!-- ===================== ASSETS ===================== -->
+        <section class="module" id="assets">
+          <div class="crumb">Operations</div>
+          <h2 class="title">Assets</h2>
+          <p class="lead">
+            The fixed-asset registry: company equipment and property, their
+            purchase cost, depreciation, current book value, and maintenance
+            history.
+          </p>
+
+          <div class="card">
+            <h3><span class="dot"></span> Who can do what</h3>
+            <table class="perm">
+              <thead>
+                <tr>
+                  <th>Action</th>
+                  <th class="rolecol" data-rc="admin">Admin</th>
+                  <th class="rolecol" data-rc="finance">Finance</th>
+                  <th class="rolecol" data-rc="operations">Operations</th>
+                  <th class="rolecol" data-rc="viewer">Viewer</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="act">View assets</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="yes">✓</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="act">Add &amp; edit assets</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="no">—</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card">
+            <h3><span class="dot"></span> The asset registry</h3>
+            <p style="color: var(--muted); font-size: 13.5px">
+              Open <b>Assets</b>. The list shows each asset and its value; the
+              totals reflect combined purchase cost. Click an asset to open its
+              detail.
+            </p>
+            <figure>
+              <img src="img/assets-list.png" alt="Asset registry" />
+              <figcaption>The fixed-asset registry.</figcaption>
+            </figure>
+            <figure>
+              <img
+                src="img/assets-detail.png"
+                alt="Asset detail with depreciation"
+              />
+              <figcaption>
+                An asset detail showing depreciation and book value.
+              </figcaption>
+            </figure>
+            <div class="callout tip">
+              <span class="ic">💡</span><b>How depreciation is calculated</b
+              ><span
+                >The system uses <b>straight-line depreciation</b>: monthly
+                depreciation = (purchase cost − salvage value) ÷ (useful life in
+                years × 12). The detail page shows accumulated depreciation and
+                current book value from the purchase date.</span
+              >
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================== HR ===================== -->
+        <section class="module" id="hr">
+          <div class="crumb">People &amp; Docs</div>
+          <h2 class="title">HR</h2>
+          <p class="lead">
+            The employee directory and 201 file: staff records, roles, and their
+            personal document vault.
+          </p>
+
+          <div class="card">
+            <h3><span class="dot"></span> Who can do what</h3>
+            <table class="perm">
+              <thead>
+                <tr>
+                  <th>Action</th>
+                  <th class="rolecol" data-rc="admin">Admin</th>
+                  <th class="rolecol" data-rc="finance">Finance</th>
+                  <th class="rolecol" data-rc="operations">Operations</th>
+                  <th class="rolecol" data-rc="viewer">Viewer</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="act">View employees</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="yes">✓</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="act">Add &amp; edit employees</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="no">—</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p style="font-size: 12px; color: var(--muted-2); margin-top: 10px">
+              Everyone can view the directory; only Admins can add or edit
+              employee records.
+            </p>
+          </div>
+
+          <div class="card">
+            <h3>
+              <span class="dot"></span> The employee directory &amp; 201 vault
+            </h3>
+            <p style="color: var(--muted); font-size: 13.5px">
+              Open <b>HR</b>. Browse employees, then open one to see their
+              profile and 201 document vault (contracts, IDs, certificates).
+            </p>
+            <figure>
+              <img src="img/hr-list.png" alt="Employee directory" />
+              <figcaption>The employee directory.</figcaption>
+            </figure>
+            <figure>
+              <img
+                src="img/hr-detail.png"
+                alt="Employee profile and 201 vault"
+              />
+              <figcaption>
+                An employee profile with the 201 document vault.
+              </figcaption>
+            </figure>
+          </div>
+        </section>
+
+        <!-- ===================== DOCUMENTS ===================== -->
+        <section class="module" id="documents">
+          <div class="crumb">People &amp; Docs</div>
+          <h2 class="title">Documents</h2>
+          <p class="lead">
+            The central document repository: a company library organised into
+            folders, plus the vendor document vault, all previewable in-app.
+          </p>
+
+          <div class="card">
+            <h3><span class="dot"></span> Who can do what</h3>
+            <table class="perm">
+              <thead>
+                <tr>
+                  <th>Action</th>
+                  <th class="rolecol" data-rc="admin">Admin</th>
+                  <th class="rolecol" data-rc="finance">Finance</th>
+                  <th class="rolecol" data-rc="operations">Operations</th>
+                  <th class="rolecol" data-rc="viewer">Viewer</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="act">View &amp; preview documents</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="yes">✓</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="act">Upload &amp; manage documents</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="no">—</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="act">Approve documents</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="no">—</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card">
+            <h3><span class="dot"></span> The repository</h3>
+            <p style="color: var(--muted); font-size: 13.5px">
+              Open <b>Documents</b>. The company library is split into folders;
+              the vendor vault holds accreditation files. Click any document to
+              preview it without downloading.
+            </p>
+            <figure>
+              <img src="img/documents.png" alt="Document repository" />
+              <figcaption>The document repository.</figcaption>
+            </figure>
+          </div>
+        </section>
+
+        <!-- ===================== AI ASSISTANT ===================== -->
+        <section class="module" id="ai">
+          <div class="crumb">More</div>
+          <h2 class="title">AI Assistant</h2>
+          <p class="lead">
+            The TVPH Assistant is a chat helper that can analyse your vendors,
+            POs, and financial data and answer questions in plain language.
+          </p>
+
+          <div class="card">
+            <h3><span class="dot"></span> Opening the assistant</h3>
+            <p style="color: var(--muted); font-size: 13.5px">
+              Click the floating assistant button (bottom-left, on every page).
+              The panel opens with suggested prompts. Type a question in “Ask
+              your assistant…” and press send. You can expand the panel or clear
+              the conversation from the header icons.
+            </p>
+            <figure>
+              <img src="img/ai-assistant.png" alt="AI assistant panel" />
+              <figcaption>
+                The TVPH Assistant with suggested prompts.
+              </figcaption>
+            </figure>
+          </div>
+
+          <div class="card">
+            <h3><span class="dot"></span> What you can ask</h3>
+            <ul class="steps" style="counter-reset: none">
+              <li style="padding-left: 0">
+                <b>“Who are our top vendors?”</b>
+                <p>Summaries and rankings across your supplier base.</p>
+              </li>
+              <li style="padding-left: 0">
+                <b>“List pending POs”</b>
+                <p>
+                  Pull up records by status without hunting through filters.
+                </p>
+              </li>
+              <li style="padding-left: 0">
+                <b>“What’s our compliance score?”</b>
+                <p>Accreditation readiness across vendors.</p>
+              </li>
+            </ul>
+            <div class="callout tip">
+              <span class="ic">💡</span><b>It respects your data</b
+              ><span
+                >The assistant answers from the same records you can see in the
+                system, so its analysis reflects live data.</span
+              >
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================== SETTINGS ===================== -->
+        <section class="module" id="settings">
+          <div class="crumb">More</div>
+          <h2 class="title">Settings</h2>
+          <p class="lead">
+            Organisation configuration, team management, and personal appearance
+            — most of it for Admins.
+          </p>
+
+          <div class="card">
+            <h3><span class="dot"></span> Who can do what</h3>
+            <table class="perm">
+              <thead>
+                <tr>
+                  <th>Action</th>
+                  <th class="rolecol" data-rc="admin">Admin</th>
+                  <th class="rolecol" data-rc="finance">Finance</th>
+                  <th class="rolecol" data-rc="operations">Operations</th>
+                  <th class="rolecol" data-rc="viewer">Viewer</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="act">Change personal appearance/profile</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="yes">✓</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="act">Manage organisation settings</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="no">—</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="act">Manage team &amp; roles</td>
+                  <td class="cell" data-rc="admin">
+                    <span class="yes">✓</span>
+                  </td>
+                  <td class="cell" data-rc="finance">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="operations">
+                    <span class="no">—</span>
+                  </td>
+                  <td class="cell" data-rc="viewer">
+                    <span class="no">—</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card">
+            <h3><span class="dot"></span> The settings screen</h3>
+            <p style="color: var(--muted); font-size: 13.5px">
+              Open <b>Settings</b>. Admins manage the organisation profile,
+              financial defaults, and the team (inviting users and assigning
+              roles). Everyone can adjust their own appearance and profile.
+            </p>
+            <figure>
+              <img src="img/settings.png" alt="Settings" />
+              <figcaption>The settings screen.</figcaption>
+            </figure>
+            <div class="callout rule" data-roles="admin">
+              <span class="ic">⚠️</span><b>Assigning roles</b
+              ><span
+                >A user’s role decides everything they can see and do. Set it
+                carefully in <b>Team management</b> — the five roles are
+                described in
+                <a data-jump="getting-started">Getting Started</a>.</span
+              >
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================== VENDOR PORTAL ===================== -->
+        <section class="module" id="vendor-portal">
+          <div class="crumb">More · External</div>
+          <h2 class="title">Vendor Portal</h2>
+          <p class="lead">
+            How your <b>vendors</b> submit accreditation documents — a secure,
+            login-free page they reach through a one-time link you generate.
+          </p>
+
+          <div class="card">
+            <h3>
+              <span class="dot"></span> 1 · Generate the link (internal)
+              <span class="roletag" data-roles="admin operations"
+                >Admin · Operations</span
+              >
+            </h3>
+            <p style="color: var(--muted); font-size: 13.5px">
+              Open the vendor’s profile and click <b>Generate Portal Link</b>.
+              Copy the link and send it to your vendor contact. The link is
+              time-limited for security.
+            </p>
+          </div>
+
+          <div class="card">
+            <h3>
+              <span class="dot"></span> 2 · The vendor’s upload experience
+              (external)
+            </h3>
+            <p style="color: var(--muted); font-size: 13.5px">
+              The vendor opens the link — no account needed — and sees their
+              accreditation checklist: a progress ring (e.g. 1 / 14 files) and a
+              card per required document marked Approved or Missing. They click
+              a requirement to upload a file or draw an e-signature.
+            </p>
+            <figure>
+              <img
+                src="img/vendor-portal.png"
+                alt="Vendor portal upload page"
+              />
+              <figcaption>
+                The external vendor portal — 14-point accreditation checklist
+                with progress.
+              </figcaption>
+            </figure>
+          </div>
+
+          <div class="card">
+            <h3><span class="dot"></span> 3 · Review (internal)</h3>
+            <p style="color: var(--muted); font-size: 13.5px">
+              Each upload flows back into
+              <a data-jump="compliance">Compliance</a> and the vendor’s
+              <a data-jump="vendors">Accreditation Docs</a> tab, where an Admin
+              or Operations user approves or rejects it. Once the Signed NDA is
+              approved and the vendor is Active, you can raise
+              <a data-jump="purchase-orders">POs</a> for them.
+            </p>
+            <div class="callout tip">
+              <span class="ic">💡</span><b>E-signature</b
+              ><span
+                >Some requirements (like the Statement of Commitment) let the
+                vendor draw a signature directly in the portal instead of
+                uploading a file.</span
+              >
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <dialog class="lb" id="lb"><img src="" alt="" /></dialog>
+
+    <script>
+      // ---- module switching ----
+      const nav = document.getElementById("nav");
+      const mods = document.querySelectorAll("section.module");
+      const labels = {
+        "getting-started": "Getting Started",
+        vendors: "Vendors",
+        compliance: "Compliance",
+        invoices: "Invoices & Payments",
+        "client-pos": "Client POs",
+        "client-invoices": "Client Invoices",
+        accounting: "Accounting & Reports",
+        projects: "Projects & Contracts",
+        crm: "CRM",
+        assets: "Assets",
+        hr: "HR",
+        documents: "Documents",
+        ai: "AI Assistant",
+        settings: "Settings",
+        "vendor-portal": "Vendor Portal",
+      };
+      function show(mod) {
+        mods.forEach((m) => m.classList.toggle("show", m.id === mod));
+        nav
+          .querySelectorAll("a")
+          .forEach((a) => a.classList.toggle("active", a.dataset.mod === mod));
+        const sec = document.getElementById(mod);
+        if (sec && !sec.innerHTML.trim()) {
+          sec.innerHTML =
+            '<div class="placeholder"><div class="big">📘</div>' +
+            "<b>" +
+            (labels[mod] || mod) +
+            "</b><br>This module will be documented in the full build, using the same layout you see for Purchase Orders.</div>";
+        }
+        window.scrollTo({ top: 0 });
+      }
+      nav.addEventListener("click", (e) => {
+        const a = e.target.closest("a[data-mod]");
+        if (a) {
+          e.preventDefault();
+          show(a.dataset.mod);
+        }
+      });
+      document.addEventListener("click", (e) => {
+        const j = e.target.closest("[data-jump]");
+        if (j) {
+          e.preventDefault();
+          show(j.dataset.jump);
+        }
+      });
+
+      // ---- role filtering ----
+      const pills = document.getElementById("pills");
+      function applyRole(role) {
+        document.documentElement.dataset.role = role;
+        // dim/hide role-scoped blocks
+        document.querySelectorAll("[data-roles]").forEach((el) => {
+          const ok =
+            role === "all" || el.dataset.roles.split(/\s+/).includes(role);
+          el.classList.toggle("roff", !ok);
+        });
+        // highlight the active role's permission column
+        document.querySelectorAll("[data-rc]").forEach((c) => {
+          const hl =
+            role !== "all" && role !== "vendor" && c.dataset.rc === role;
+          c.classList.toggle("hl", hl);
+        });
+      }
+      pills.addEventListener("click", (e) => {
+        const p = e.target.closest(".pill");
+        if (!p) return;
+        pills
+          .querySelectorAll(".pill")
+          .forEach((x) => x.classList.toggle("on", x === p));
+        applyRole(p.dataset.role);
+      });
+
+      // ---- lightbox ----
+      const lb = document.getElementById("lb"),
+        lbImg = lb.querySelector("img");
+      document.addEventListener("click", (e) => {
+        if (e.target.tagName === "IMG" && e.target.closest("figure")) {
+          lbImg.src = e.target.src;
+          lb.showModal();
+        } else if (e.target === lb) {
+          lb.close();
+        }
+      });
+
+      // ---- theme toggle ----
+      const html = document.documentElement,
+        themeBtn = document.getElementById("themeBtn");
+      function setTheme(t) {
+        html.setAttribute("data-theme", t);
+        localStorage.setItem("guideTheme", t);
+        themeBtn.textContent = t === "light" ? "☀️" : "🌙";
+      }
+      setTheme(html.getAttribute("data-theme") || "dark");
+      themeBtn.addEventListener("click", () =>
+        setTheme(
+          html.getAttribute("data-theme") === "light" ? "dark" : "light",
+        ),
+      );
+    </script>
+  </body>
+</html>
