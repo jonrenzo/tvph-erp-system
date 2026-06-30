@@ -75,7 +75,7 @@ async function VendorsContent({
   let query = supabase
     .from("vendors")
     .select(
-      "id, name, address, tin, contact_person, contact_email, contact_phone, bank_name, payment_terms, status, vendor_documents(doc_type, status)",
+      "id, vendor_code, name, address, tin, contact_person, contact_email, contact_phone, bank_name, payment_terms, status, vendor_documents(doc_type, status)",
       { count: "exact" },
     )
     .is("deleted_at", null)
@@ -161,7 +161,8 @@ async function VendorsContent({
                         <span className="font-semibold text-slate-900 dark:text-white truncate">{vendor.name}</span>
                       </div>
                     </Tooltip>
-                    <div className="text-slate-500 dark:text-slate-400 text-xs mt-0.5 truncate">
+                    <div className="text-slate-500 dark:text-slate-400 text-xs mt-0.5 truncate flex gap-2">
+                      {vendor.vendor_code && <span className="font-mono text-primary/70">{vendor.vendor_code}</span>}
                       {vendor.address || "No address provided"}
                     </div>
                   </td>
