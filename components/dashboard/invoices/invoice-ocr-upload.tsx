@@ -27,18 +27,14 @@ interface Props {
 export function InvoiceOcrUpload({ onExtracted, onCleared, stagedFileName }: Props) {
   const [isPending, startTransition] = useTransition();
   const [clientError, setClientError] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  function processFile(file: File) {
     setClientError(null);
 
-    // Client-side pre-check
     if (file.size > MAX_FILE_SIZE) {
       setClientError("File exceeds the 10MB limit.");
-      e.target.value = "";
       return;
     }
     const mimeByExt: Record<string, string> = { pdf: "application/pdf", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp" };
@@ -46,7 +42,6 @@ export function InvoiceOcrUpload({ onExtracted, onCleared, stagedFileName }: Pro
     const mime = file.type || mimeByExt[ext] || "";
     if (!ALLOWED_MIME.includes(mime)) {
       setClientError("Only PDF, JPEG, PNG, or WebP files are accepted.");
-      e.target.value = "";
       return;
     }
 
@@ -61,6 +56,20 @@ export function InvoiceOcrUpload({ onExtracted, onCleared, stagedFileName }: Pro
         onExtracted(result as ExtractResult);
       }
     });
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) processFile(file);
+    e.target.value = "";
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragging(false);
+    if (isPending) return;
+    const file = e.dataTransfer.files?.[0];
+    if (file) processFile(file);
   }
 
   if (stagedFileName) {
@@ -86,9 +95,14 @@ export function InvoiceOcrUpload({ onExtracted, onCleared, stagedFileName }: Pro
     <div className="space-y-2">
       <label
         htmlFor="ocr-upload"
+        onDragOver={(e) => { e.preventDefault(); if (!isPending) setIsDragging(true); }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={handleDrop}
         className={`flex items-center justify-center gap-3 w-full px-4 py-3 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
           isPending
             ? "border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/20"
+            : isDragging
+            ? "border-primary bg-primary/10 dark:bg-primary/20"
             : "border-primary/30 hover:border-primary/60 hover:bg-primary/5 dark:hover:bg-primary/10"
         }`}
       >
@@ -100,7 +114,9 @@ export function InvoiceOcrUpload({ onExtracted, onCleared, stagedFileName }: Pro
         ) : (
           <>
             <ScanLine className="h-4 w-4 text-primary" />
-            <span className="text-sm font-medium text-primary">Scan invoice (PDF / image)</span>
+            <span className="text-sm font-medium text-primary">
+              {isDragging ? "Drop to scan" : "Drag & drop or click to scan (PDF / image)"}
+            </span>
           </>
         )}
         <input
