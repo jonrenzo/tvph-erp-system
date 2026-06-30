@@ -2,6 +2,7 @@ import { createClient } from "@/utils/supabase/server";
 import { FolderGit2, Clock, ExternalLink, Building2, Plus, Users } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
+import { CustomerFilter } from "./customer-filter";
 import { Pagination } from "@/components/ui/pagination";
 import { LIST_PAGE_SIZE, parsePage, pageRange } from "@/components/ui/pagination-utils";
 import { ImportExportButtons } from "@/components/dashboard/import-export-buttons";
@@ -130,7 +131,7 @@ async function ProjectsContent({
 
   return (
     <>
-    <CustomerFilter accounts={accounts || []} accountFilter={accountFilter} />
+    <CustomerFilter accounts={accounts} accountFilter={accountFilter} />
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       {projects.map((project: any) => {
         const linkedVendors = (project.project_vendors || [])

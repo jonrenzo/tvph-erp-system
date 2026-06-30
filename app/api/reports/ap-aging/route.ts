@@ -42,13 +42,13 @@ export async function GET() {
         heading: "Aging Detail",
         table: {
           columns: [
-            { header: "Vendor", width: 28 },
-            { header: "Current", width: 14, align: "right" },
-            { header: "1-30", width: 13, align: "right" },
-            { header: "31-60", width: 13, align: "right" },
-            { header: "61-90", width: 13, align: "right" },
-            { header: ">90", width: 13, align: "right" },
-            { header: "Total", width: 16, align: "right" },
+            { header: "Vendor", width: 26 },
+            { header: "Current", width: 12, align: "right" },
+            { header: "1-30", width: 12, align: "right" },
+            { header: "31-60", width: 12, align: "right" },
+            { header: "61-90", width: 12, align: "right" },
+            { header: ">90", width: 12, align: "right" },
+            { header: "Total", width: 14, align: "right" },
           ],
           rows: result.rows.map((r) => [
             r.vendorName,

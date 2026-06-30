@@ -26,6 +26,15 @@ const ink = {
   white:    [255, 255, 255] as RGB,
 };
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const MAX_CELL_CHARS = 200;
+
+function truncate(v: string | number): string {
+  const s = String(v);
+  return s.length > MAX_CELL_CHARS ? s.slice(0, MAX_CELL_CHARS - 1) + "…" : s;
+}
+
 // ─── Page layout ──────────────────────────────────────────────────────────────
 const CL = MARGIN_LEFT;               // 35
 const CR = PAGE_WIDTH - MARGIN_RIGHT; // 560.28
@@ -272,12 +281,12 @@ function drawSection(doc: Doc, section: ReportSection, spec: ReportSpec) {
 function drawTable(doc: Doc, table: ReportTable, spec: ReportSpec) {
   const total = table.columns.reduce((s, c) => s + c.width, 0);
   const ws    = table.columns.map((c) => (c.width / total) * CW);
-  const rowH  = 19;
+  const hdrH  = 19;
   const pad   = 5;
 
   const drawHeaderRow = () => {
     const y = doc.y;
-    doc.rect(CL, y, CW, rowH).fillAndStroke(ink.brand, ink.brand);
+    doc.rect(CL, y, CW, hdrH).fillAndStroke(ink.brand, ink.brand);
     let x = CL;
     doc.font("Helvetica-Bold").fontSize(7.5).fillColor(...ink.white);
     table.columns.forEach((col, i) => {
@@ -288,13 +297,26 @@ function drawTable(doc: Doc, table: ReportTable, spec: ReportSpec) {
       });
       x += ws[i];
     });
-    doc.y = y + rowH;
+    doc.y = y + hdrH;
   };
 
-  guard(doc, rowH * 3, spec.title);
+  guard(doc, hdrH * 3, spec.title);
   drawHeaderRow();
 
   const drawRow = (cells: (string | number)[], idx: number, bold = false, totals = false) => {
+    // Calculate dynamic row height based on tallest wrapped cell
+    const fontName = bold || totals ? "Helvetica-Bold" : "Helvetica";
+    doc.font(fontName).fontSize(8);
+    let maxH = hdrH;
+    table.columns.forEach((col, i) => {
+      const text = String(cells[i] ?? "");
+      if (text) {
+        const h = doc.heightOfString(text, { width: ws[i] - pad * 2, lineGap: 1 });
+        maxH = Math.max(maxH, h + 10);
+      }
+    });
+    const rowH = Math.max(hdrH, Math.ceil(maxH));
+
     if (doc.y + rowH > BOT) {
       doc.addPage();
       drawSlimHeader(doc, spec.title);
@@ -314,12 +336,13 @@ function drawTable(doc: Doc, table: ReportTable, spec: ReportSpec) {
 
     const fg = totals ? (ink.white as RGB) : (ink.dark as RGB);
     let x = CL;
-    doc.font(bold || totals ? "Helvetica-Bold" : "Helvetica").fontSize(8).fillColor(...fg);
+    doc.font(fontName).fontSize(8).fillColor(...fg);
     table.columns.forEach((col, i) => {
-      doc.text(String(cells[i] ?? ""), x + pad, y + 6, {
+      doc.text(truncate(cells[i] ?? ""), x + pad, y + 5, {
         width: ws[i] - pad * 2,
         align: col.align ?? "left",
-        lineBreak: false,
+        lineBreak: true,
+        lineGap: 1,
       });
       x += ws[i];
     });
@@ -328,7 +351,7 @@ function drawTable(doc: Doc, table: ReportTable, spec: ReportSpec) {
 
   if (table.rows.length === 0) {
     const y = doc.y;
-    doc.rect(CL, y, CW, rowH).fillAndStroke(ink.tint, ink.border);
+    doc.rect(CL, y, CW, hdrH).fillAndStroke(ink.tint, ink.border);
     doc
       .font("Helvetica-Oblique")
       .fontSize(8)
@@ -338,7 +361,7 @@ function drawTable(doc: Doc, table: ReportTable, spec: ReportSpec) {
         align: "center",
         lineBreak: false,
       });
-    doc.y = y + rowH;
+    doc.y = y + hdrH;
   } else {
     table.rows.forEach((r, i) => drawRow(r, i));
   }

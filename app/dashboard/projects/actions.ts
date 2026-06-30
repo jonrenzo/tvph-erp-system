@@ -224,6 +224,34 @@ export async function removeVendorFromProject(projectId: string, vendorId: strin
   return { success: true };
 }
 
+export async function saveCompletionPct(projectId: string, pct: number | null) {
+  const supabase = await createClient();
+  const { user, error: authError } = await requireCapability('project.write', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
+
+  const clamped = pct !== null ? Math.min(100, Math.max(0, pct)) : null;
+
+  const { error } = await supabase
+    .from('projects')
+    .update({ completion_pct: clamped, updated_at: new Date().toISOString() })
+    .eq('id', projectId);
+
+  if (error) return { error: error.message };
+
+  await recordAuditLog({
+    entity_type: 'project',
+    entity_id: projectId,
+    action: 'UPDATE',
+    changes: { after: { completion_pct: clamped } },
+    performed_by: user.id,
+  });
+
+  revalidatePath(`/dashboard/projects/${projectId}`);
+  revalidatePath('/dashboard/projects');
+  revalidatePath('/dashboard');
+  return { success: true };
+}
+
 const VALID_PROJECT_FIELDS = new Set([
   "name", "description", "status", "account_id",
 ]);

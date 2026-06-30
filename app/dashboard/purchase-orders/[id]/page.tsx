@@ -178,6 +178,12 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
   const totalInvoiced =
     invoices?.reduce((sum, i) => sum + Number(i.amount), 0) || 0;
   const poAmount = Number(po.amount);
+  const dpAmount = Number(po.dp_amount || 0);
+  const effectiveBilled = totalInvoiced + dpAmount;
+  const billingPct = poAmount > 0 ? Math.round((effectiveBilled / poAmount) * 100) : 0;
+  const compPct = maxApprovedPercent || 0;
+  const billingVariance = compPct - billingPct;
+
   const remainingBalance = Math.max(0, poAmount - totalPaid);
   const overpaidAmount = Math.max(0, totalPaid - poAmount);
   const progress = Math.min(100, Math.round((totalPaid / poAmount) * 100)) || 0;
@@ -581,34 +587,73 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
             <FileText className="h-4 w-4 text-primary" /> Billing Health
           </h3>
           <div className="space-y-4">
+            {/* Completion vs Billing */}
             <div>
               <div className="flex justify-between text-xs font-bold mb-2">
-                <span className="text-slate-500 uppercase">Invoiced vs PO</span>
-                <span
-                  className={
-                    totalInvoiced > poAmount
-                      ? "text-red-500"
-                      : "text-slate-900 dark:text-white"
-                  }
-                >
-                  {Math.round((totalInvoiced / poAmount) * 100)}%
+                <span className="text-slate-500 uppercase">Billing % (incl. DP)</span>
+                <span className={effectiveBilled > poAmount ? "text-red-500" : "text-slate-900 dark:text-white"}>
+                  {billingPct}%
                 </span>
               </div>
               <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                <div
-                  className={`h-full ${totalInvoiced > poAmount ? "bg-red-500" : "bg-blue-500"}`}
-                  style={{
-                    width: `${Math.min(100, (totalInvoiced / poAmount) * 100)}%`,
-                  }}
+                <div className={`h-full ${effectiveBilled > poAmount ? "bg-red-500" : "bg-blue-500"}`}
+                  style={{ width: `${Math.min(100, billingPct)}%` }}
                 ></div>
               </div>
             </div>
 
-            <div className="pt-4 space-y-3">
+            <div>
+              <div className="flex justify-between text-xs font-bold mb-2">
+                <span className="text-slate-500 uppercase">Completion %</span>
+                <span className="text-emerald-600 dark:text-emerald-400">{compPct}%</span>
+              </div>
+              <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div className="h-full bg-emerald-500 rounded-full"
+                  style={{ width: `${Math.min(100, compPct)}%` }}
+                ></div>
+              </div>
+            </div>
+
+            {/* Variance */}
+            <div className={`p-3 rounded-xl text-center ${
+              billingVariance > 0
+                ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50'
+                : billingVariance < 0
+                  ? 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50'
+                  : 'bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-800'
+            }`}>
+              {billingVariance > 0 ? (
+                <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                  Need to pay {billingVariance}% more
+                </p>
+              ) : billingVariance < 0 ? (
+                <p className="text-xs font-bold text-red-700 dark:text-red-400">
+                  Overpaid by {Math.abs(billingVariance)}%
+                </p>
+              ) : (
+                <p className="text-xs font-bold text-slate-500">On track</p>
+              )}
+            </div>
+
+            <div className="pt-4 space-y-3 border-t border-slate-100 dark:border-slate-800">
               <div className="flex justify-between items-center text-sm">
                 <span className="text-slate-500">Bills Received</span>
                 <span className="font-bold text-slate-900 dark:text-white">
                   ₱{totalInvoiced.toLocaleString()}
+                </span>
+              </div>
+              {dpAmount > 0 && (
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-slate-500">Downpayment (DP)</span>
+                  <span className="font-bold text-blue-600 dark:text-blue-400">
+                    ₱{dpAmount.toLocaleString()} ({Math.round((dpAmount / poAmount) * 100)}%)
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between items-center text-sm font-semibold">
+                <span className="text-slate-700 dark:text-slate-300">Effective Billed</span>
+                <span className="font-bold text-slate-900 dark:text-white">
+                  ₱{effectiveBilled.toLocaleString()} ({billingPct}%)
                 </span>
               </div>
               {billingCeiling !== null ? (
@@ -630,7 +675,7 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-slate-500">Unbilled PO Amount</span>
                   <span className="font-bold text-slate-900 dark:text-white">
-                    ₱{Math.max(0, poAmount - totalInvoiced).toLocaleString()}
+                    ₱{Math.max(0, poAmount - effectiveBilled).toLocaleString()}
                   </span>
                 </div>
               )}

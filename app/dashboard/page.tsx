@@ -3,6 +3,7 @@ import { getCurrentProfile, hasCapability } from "@/lib/auth/permissions";
 import { computeComplianceSummary } from "@/lib/reports/compliance";
 import { getProjectProgress, getMonthlyTrends } from "@/lib/dashboard/queries";
 import { TrendsChart } from "@/components/dashboard/trends-chart";
+import { ProjectProgressList } from "@/components/dashboard/project-progress-list";
 import {
   Building2,
   FileText,
@@ -538,33 +539,14 @@ async function DashboardContent() {
             <CardHeader
               icon={<FolderKanban className="h-4 w-4 text-violet-500" />}
               title="Project Progress"
-              subtitle="Billing proxy — paid ÷ committed POs"
+              subtitle="Billing % vs Completion % — per project"
             />
             {projectProgress.length === 0 ? (
               <div className="px-5 py-10 text-center text-slate-400 text-sm">
                 No projects with active POs yet.
               </div>
             ) : (
-              <div className="divide-y divide-slate-50 dark:divide-slate-800/40">
-                {projectProgress.slice(0, 8).map((p) => (
-                  <div key={p.id} className="px-5 py-3.5 hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate max-w-[70%]">{p.name}</span>
-                      <span className="text-xs font-bold tabular-nums text-slate-600 dark:text-slate-400 shrink-0">{p.pct}%</span>
-                    </div>
-                    <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-700 ${p.pct >= 80 ? "bg-emerald-500" : p.pct >= 40 ? "bg-blue-500" : "bg-amber-400"}`}
-                        style={{ width: `${p.pct}%` }}
-                      />
-                    </div>
-                    <div className="flex justify-between text-[10px] text-slate-400 mt-1">
-                      <span>₱{p.paidAmount.toLocaleString()} paid</span>
-                      <span>₱{p.committedAmount.toLocaleString()} committed</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <ProjectProgressList projects={projectProgress} />
             )}
             <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800">
               <Link href="/dashboard/projects" className="text-xs font-bold text-primary hover:underline flex items-center gap-1">

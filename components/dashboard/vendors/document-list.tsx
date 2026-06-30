@@ -255,7 +255,7 @@ export function DocumentList({ vendorId, documents, userRole }: { vendorId: stri
         <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-all ${
           uploading === (doc.doc_type === 'custom' ? doc.id : doc.doc_type)
             ? 'bg-slate-100 dark:bg-slate-800 text-slate-400'
-            : 'bg-primary/10 text-primary hover:bg-primary hover:text-white'
+            : 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all border border-emerald-200 dark:border-emerald-800/50'
         }`}>
           {uploading === (doc.doc_type === 'custom' ? doc.id : doc.doc_type)
             ? <Loader2 className="h-3 w-3 animate-spin" />
