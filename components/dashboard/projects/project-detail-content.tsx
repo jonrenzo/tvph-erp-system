@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 import {
   FolderGit2, Edit2, ExternalLink, Clock, FileText, Building2,
   Package, Plus, Unlink, Loader2, AlertCircle, Users, Upload,
+  TrendingUp, CircleDollarSign, CreditCard, CheckCircle2,
 } from "lucide-react";
 import { updateProject, uploadContractDocument } from "@/app/dashboard/projects/actions";
 import { linkVendorToProject, removeVendorFromProject } from "@/app/dashboard/projects/actions";
+import { getCompletionOverride, setCompletionOverride } from "@/lib/completion-override";
 import Link from "next/link";
 
 type Account = { id: string; company_name: string };
@@ -21,6 +23,7 @@ type Project = {
   contract_file_name?: string | null;
   status: string;
   created_at: string;
+  completion_pct?: number | null;
   crm_accounts?: Account | null;
 };
 
@@ -37,18 +40,42 @@ type PO = {
   vendors?: Vendor;
 };
 
+type BillingPODetail = {
+  poId: string;
+  poNumber: string;
+  vendorName: string;
+  amount: number;
+  dpAmount: number;
+  invoiced: number;
+  paid: number;
+  billingPct: number;
+  completionPct: number;
+};
+
+type BillingSummary = {
+  totalPOValue: number;
+  totalInvoiced: number;
+  totalPaid: number;
+  billingPct: number;
+  completionPct: number;
+  variance: number;
+  poDetails: BillingPODetail[];
+};
+
 export function ProjectDetailContent({
   project,
   pos,
   linkedVendors,
   availableVendors,
   allAccounts,
+  billingSummary,
 }: {
   project: Project;
   pos: PO[];
   linkedVendors: Vendor[];
   availableVendors: Vendor[];
   allAccounts: Account[];
+  billingSummary: BillingSummary;
 }) {
   const router = useRouter();
   const [isEditing, setIsEditing] = useState(false);
@@ -61,12 +88,28 @@ export function ProjectDetailContent({
   const [removingVendorId, setRemovingVendorId] = useState<string | null>(null);
   const [contractUploading, setContractUploading] = useState(false);
   const contractInputRef = useRef<HTMLInputElement>(null);
+  // TEMPORARY: completion % is stored client-side only (localStorage) for testing,
+  // since the projects.completion_pct DB column does not exist yet. See lib/completion-override.
+  const [manualCompletionPct, setManualCompletionPct] = useState<number | null>(
+    project.completion_pct ?? null
+  );
 
   const [updateState, updateAction, isUpdating] = useActionState(updateProject, null);
 
   useEffect(() => {
     if (updateState?.success) setIsEditing(false);
   }, [updateState]);
+
+  // Hydrate the manual completion % from the local (testing-only) override on mount.
+  useEffect(() => {
+    const override = getCompletionOverride(project.id);
+    if (override !== null) setManualCompletionPct(override);
+  }, [project.id]);
+
+  const updateCompletionPct = (pct: number | null) => {
+    setManualCompletionPct(pct);
+    setCompletionOverride(project.id, pct); // local-only persistence (testing)
+  };
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -121,6 +164,7 @@ export function ProjectDetailContent({
 
   const totalPOValue = pos.reduce((sum, po) => sum + Number(po.amount), 0);
   const client = project.crm_accounts;
+  const effectiveCompletionPct = manualCompletionPct ?? billingSummary.completionPct;
 
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -247,6 +291,185 @@ export function ProjectDetailContent({
         <div className="bg-white dark:bg-[#0a0a0a] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
           <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-2 uppercase tracking-wider">Description</h3>
           <p className="text-slate-600 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">{project.description}</p>
+        </div>
+      )}
+
+      {/* Progress & Billing Summary Card */}
+      {pos.length > 0 && (
+        <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 lg:p-8 shadow-sm">
+          <div className="flex items-center gap-2 mb-6">
+            <TrendingUp className="h-5 w-5 text-primary" />
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white">Progress &amp; Billing</h2>
+          </div>
+
+          <div className="flex flex-col lg:flex-row gap-8">
+            {/* Progress Ring — now shows billing % */}
+            <div className="flex flex-col items-center gap-2 shrink-0">
+              <div className="relative h-36 w-36">
+                <svg className="h-full w-full -rotate-90">
+                  <circle cx="72" cy="72" r="62" fill="none" stroke="currentColor" strokeWidth="10" className="text-slate-100 dark:text-slate-800" />
+                  <circle cx="72" cy="72" r="62" fill="none" stroke="currentColor" strokeWidth="10"
+                    strokeDasharray={390}
+                    strokeDashoffset={390 - (390 * billingSummary.billingPct) / 100}
+                    strokeLinecap="round"
+                    className="text-blue-500"
+                  />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                  <span className="text-2xl font-bold text-slate-900 dark:text-white">{billingSummary.billingPct}%</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Billed</span>
+                </div>
+              </div>
+              <div className="w-32">
+                <div className="flex justify-between text-[10px] text-slate-500 mb-0.5">
+                  <span>Complete</span>
+                  <span>{effectiveCompletionPct}%</span>
+                </div>
+                <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                  <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${Math.min(100, effectiveCompletionPct)}%` }}></div>
+                </div>
+              </div>
+            </div>
+
+            {/* Metrics */}
+            <div className="flex-1 grid grid-cols-2 gap-x-8 gap-y-4">
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">PO Total Value</label>
+                <div className="text-xl font-bold text-slate-900 dark:text-white">₱{billingSummary.totalPOValue.toLocaleString()}</div>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">PO Remaining Value</label>
+                <div className="text-xl font-bold text-amber-600 dark:text-amber-400">
+                  ₱{Math.max(0, billingSummary.totalPOValue - (billingSummary.totalInvoiced + pos.reduce((s, po) => s + Number((po as any).dp_amount || 0), 0))).toLocaleString()}
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Total Invoiced (+DP)</label>
+                <div className="flex items-center gap-3">
+                  <span className="text-xl font-bold text-blue-600 dark:text-blue-400">₱{(billingSummary.totalInvoiced + pos.reduce((s, po) => s + Number((po as any).dp_amount || 0), 0)).toLocaleString()}</span>
+                  <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">{billingSummary.billingPct}%</span>
+                </div>
+                <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden mt-1.5">
+                  <div className="h-full bg-blue-500 rounded-full" style={{ width: `${Math.min(100, billingSummary.billingPct)}%` }}></div>
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Total Paid</label>
+                <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400">₱{billingSummary.totalPaid.toLocaleString()}</div>
+              </div>
+              <div className="col-span-2">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+                  Completion %
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={manualCompletionPct ?? ''}
+                    placeholder={String(billingSummary.completionPct || 0)}
+                    onChange={(e) => updateCompletionPct(e.target.value ? Math.min(100, Math.max(0, Number(e.target.value))) : null)}
+                    className="w-20 px-3 py-1.5 bg-slate-50 dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-lg text-sm font-bold text-emerald-700 dark:text-emerald-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                  />
+                  <span className="text-sm text-slate-500">/ 100</span>
+                  {manualCompletionPct !== null && (
+                    <button
+                      onClick={() => updateCompletionPct(null)}
+                      className="text-[10px] text-slate-400 hover:text-red-500 underline"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <p className="mt-1.5 text-[10px] text-slate-400">Saved locally for testing only (not persisted to the database).</p>
+              </div>
+            </div>
+
+            {/* Variance — uses manual completion when set */}
+            <div className="shrink-0 flex flex-col justify-center">
+              {(() => {
+                const effectiveComp = manualCompletionPct ?? billingSummary.completionPct;
+                const effVariance = effectiveComp - billingSummary.billingPct;
+                return effVariance > 0 ? (
+                  <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50 rounded-2xl text-center">
+                    <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">Need to Pay</p>
+                    <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-300">{effVariance}%</p>
+                    <p className="text-[10px] text-emerald-600/70 dark:text-emerald-400/60 mt-1">more to match progress</p>
+                  </div>
+                ) : effVariance < 0 ? (
+                  <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 rounded-2xl text-center">
+                    <p className="text-xs font-bold text-red-700 dark:text-red-400 uppercase tracking-wider">Overbilled</p>
+                    <p className="text-2xl font-bold text-red-600 dark:text-red-300">{Math.abs(effVariance)}%</p>
+                    <p className="text-[10px] text-red-600/70 dark:text-red-400/60 mt-1">ahead of completion</p>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-800 rounded-2xl text-center">
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">On Track</p>
+                    <CheckCircle2 className="h-8 w-8 text-slate-400 mx-auto mt-1" />
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+
+          {/* Per-PO Breakdown Table */}
+          {billingSummary.poDetails.length > 0 && (
+            <div className="mt-6 pt-6 border-t border-slate-100 dark:border-slate-800">
+              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Per-PO Breakdown</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-[10px] text-slate-500 uppercase border-b border-slate-200 dark:border-slate-800">
+                      <th className="text-left py-2 pr-4 font-semibold">PO</th>
+                      <th className="text-left py-2 pr-4 font-semibold">Vendor</th>
+                      <th className="text-right py-2 pr-4 font-semibold">Amount</th>
+                      <th className="text-right py-2 pr-4 font-semibold">DP</th>
+                      <th className="text-right py-2 pr-4 font-semibold">Billed</th>
+                      <th className="text-right py-2 pr-4 font-semibold">Complete</th>
+                      <th className="text-right py-2 pr-2 font-semibold">Variance</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
+                    {billingSummary.poDetails.map((d) => {
+                      const effectiveComp = manualCompletionPct ?? d.completionPct;
+                      const poVar = effectiveComp - d.billingPct;
+                      return (
+                        <tr key={d.poId} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors">
+                          <td className="py-2.5 pr-4">
+                            <Link href={`/dashboard/purchase-orders/${d.poId}`} className="font-semibold text-slate-900 dark:text-white hover:text-primary transition-colors">
+                              {d.poNumber}
+                            </Link>
+                          </td>
+                          <td className="py-2.5 pr-4 text-slate-500 dark:text-slate-400 text-xs">{d.vendorName}</td>
+                          <td className="py-2.5 pr-4 text-right font-semibold text-slate-900 dark:text-white">₱{d.amount.toLocaleString()}</td>
+                          <td className="py-2.5 pr-4 text-right text-slate-600 dark:text-slate-400">
+                            {d.dpAmount > 0 ? `₱${d.dpAmount.toLocaleString()}` : '—'}
+                          </td>
+                          <td className="py-2.5 pr-4 text-right">
+                            <span className="text-xs font-bold text-blue-600 dark:text-blue-400">{d.billingPct}%</span>
+                          </td>
+                          <td className="py-2.5 pr-4 text-right">
+                            <span className={`text-xs font-bold ${d.completionPct > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>
+                              {d.completionPct > 0 ? `${d.completionPct}%` : '—'}
+                            </span>
+                          </td>
+                          <td className="py-2.5 pr-2 text-right">
+                            {poVar > 0 ? (
+                              <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">+{poVar}%</span>
+                            ) : poVar < 0 ? (
+                              <span className="text-xs font-bold text-red-600 dark:text-red-400">{poVar}%</span>
+                            ) : (
+                              <span className="text-xs text-slate-400">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
