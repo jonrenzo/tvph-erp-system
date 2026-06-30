@@ -27,7 +27,8 @@
     --z-editor: 10;            /* DOCX editor (page content, not an overlay) */
     --z-sidebar-backdrop: 45;  /* mobile sidebar dim backdrop */
     --z-sidebar: 50;           /* sidebar panel */
-    --z-dropdown: 60;          /* header menus, notification bell, tooltips */
+    --z-dropdown: 60;          /* page-level menus, tooltips */
+    --z-header-dropdown: 70;   /* header overlays (notification bell, user menu) — above page dropdowns */
     --z-drawer-backdrop: 110;
     --z-drawer: 120;           /* slide-in drawers */
     --z-modal: 200;            /* dialogs, previews, confirmations */

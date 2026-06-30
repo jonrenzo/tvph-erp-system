@@ -174,7 +174,7 @@ export function NotificationBell() {
 
       {/* Dropdown Panel */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#071F15] shadow-xl z-[var(--z-dropdown)] overflow-hidden flex flex-col animate-in slide-in-from-top-2 fade-in duration-200">
+        <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#071F15] shadow-xl z-[var(--z-header-dropdown)] overflow-hidden flex flex-col animate-in slide-in-from-top-2 fade-in duration-200">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/20">
             <h3 className="font-semibold text-slate-900 dark:text-white">
