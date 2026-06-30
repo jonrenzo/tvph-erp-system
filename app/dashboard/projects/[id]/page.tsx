@@ -113,7 +113,7 @@ async function ProjectDetailLoader({ paramsPromise }: { paramsPromise: Promise<{
 
   let totalPOValue = 0, totalDpAmount = 0;
   let totalInvoiced = 0, totalPaid = 0;
-  let weightedCompletionSum = 0;
+  let completionSum = 0;
 
   const poDetails: Array<{
     poId: string;
@@ -138,7 +138,7 @@ async function ProjectDetailLoader({ paramsPromise }: { paramsPromise: Promise<{
     totalDpAmount += dp;
     totalInvoiced += invoiced;
     totalPaid += paid + dp;
-    weightedCompletionSum += amount * compPct;
+    completionSum += compPct;
 
     poDetails.push({
       poId: po.id,
@@ -156,11 +156,7 @@ async function ProjectDetailLoader({ paramsPromise }: { paramsPromise: Promise<{
   const billingPct = totalPOValue > 0
     ? Math.round(((totalInvoiced + totalDpAmount) / totalPOValue) * 100)
     : 0;
-  const completionPct = (project as any).completion_pct != null
-    ? Math.round(Number((project as any).completion_pct))
-    : totalPOValue > 0
-      ? Math.round(weightedCompletionSum / totalPOValue)
-      : 0;
+  const completionPct = Math.min(100, Math.round(completionSum));
   const variance = completionPct - billingPct;
 
   const billingSummary = {

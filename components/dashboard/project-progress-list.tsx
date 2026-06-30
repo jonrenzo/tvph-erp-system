@@ -1,28 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import { getCompletionOverride, onCompletionOverrideChange } from "@/lib/completion-override";
 import type { ProjectProgress } from "@/lib/dashboard/queries";
 
 export function ProjectProgressList({ projects }: { projects: ProjectProgress[] }) {
-  const [overrides, setOverrides] = useState<Record<string, number | null>>({});
-
-  useEffect(() => {
-    const load = () => {
-      const next: Record<string, number | null> = {};
-      for (const p of projects) next[p.id] = getCompletionOverride(p.id);
-      setOverrides(next);
-    };
-    load();
-    return onCompletionOverrideChange(load);
-  }, [projects]);
-
   return (
     <div className="divide-y divide-slate-50 dark:divide-slate-800/40">
       {projects.slice(0, 8).map((p) => {
-        const override = overrides[p.id];
-        const completionPct = override ?? p.completionPct;
+        const completionPct = p.completionPct;
         const variance = completionPct - p.billingPct;
         return (
           <Link key={p.id} href={`/dashboard/projects/${p.id}`} className="block px-5 py-3.5 hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors">
