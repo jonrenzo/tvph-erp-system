@@ -6,7 +6,6 @@ import { CustomerFilter } from "./customer-filter";
 import { Pagination } from "@/components/ui/pagination";
 import { LIST_PAGE_SIZE, parsePage, pageRange } from "@/components/ui/pagination-utils";
 import { ImportExportButtons } from "@/components/dashboard/import-export-buttons";
-import { CustomerFilter } from "@/components/dashboard/projects/customer-filter";
 import { importProjects } from "./actions";
 
 export const unstable_instant = {
