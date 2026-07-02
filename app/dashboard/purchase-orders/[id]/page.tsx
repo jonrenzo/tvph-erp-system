@@ -33,6 +33,7 @@ import { PoResendButton } from "@/components/dashboard/purchase-orders/po-resend
 import { PoIssueButton } from "@/components/dashboard/purchase-orders/po-issue-button";
 import { PoApprovalActions } from "@/components/dashboard/purchase-orders/po-approval-actions";
 import { PoCertUpload } from "@/components/dashboard/purchase-orders/po-cert-upload";
+import { NotifyFinanceButton } from "@/components/dashboard/purchase-orders/notify-finance-button";
 import { getCurrentProfile, hasCapability } from "@/lib/auth/permissions";
 import { isAdminOrAbove } from "@/lib/auth/roles";
 import { signDocUrls } from "@/utils/storage";
@@ -198,9 +199,26 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
   const billingCeiling = maxApprovedPercent !== null ? (maxApprovedPercent / 100) * poAmount : null;
   const availableToBill = billingCeiling !== null ? Math.max(0, billingCeiling - totalInvoiced) : Math.max(0, poAmount - totalInvoiced);
 
+  // Fetch project completion_pct and active payment reservation in parallel
+  const [{ data: project }, { data: activeReservation }] = await Promise.all([
+    po.project_id
+      ? supabase.from('projects').select('completion_pct').eq('id', po.project_id).single()
+      : Promise.resolve({ data: null }),
+    supabase
+      .from('payment_reservations')
+      .select('id, status, reserved_amount')
+      .eq('po_id', po.id)
+      .in('status', ['pending', 'acknowledged'])
+      .maybeSingle(),
+  ]);
+
   // Cert permissions
   const canSubmitCert = hasCapability(currentRole, 'po.write');
   const canApproveCert = hasCapability(currentRole, 'po.approve_completion');
+
+  // Payment reservation
+  const canNotify = hasCapability(currentRole, 'payment_reservation.notify');
+  const canAcknowledge = hasCapability(currentRole, 'payment_reservation.acknowledge');
 
   // Waiver state
   const isPendingApproval = po.requirements_waived && !po.waiver_approved;
@@ -470,6 +488,17 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
           </div>
         </div>
       )}
+
+      {/* Payment Notification */}
+      <NotifyFinanceButton
+        poId={po.id}
+        reservationId={activeReservation?.id ?? null}
+        reservationStatus={(activeReservation?.status as any) ?? null}
+        reservedAmount={activeReservation ? Number(activeReservation.reserved_amount) : remainingBalance}
+        canNotify={canNotify}
+        canAcknowledge={canAcknowledge}
+        projectCompletionPct={project ? Number((project as any).completion_pct ?? 0) : null}
+      />
 
       {/* New Intuitive Financial Dashboard */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
