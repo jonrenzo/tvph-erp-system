@@ -148,6 +148,9 @@ export async function recordClientPayment(formData: FormData) {
   if (!invoice_id) return { error: "Invoice ID is required." };
   if (isNaN(amount_paid) || amount_paid <= 0) return { error: "A valid payment amount is required." };
   if (!payment_date) return { error: "Payment date is required." };
+  if (payment_method !== "cash" && !reference_number) {
+    return { error: "Reference number is required for the selected payment method." };
+  }
 
   const { data: invoice } = await supabase
     .from("client_invoices")
