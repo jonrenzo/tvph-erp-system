@@ -6,7 +6,6 @@ import { redirect } from 'next/navigation';
 import { createNotification } from '@/utils/notifications';
 import { recordAuditLog } from '@/utils/audit';
 import { requireCapability, hasCapability } from '@/lib/auth/permissions';
-import { isAdminOrAbove } from '@/lib/auth/roles';
 import { sendPoIssuedEmail } from '@/lib/email/po';
 
 type POLineItem = { item_code?: string; description: string; qty: number; uom?: string; unit_price: number };
@@ -199,10 +198,6 @@ export async function submitPOForApproval(poId: string) {
   const { user, role, error: authError } = await requireCapability('po.status', supabase);
   if (authError || !user) return { error: authError || 'Unauthorized' };
 
-  if (isAdminOrAbove(role)) {
-    return { error: 'Admins can issue POs directly — use "Issue PO" instead.' };
-  }
-
   const { data: po } = await supabase
     .from('purchase_orders')
     .select('status')
@@ -254,7 +249,7 @@ export async function approvePO(poId: string) {
 
   const { data: po } = await supabase
     .from('purchase_orders')
-    .select('status, requirements_waived, waiver_approved')
+    .select('status, requirements_waived, waiver_approved, submitted_for_approval_by')
     .eq('id', poId)
     .single();
 
@@ -262,13 +257,18 @@ export async function approvePO(poId: string) {
     return { error: 'This PO is not pending approval.' };
   }
 
+  if (po.submitted_for_approval_by === user.id) {
+    return { error: 'You cannot approve a PO you submitted for approval. Another admin or superadmin must approve it.' };
+  }
+
   if (po.requirements_waived && !po.waiver_approved) {
     return { error: 'Cannot issue: this PO has waived requirements pending executive approval.' };
   }
 
+  const now = new Date().toISOString();
   const { error } = await supabase
     .from('purchase_orders')
-    .update({ status: 'issued', updated_at: new Date().toISOString() })
+    .update({ status: 'issued', approved_by: user.id, approved_at: now, updated_at: now })
     .eq('id', poId);
 
   if (error) return { error: error.message };

@@ -34,7 +34,6 @@ import { PoIssueButton } from "@/components/dashboard/purchase-orders/po-issue-b
 import { PoApprovalActions } from "@/components/dashboard/purchase-orders/po-approval-actions";
 import { PoCertUpload } from "@/components/dashboard/purchase-orders/po-cert-upload";
 import { getCurrentProfile, hasCapability } from "@/lib/auth/permissions";
-import { isAdminOrAbove } from "@/lib/auth/roles";
 import { signDocUrls } from "@/utils/storage";
 
 export const unstable_instant = { 
@@ -116,7 +115,6 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
     .maybeSingle();
 
   const canSendEmail = hasCapability(currentRole, "email.send");
-  const isAdmin = isAdminOrAbove(currentRole);
   const canApprovePO = hasCapability(currentRole, "po.approve");
 
   const invoiceIds = invoices?.map((i) => i.id) || [];
@@ -141,6 +139,19 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
       .in("id", waiverProfileIds);
     for (const p of profiles || []) {
       waiverProfiles[p.id] = p.full_name;
+    }
+  }
+
+  // Resolve PO creator and approver names
+  const poProfileIds = [po.created_by, po.approved_by].filter(Boolean) as string[];
+  const poProfiles: Record<string, string> = {};
+  if (poProfileIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, full_name")
+      .in("id", poProfileIds);
+    for (const p of profiles || []) {
+      poProfiles[p.id] = p.full_name;
     }
   }
 
@@ -253,7 +264,7 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
 
         <div className="flex items-center gap-3 md:ml-auto">
           {po.status === "draft" && hasCapability(currentRole, "po.status") && (
-            <PoIssueButton poId={po.id} isAdmin={isAdmin} />
+            <PoIssueButton poId={po.id} />
           )}
           {["issued", "paid", "overpaid"].includes(po.status) && canSendEmail && (
             <PoResendButton poId={po.id} />
@@ -299,7 +310,13 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
               </p>
             </div>
           </div>
-          {canApprovePO && <PoApprovalActions poId={po.id} />}
+          {canApprovePO && po.submitted_for_approval_by !== currentUser?.id ? (
+            <PoApprovalActions poId={po.id} />
+          ) : canApprovePO ? (
+            <p className="text-xs text-amber-600/80 dark:text-amber-400/60">
+              You submitted this PO for approval. Another admin or superadmin must approve it.
+            </p>
+          ) : null}
         </div>
       )}
 
@@ -730,6 +747,32 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
                           dateStyle: "long",
                         })
                       : "No due date set"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-8 pt-4 border-t border-slate-100 dark:border-slate-800/50">
+                <div>
+                  <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <User className="h-3.5 w-3.5" /> Drafted by
+                  </label>
+                  <p className="mt-1 text-slate-900 dark:text-slate-300 font-medium">
+                    {poProfiles[po.created_by] || "Unknown"}
+                    {po.created_at && (
+                      <span className="text-slate-400 font-normal">
+                        {" "}on {new Date(po.created_at).toLocaleDateString(undefined, { dateStyle: "long" })}
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Approved by
+                  </label>
+                  <p className="mt-1 text-slate-900 dark:text-slate-300 font-medium">
+                    {po.approved_by
+                      ? `${poProfiles[po.approved_by] || "Unknown"} on ${new Date(po.approved_at).toLocaleDateString(undefined, { dateStyle: "long" })}`
+                      : "Not yet approved"}
                   </p>
                 </div>
               </div>
