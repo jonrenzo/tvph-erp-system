@@ -31,6 +31,7 @@ type Vendor = { id: string; name: string; currency?: string };
 type PO = {
   id: string;
   po_number: string;
+  description?: string;
   issued_date: string;
   amount: number;
   status: string;
@@ -562,6 +563,11 @@ export function ProjectDetailContent({
                     <span className="text-slate-500 dark:text-slate-400">{new Date(po.issued_date).toLocaleDateString()}</span>
                     <span className="font-bold text-slate-900 dark:text-white">{sym}{Number(po.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                   </div>
+                  {po.description && (
+                    <p className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-sm text-slate-600 dark:text-slate-400 whitespace-pre-wrap">
+                      {po.description}
+                    </p>
+                  )}
                 </div>
               );
             }) : (
@@ -572,7 +578,6 @@ export function ProjectDetailContent({
               </div>
             )}
           </div>
-
           {/* Contract Document */}
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">

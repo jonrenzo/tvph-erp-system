@@ -197,7 +197,7 @@ describe('approvePO — 4-eyes', () => {
     expect(updateCall).toHaveBeenCalledWith(
       expect.objectContaining({
         status: 'issued',
-        approved_by: 'approver-user',
+        approved_by_user_id: 'approver-user',
         approved_at: expect.any(String),
         updated_at: expect.any(String),
       })

@@ -145,7 +145,7 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
   }
 
   // Resolve PO creator and approver names
-  const poProfileIds = [po.created_by, po.approved_by].filter(Boolean) as string[];
+  const poProfileIds = [po.created_by, po.approved_by_user_id].filter(Boolean) as string[];
   const poProfiles: Record<string, { full_name: string; role: string }> = {};
   if (poProfileIds.length > 0) {
     const { data: profiles } = await supabase
@@ -833,8 +833,8 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
                     <CheckCircle2 className="h-3.5 w-3.5" /> Approved by
                   </label>
                   <p className="mt-1 text-slate-900 dark:text-slate-300 font-medium">
-                    {po.approved_by
-                      ? `${poProfiles[po.approved_by] ? `${poProfiles[po.approved_by].full_name} (${poProfiles[po.approved_by].role})` : "Unknown"} on ${new Date(po.approved_at).toLocaleDateString(undefined, { dateStyle: "long" })}`
+                    {po.approved_by_user_id
+                      ? `${poProfiles[po.approved_by_user_id] ? `${poProfiles[po.approved_by_user_id].full_name} (${poProfiles[po.approved_by_user_id].role})` : "Unknown"} on ${new Date(po.approved_at).toLocaleDateString(undefined, { dateStyle: "long" })}`
                       : "Not yet approved"}
                   </p>
                 </div>

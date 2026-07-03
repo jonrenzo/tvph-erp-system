@@ -268,7 +268,7 @@ export async function approvePO(poId: string) {
   const now = new Date().toISOString();
   const { error } = await supabase
     .from('purchase_orders')
-    .update({ status: 'issued', approved_by: user.id, approved_at: now, updated_at: now })
+    .update({ status: 'issued', approved_by_user_id: user.id, approved_at: now, updated_at: now })
     .eq('id', poId);
 
   if (error) return { error: error.message };
@@ -277,7 +277,7 @@ export async function approvePO(poId: string) {
     entity_type: 'purchase_order',
     entity_id: poId,
     action: 'UPDATE',
-    changes: { after: { status: 'issued', approved_by: user.id } },
+    changes: { after: { status: 'issued', approved_by_user_id: user.id } },
     performed_by: user.id,
   });
 
