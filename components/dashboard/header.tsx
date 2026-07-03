@@ -124,7 +124,7 @@ export function Header({
           </button>
 
           {dropdownOpen && (
-            <div className="absolute right-0 mt-2 w-56 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#071F15] p-1 shadow-xl z-[var(--z-dropdown)]">
+            <div className="absolute right-0 mt-2 w-56 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#071F15] p-1 shadow-xl z-[var(--z-header-dropdown)]">
               <div className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400">
                 Logged in as: <br />
                 <span className="text-slate-900 dark:text-white truncate block">
