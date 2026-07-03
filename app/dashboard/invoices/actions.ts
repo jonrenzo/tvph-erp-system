@@ -165,6 +165,8 @@ export async function createInvoice(prevState: any, formData: FormData) {
   const amount = formData.get('amount') as string;
   const invoice_date = formData.get('invoice_date') as string;
   const due_date = formData.get('due_date') as string;
+  const payment_method = formData.get('payment_method') as string;
+  const expense_category = formData.get('expense_category') as string;
   const notes = formData.get('notes') as string;
   const file = formData.get('file') as File;
   const staged_file_path = formData.get('staged_file_path') as string;
@@ -277,17 +279,27 @@ export async function createInvoice(prevState: any, formData: FormData) {
     }
   }
 
+  // Auto-compute Net-30 due date if none provided, starting from invoice_date.
+  const finalDueDate = due_date || (() => {
+    const d = new Date(invoice_date);
+    d.setDate(d.getDate() + 30);
+    return d.toISOString().split('T')[0];
+  })();
+
   const { data: newInvoice, error } = await supabase.from('service_invoices').insert({
     vendor_id,
     po_id: po_id || null,
     invoice_number,
     amount: parseFloat(amount),
     invoice_date,
-    due_date: due_date || null,
+    due_date: finalDueDate,
     status: 'received',
     file_url,
     file_name,
     notes,
+    payment_method: payment_method || null,
+    expense_category: expense_category || null,
+    submitted_at: new Date().toISOString(),
     created_by: user.id
   }).select('id').single();
 

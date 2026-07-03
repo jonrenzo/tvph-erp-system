@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { createClient } from '@/utils/supabase/server';
-import { ArrowLeft, Building2, FileText, CreditCard, History, ExternalLink, AlertCircle, Clock, Paperclip } from 'lucide-react';
+import { ArrowLeft, Building2, FileText, CreditCard, History, ExternalLink, AlertCircle, Clock, Paperclip, Tag, Send } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import { RecordPaymentModal } from '@/components/dashboard/invoices/record-payment-modal';
 import { AttachPaymentDocModal } from '@/components/dashboard/invoices/attach-payment-doc-modal';
@@ -256,6 +256,56 @@ async function InvoiceDetailContent({ paramsPromise }: { paramsPromise: Promise<
               </div>
             </div>
           </div>
+
+          {invoice.payment_method && (
+            <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
+              <h3 className="font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                <CreditCard className="h-4 w-4 text-primary" /> Mode of Payment
+              </h3>
+              <p className="text-sm font-medium text-slate-900 dark:text-white capitalize">
+                {invoice.payment_method.replace(/_/g, ' ')}
+              </p>
+            </div>
+          )}
+
+          {(invoice.expense_category || invoice.notes) && (
+            <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
+              <h3 className="font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                <Tag className="h-4 w-4 text-primary" /> What For
+              </h3>
+              <div className="space-y-3">
+                {invoice.expense_category && (
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Category</label>
+                    <p className="text-sm font-medium text-slate-900 dark:text-white mt-1 capitalize">
+                      {invoice.expense_category.replace(/_/g, ' ')}
+                    </p>
+                  </div>
+                )}
+                {invoice.notes && (
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Notes</label>
+                    <p className="text-sm text-slate-700 dark:text-slate-300 mt-1 whitespace-pre-wrap">
+                      {invoice.notes}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {invoice.submitted_at && (
+            <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
+              <h3 className="font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                <Send className="h-4 w-4 text-primary" /> Submission
+              </h3>
+              <p className="text-sm font-medium text-slate-900 dark:text-white">
+                {new Date(invoice.submitted_at).toLocaleDateString(undefined, {
+                  year: 'numeric', month: 'long', day: 'numeric'
+                })}
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>

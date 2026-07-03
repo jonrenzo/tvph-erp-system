@@ -66,7 +66,7 @@ export async function requireCapability(
   if (!hasCapability(context.role, capability)) {
     return {
       ...context,
-      error: `Forbidden. Required capability: ${capability}.`,
+      error: `You do not have permission to perform this action.`,
     };
   }
 

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useActionState, useTransition } from "react";
-import { Save, Building2, Calendar, FileText, Upload, Link as LinkIcon, AlertTriangle } from "lucide-react";
+import { useState, useActionState, useTransition, useEffect } from "react";
+import { Save, FileText, Upload, Link as LinkIcon, Tag, AlertTriangle } from "lucide-react";
 import { createInvoice, discardStagedInvoiceFile } from "@/app/dashboard/invoices/actions";
 import { InvoiceOcrUpload } from "@/components/dashboard/invoices/invoice-ocr-upload";
 
@@ -34,6 +34,17 @@ export function CreateInvoiceForm({ vendors, pos }: { vendors: Vendor[], pos: PO
   const [amount, setAmount] = useState("");
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split("T")[0]);
   const [dueDate, setDueDate] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("");
+  const [expenseCategory, setExpenseCategory] = useState("");
+
+  // Auto-compute Net-30 due date when invoice_date changes and no manual override
+  useEffect(() => {
+    if (invoiceDate) {
+      const d = new Date(invoiceDate);
+      d.setDate(d.getDate() + 30);
+      setDueDate(d.toISOString().split("T")[0]);
+    }
+  }, [invoiceDate]);
 
   const [staged, setStaged] = useState<StagedExtraction | null>(null);
   const [vendorHint, setVendorHint] = useState<string | null>(null);
@@ -190,7 +201,7 @@ export function CreateInvoiceForm({ vendors, pos }: { vendors: Vendor[], pos: PO
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                    Due Date
+                    Due Date <span className="text-slate-400 font-normal">(Net-30 pre-filled)</span>
                   </label>
                   <input
                     name="due_date"
@@ -200,18 +211,68 @@ export function CreateInvoiceForm({ vendors, pos }: { vendors: Vendor[], pos: PO
                     className="w-full px-4 py-2.5 bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                   />
                 </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Mode of Payment
+                  </label>
+                  <select
+                    name="payment_method"
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary appearance-none"
+                  >
+                    <option value="">Select MOP</option>
+                    <option value="cash">Cash</option>
+                    <option value="cheque">Cheque</option>
+                    <option value="bank_transfer">Bank Transfer</option>
+                    <option value="gcash">GCash</option>
+                    <option value="card">Card</option>
+                    <option value="others">Others</option>
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Expense Category
+                  </label>
+                  <select
+                    name="expense_category"
+                    value={expenseCategory}
+                    onChange={(e) => setExpenseCategory(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary appearance-none"
+                  >
+                    <option value="">Select category</option>
+                    <option value="labor">Labor</option>
+                    <option value="materials">Materials</option>
+                    <option value="equipment">Equipment</option>
+                    <option value="subcontractor">Subcontractor</option>
+                    <option value="transportation">Transportation</option>
+                    <option value="utilities">Utilities</option>
+                    <option value="professional_fees">Professional Fees</option>
+                    <option value="government_fees">Government Fees</option>
+                    <option value="office_admin">Office / Admin</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Internal Notes</label>
-            <textarea
-              name="notes"
-              rows={3}
-              className="w-full mt-2 px-4 py-2.5 bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary resize-none"
-              placeholder="Any additional payment instructions..."
-            ></textarea>
+          <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-[#0a0a0a]/50 flex items-center gap-3">
+              <Tag className="h-5 w-5 text-primary" />
+              <h2 className="font-semibold text-slate-900 dark:text-white">What For</h2>
+            </div>
+            <div className="p-6 space-y-4">
+              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Notes / Description</label>
+              <textarea
+                name="notes"
+                rows={3}
+                className="w-full px-4 py-2.5 bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary resize-none"
+                placeholder="Describe what this invoice is for — scope of work, items delivered, etc."
+              ></textarea>
+            </div>
           </div>
         </div>
 
