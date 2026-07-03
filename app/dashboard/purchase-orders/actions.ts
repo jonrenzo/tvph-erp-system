@@ -909,3 +909,157 @@ export async function markReservationPaid(reservationId: string) {
   revalidatePath('/dashboard/accounting');
   return { success: true };
 }
+
+// ─── Payment Requests ─────────────────────────────────────────────────────────
+
+export async function createPaymentRequest(
+  poId: string,
+  amount: number,
+  dueInDays?: number,
+  notes?: string,
+  completionCertId?: string,
+) {
+  const supabase = await createClient();
+  const { user, error: authError } = await requireCapability('payment_request.create', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
+
+  const { data: po } = await supabase
+    .from('purchase_orders')
+    .select('id, po_number, amount, project_id, vendor_id, vendors(name)')
+    .eq('id', poId)
+    .single();
+  if (!po) return { error: 'PO not found' };
+
+  const { data: activePR } = await supabase
+    .from('payment_requests')
+    .select('id')
+    .eq('po_id', poId)
+    .in('status', ['pending', 'approved'])
+    .limit(1)
+    .maybeSingle();
+  if (activePR) return { error: 'An active Payment Request already exists for this PO.' };
+
+  let percentComplete: number | null = null;
+
+  if (completionCertId) {
+    const { data: cert } = await supabase
+      .from('po_completion_certificates')
+      .select('percent_complete, status')
+      .eq('id', completionCertId)
+      .single();
+    if (!cert) return { error: 'Completion certificate not found.' };
+    if (cert.status !== 'approved') return { error: 'Only approved completion certificates can be referenced.' };
+    percentComplete = Number(cert.percent_complete);
+
+    const poAmount = Number(po.amount);
+    const ceiling = (percentComplete / 100) * poAmount;
+    if (amount > ceiling) {
+      return {
+        error: `Requested amount (₱${amount.toLocaleString()}) exceeds the completion certificate ceiling (${percentComplete}% = ₱${ceiling.toLocaleString()}).`,
+      };
+    }
+  } else {
+    if (amount > Number(po.amount)) {
+      return { error: `Requested amount exceeds the PO total (₱${Number(po.amount).toLocaleString()}).` };
+    }
+  }
+
+  const { error: insertError } = await supabase.from('payment_requests').insert({
+    po_id: poId,
+    project_id: po.project_id,
+    vendor_id: po.vendor_id,
+    amount,
+    due_in_days: dueInDays ?? 30,
+    notes: notes || null,
+    completion_cert_id: completionCertId || null,
+    percent_complete: percentComplete,
+    created_by: user.id,
+  });
+  if (insertError) return { error: insertError.message };
+
+  const vendorName = (po.vendors as any)?.name || 'Vendor';
+  await createNotification({
+    type: 'payment_request',
+    title: 'Payment Request Created',
+    message: `Payment request for ${vendorName} (PO ${po.po_number}) — ₱${amount.toLocaleString()}, due in ${dueInDays ?? 30} days.`,
+    link: `/dashboard/purchase-orders/${poId}`,
+    created_by: user.id,
+  });
+
+  revalidatePath(`/dashboard/purchase-orders/${poId}`);
+  revalidatePath('/dashboard/accounting');
+  return { success: true };
+}
+
+export async function approvePaymentRequest(requestId: string) {
+  const supabase = await createClient();
+  const { user, error: authError } = await requireCapability('payment_request.approve', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
+
+  const { data: pr } = await supabase
+    .from('payment_requests')
+    .select('id, po_id, amount, purchase_orders(po_number, vendors(name))')
+    .eq('id', requestId)
+    .single();
+  if (!pr) return { error: 'Payment Request not found' };
+
+  const { error } = await supabase
+    .from('payment_requests')
+    .update({ status: 'approved', approved_by: user.id, approved_at: new Date().toISOString() })
+    .eq('id', requestId)
+    .eq('status', 'pending');
+  if (error) return { error: error.message };
+
+  const po = pr.purchase_orders as any;
+  const vendorName = po?.vendors?.name || 'Vendor';
+  await createNotification({
+    type: 'payment_request',
+    title: 'Payment Request Approved',
+    message: `Payment request for ${vendorName} (PO ${po?.po_number}) — ₱${Number(pr.amount).toLocaleString()} approved. The subcontractor may now submit a progress-billing invoice.`,
+    link: `/dashboard/purchase-orders/${pr.po_id}`,
+    created_by: user.id,
+  });
+
+  revalidatePath(`/dashboard/purchase-orders/${pr.po_id}`);
+  revalidatePath('/dashboard/accounting');
+  return { success: true };
+}
+
+export async function rejectPaymentRequest(requestId: string, reason: string) {
+  const supabase = await createClient();
+  const { user, error: authError } = await requireCapability('payment_request.approve', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
+
+  const { data: pr } = await supabase
+    .from('payment_requests')
+    .select('id, po_id, amount, purchase_orders(po_number, vendors(name))')
+    .eq('id', requestId)
+    .single();
+  if (!pr) return { error: 'Payment Request not found' };
+
+  const { error } = await supabase
+    .from('payment_requests')
+    .update({
+      status: 'rejected',
+      rejected_by: user.id,
+      rejected_at: new Date().toISOString(),
+      rejection_reason: reason,
+    })
+    .eq('id', requestId)
+    .eq('status', 'pending');
+  if (error) return { error: error.message };
+
+  const po = pr.purchase_orders as any;
+  const vendorName = po?.vendors?.name || 'Vendor';
+  await createNotification({
+    type: 'payment_request',
+    title: 'Payment Request Rejected',
+    message: `Payment request for ${vendorName} (PO ${po?.po_number}) — ₱${Number(pr.amount).toLocaleString()} rejected. Reason: ${reason}`,
+    link: `/dashboard/purchase-orders/${pr.po_id}`,
+    created_by: user.id,
+  });
+
+  revalidatePath(`/dashboard/purchase-orders/${pr.po_id}`);
+  revalidatePath('/dashboard/accounting');
+  return { success: true };
+}

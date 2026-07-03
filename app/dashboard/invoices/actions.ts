@@ -187,7 +187,7 @@ export async function createInvoice(prevState: any, formData: FormData) {
   // PO Amount Guard (includes completion-certificate ceiling when one is approved)
   if (po_id) {
     const [{ data: po }, { data: existingInvoices }, { data: topCert }] = await Promise.all([
-      supabase.from('purchase_orders').select('amount').eq('id', po_id).single(),
+      supabase.from('purchase_orders').select('amount, expense_category').eq('id', po_id).single(),
       supabase.from('service_invoices')
         .select('amount')
         .eq('po_id', po_id)
@@ -216,6 +216,29 @@ export async function createInvoice(prevState: any, formData: FormData) {
         return {
           error: `Invoice amount exceeds ${ceilingLabel}. Available to bill: ₱${remaining.toLocaleString()}.`
         };
+      }
+
+      // Subcontractor PR gate: if the PO is for a subcontractor, require an approved Payment Request
+      if (po.expense_category === 'subcontractor') {
+        const { data: approvedPR } = await supabase
+          .from('payment_requests')
+          .select('id, amount')
+          .eq('po_id', po_id)
+          .eq('status', 'approved')
+          .maybeSingle();
+
+        if (!approvedPR) {
+          return {
+            error: 'This subcontractor PO requires an approved Payment Request before an invoice can be submitted. An operations user must create and get approval for a Payment Request first.',
+          };
+        }
+
+        const prAmount = Number(approvedPR.amount);
+        if (parseFloat(amount) > prAmount) {
+          return {
+            error: `Invoice amount (₱${Number(amount).toLocaleString()}) exceeds the approved Payment Request amount (₱${prAmount.toLocaleString()}).`,
+          };
+        }
       }
     }
   }

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ExpenseChart } from "@/components/dashboard/accounting/expense-chart";
 import { APAgingTable } from "@/components/dashboard/accounting/ap-aging-table";
 import { PaymentReservationsTable } from "@/components/dashboard/accounting/payment-reservations-table";
+import { PaymentRequestsTable } from "@/components/dashboard/accounting/payment-requests-table";
 import { computeApAging } from "@/lib/reports/apAging";
 import { getCurrentProfile, hasCapability } from "@/lib/auth/permissions";
 
@@ -34,7 +35,7 @@ export default function AccountingPage() {
 async function AccountingContent() {
   const supabase = await createClient();
 
-  const [{ data: invoices }, { data: payments }, { data: reservations }, { role }] = await Promise.all([
+  const [{ data: invoices }, { data: payments }, { data: reservations }, { data: paymentRequests }, { role }] = await Promise.all([
     supabase
       .from("service_invoices")
       .select(
@@ -46,6 +47,11 @@ async function AccountingContent() {
       .select("id, po_id, reserved_amount, status, notified_at, acknowledged_at, cancelled_reason, purchase_orders(po_number, vendors(name)), projects(name)")
       .in("status", ["pending", "acknowledged"])
       .order("notified_at", { ascending: false }),
+    supabase
+      .from("payment_requests")
+      .select("id, po_id, amount, due_in_days, status, percent_complete, created_at, rejection_reason, purchase_orders(po_number, vendors(name)), projects(name)")
+      .in("status", ["pending"])
+      .order("created_at", { ascending: false }),
     getCurrentProfile(supabase),
   ]);
 
@@ -79,6 +85,22 @@ async function AccountingContent() {
           reservations={(reservations ?? []) as any}
           canAcknowledge={hasCapability(role, "payment_reservation.acknowledge")}
           canCancel={hasCapability(role, "po.status")}
+        />
+      </div>
+
+      <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-6">
+          <FileText className="h-5 w-5 text-primary" />
+          <h2 className="text-lg font-bold text-slate-900 dark:text-white">Payment Requests</h2>
+          {(paymentRequests?.length ?? 0) > 0 && (
+            <span className="ml-auto bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 text-xs font-bold px-2 py-0.5 rounded-full">
+              {paymentRequests!.length} pending
+            </span>
+          )}
+        </div>
+        <PaymentRequestsTable
+          requests={(paymentRequests ?? []) as any}
+          canApprove={hasCapability(role, "payment_request.approve")}
         />
       </div>
 

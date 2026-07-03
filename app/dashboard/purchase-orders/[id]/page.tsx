@@ -34,6 +34,7 @@ import { PoIssueButton } from "@/components/dashboard/purchase-orders/po-issue-b
 import { PoApprovalActions } from "@/components/dashboard/purchase-orders/po-approval-actions";
 import { PoCertUpload } from "@/components/dashboard/purchase-orders/po-cert-upload";
 import { NotifyFinanceButton } from "@/components/dashboard/purchase-orders/notify-finance-button";
+import { PaymentRequestButton } from "@/components/dashboard/purchase-orders/payment-request-button";
 import { getCurrentProfile, hasCapability } from "@/lib/auth/permissions";
 import { signDocUrls } from "@/utils/storage";
 
@@ -145,14 +146,14 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
 
   // Resolve PO creator and approver names
   const poProfileIds = [po.created_by, po.approved_by].filter(Boolean) as string[];
-  const poProfiles: Record<string, string> = {};
+  const poProfiles: Record<string, { full_name: string; role: string }> = {};
   if (poProfileIds.length > 0) {
     const { data: profiles } = await supabase
       .from("profiles")
-      .select("id, full_name")
+      .select("id, full_name, role")
       .in("id", poProfileIds);
     for (const p of profiles || []) {
-      poProfiles[p.id] = p.full_name;
+      poProfiles[p.id] = { full_name: p.full_name, role: p.role };
     }
   }
 
@@ -230,6 +231,27 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
   // Payment reservation
   const canNotify = hasCapability(currentRole, 'payment_reservation.notify');
   const canAcknowledge = hasCapability(currentRole, 'payment_reservation.acknowledge');
+
+  // Fetch latest payment request for this PO
+  const { data: paymentRequest } = await supabase
+    .from('payment_requests')
+    .select('id, amount, due_in_days, notes, status, completion_cert_id, percent_complete, created_at, rejection_reason')
+    .eq('po_id', po.id)
+    .in('status', ['pending', 'approved', 'rejected'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  // Approved completion certs available to reference in a PR
+  const approvedCerts = (certs || []).filter(c => c.status === 'approved').map(c => ({
+    id: c.id,
+    percent_complete: Number(c.percent_complete),
+    status: c.status,
+  }));
+
+  // Payment request capabilities
+  const canCreatePR = hasCapability(currentRole, 'payment_request.create');
+  const canApprovePR = hasCapability(currentRole, 'payment_request.approve');
 
   // Waiver state
   const isPendingApproval = po.requirements_waived && !po.waiver_approved;
@@ -505,6 +527,16 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
           </div>
         </div>
       )}
+
+      {/* Payment Request */}
+      <PaymentRequestButton
+        poId={po.id}
+        poAmount={poAmount}
+        paymentRequest={paymentRequest as any}
+        approvedCerts={approvedCerts}
+        canCreate={canCreatePR}
+        canApprove={canApprovePR}
+      />
 
       {/* Payment Notification */}
       <NotifyFinanceButton
@@ -786,7 +818,9 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
                     <User className="h-3.5 w-3.5" /> Drafted by
                   </label>
                   <p className="mt-1 text-slate-900 dark:text-slate-300 font-medium">
-                    {poProfiles[po.created_by] || "Unknown"}
+                    {poProfiles[po.created_by]
+                      ? `${poProfiles[po.created_by].full_name} (${poProfiles[po.created_by].role})`
+                      : "Unknown"}
                     {po.created_at && (
                       <span className="text-slate-400 font-normal">
                         {" "}on {new Date(po.created_at).toLocaleDateString(undefined, { dateStyle: "long" })}
@@ -800,7 +834,7 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
                   </label>
                   <p className="mt-1 text-slate-900 dark:text-slate-300 font-medium">
                     {po.approved_by
-                      ? `${poProfiles[po.approved_by] || "Unknown"} on ${new Date(po.approved_at).toLocaleDateString(undefined, { dateStyle: "long" })}`
+                      ? `${poProfiles[po.approved_by] ? `${poProfiles[po.approved_by].full_name} (${poProfiles[po.approved_by].role})` : "Unknown"} on ${new Date(po.approved_at).toLocaleDateString(undefined, { dateStyle: "long" })}`
                       : "Not yet approved"}
                   </p>
                 </div>

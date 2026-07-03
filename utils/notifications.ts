@@ -1,6 +1,6 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
-export type NotificationType = 'po' | 'invoice' | 'payment' | 'document' | 'vendor' | 'hr' | 'crm';
+export type NotificationType = 'po' | 'invoice' | 'payment' | 'document' | 'vendor' | 'hr' | 'crm' | 'payment_request';
 
 export async function createNotification({
   type, title, message, link, created_by
