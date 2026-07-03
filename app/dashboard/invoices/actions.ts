@@ -347,6 +347,10 @@ export async function recordPayment(prevState: any, formData: FormData) {
     return { error: 'Missing required fields.' };
   }
 
+  if (payment_method !== 'cash' && !reference_number?.trim()) {
+    return { error: 'Reference number is required for the selected payment method.' };
+  }
+
   // Require both blocking documents
   const voucherFile = formData.get('payment_voucher_file') as File | null;
   const proofFile = formData.get('proof_of_payment_file') as File | null;

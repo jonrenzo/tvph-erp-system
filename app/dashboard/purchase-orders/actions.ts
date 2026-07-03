@@ -762,3 +762,150 @@ export async function rejectWaiver(poId: string) {
   revalidatePath('/dashboard/purchase-orders');
   return { success: true };
 }
+
+// ─── Payment Reservations ────────────────────────────────────────────────────
+
+export async function notifyFinanceForPayment(poId: string) {
+  const supabase = await createClient();
+  const { user, role, error: authError } = await requireCapability('payment_reservation.notify', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
+
+  // Compute reserved_amount: po.amount - dp_amount - total paid
+  const { data: po } = await supabase
+    .from('purchase_orders')
+    .select('id, po_number, amount, dp_amount, project_id, vendor_id, vendors(name)')
+    .eq('id', poId)
+    .single();
+  if (!po) return { error: 'PO not found' };
+
+  const { data: invoices } = await supabase
+    .from('service_invoices')
+    .select('id')
+    .eq('po_id', poId);
+  const invoiceIds = (invoices || []).map((i: any) => i.id);
+
+  let totalPaid = 0;
+  if (invoiceIds.length > 0) {
+    const { data: payments } = await supabase
+      .from('payments')
+      .select('amount_paid')
+      .in('invoice_id', invoiceIds);
+    totalPaid = (payments || []).reduce((s: number, p: any) => s + Number(p.amount_paid), 0);
+  }
+
+  const reservedAmount = Math.max(0, Number(po.amount) - Number(po.dp_amount || 0) - totalPaid);
+
+  const { error: insertError } = await supabase.from('payment_reservations').insert({
+    po_id: poId,
+    project_id: po.project_id,
+    vendor_id: po.vendor_id,
+    reserved_amount: reservedAmount,
+    notified_by: user.id,
+  });
+  if (insertError) return { error: insertError.message };
+
+  const vendorName = (po.vendors as any)?.name || 'Vendor';
+  await createNotification({
+    type: 'payment',
+    title: 'Payment Reservation Created',
+    message: `${vendorName} may request payment for PO ${po.po_number}. ₱${reservedAmount.toLocaleString()} reserved.`,
+    link: `/dashboard/purchase-orders/${poId}`,
+    created_by: user.id,
+  });
+
+  revalidatePath(`/dashboard/purchase-orders/${poId}`);
+  revalidatePath('/dashboard/accounting');
+  return { success: true };
+}
+
+export async function acknowledgePaymentReservation(reservationId: string) {
+  const supabase = await createClient();
+  const { user, error: authError } = await requireCapability('payment_reservation.acknowledge', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
+
+  const { data: res } = await supabase
+    .from('payment_reservations')
+    .select('id, po_id, reserved_amount, notified_by, purchase_orders(po_number, vendors(name))')
+    .eq('id', reservationId)
+    .single();
+  if (!res) return { error: 'Reservation not found' };
+
+  const { error } = await supabase
+    .from('payment_reservations')
+    .update({ status: 'acknowledged', acknowledged_by: user.id, acknowledged_at: new Date().toISOString() })
+    .eq('id', reservationId)
+    .eq('status', 'pending');
+  if (error) return { error: error.message };
+
+  const po = res.purchase_orders as any;
+  const vendorName = po?.vendors?.name || 'Vendor';
+  await createNotification({
+    type: 'payment',
+    title: 'Payment Reservation Acknowledged',
+    message: `Finance acknowledged payment reservation for ${vendorName} (PO ${po?.po_number}). ₱${Number(res.reserved_amount).toLocaleString()} is being prepared.`,
+    link: `/dashboard/purchase-orders/${res.po_id}`,
+    created_by: user.id,
+  });
+
+  revalidatePath(`/dashboard/purchase-orders/${res.po_id}`);
+  revalidatePath('/dashboard/accounting');
+  return { success: true };
+}
+
+export async function cancelPaymentReservation(reservationId: string, reason: string) {
+  const supabase = await createClient();
+  const { user, role, error: authError } = await requireCapability('po.status', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
+
+  const { data: res } = await supabase
+    .from('payment_reservations')
+    .select('id, po_id, reserved_amount, purchase_orders(po_number, vendors(name))')
+    .eq('id', reservationId)
+    .single();
+  if (!res) return { error: 'Reservation not found' };
+
+  const { error } = await supabase
+    .from('payment_reservations')
+    .update({ status: 'cancelled', cancelled_by: user.id, cancelled_reason: reason, cancelled_at: new Date().toISOString() })
+    .eq('id', reservationId)
+    .in('status', ['pending', 'acknowledged']);
+  if (error) return { error: error.message };
+
+  const po = res.purchase_orders as any;
+  const vendorName = po?.vendors?.name || 'Vendor';
+  await createNotification({
+    type: 'payment',
+    title: 'Payment Reservation Cancelled',
+    message: `Payment reservation for ${vendorName} (PO ${po?.po_number}) was cancelled. Reason: ${reason}`,
+    link: `/dashboard/purchase-orders/${res.po_id}`,
+    created_by: user.id,
+  });
+
+  revalidatePath(`/dashboard/purchase-orders/${res.po_id}`);
+  revalidatePath('/dashboard/accounting');
+  return { success: true };
+}
+
+export async function markReservationPaid(reservationId: string) {
+  const supabase = await createClient();
+  const { user, error: authError } = await requireCapability('payment_reservation.acknowledge', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
+
+  const { data: res } = await supabase
+    .from('payment_reservations')
+    .select('po_id')
+    .eq('id', reservationId)
+    .single();
+  if (!res) return { error: 'Reservation not found' };
+
+  const { error } = await supabase
+    .from('payment_reservations')
+    .update({ status: 'paid' })
+    .eq('id', reservationId)
+    .eq('status', 'acknowledged');
+  if (error) return { error: error.message };
+
+  revalidatePath(`/dashboard/purchase-orders/${res.po_id}`);
+  revalidatePath('/dashboard/accounting');
+  return { success: true };
+}

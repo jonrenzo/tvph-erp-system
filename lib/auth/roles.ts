@@ -54,7 +54,9 @@ export type Capability =
   | "po.approve_completion"
   | "client_po.write"
   | "client_invoice.write"
-  | "client_invoice.pay";
+  | "client_invoice.pay"
+  | "payment_reservation.notify"
+  | "payment_reservation.acknowledge";
 
 // superadmin is granted on every capability. admin gets everything EXCEPT the
 // three superadmin-only items (audit.read, vendor.delete, po.delete).
@@ -94,6 +96,8 @@ export const CAPABILITY_ROLES = {
   "client_po.write": ["superadmin", "admin", "operations"],
   "client_invoice.write": ["superadmin", "admin", "finance"],
   "client_invoice.pay": ["superadmin", "admin", "finance"],
+  "payment_reservation.notify": ["superadmin", "admin", "operations"],
+  "payment_reservation.acknowledge": ["superadmin", "admin", "finance"],
 } as const satisfies Record<Capability, readonly Role[]>;
 
 export function hasCapability(role: string | null | undefined, capability: Capability) {

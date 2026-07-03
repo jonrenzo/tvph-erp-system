@@ -134,6 +134,7 @@ export function RecordPaymentModal({ invoiceId, remainingBalance }: { invoiceId:
                     <option value="bank_transfer">Bank Transfer</option>
                     <option value="cheque">Cheque</option>
                     <option value="cash">Cash</option>
+                    <option value="gcash">GCash</option>
                     <option value="others">Other</option>
                   </select>
                 </div>
