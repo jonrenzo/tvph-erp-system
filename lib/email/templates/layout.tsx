@@ -99,10 +99,12 @@ const footerText: React.CSSProperties = {
 export function EmailLayout({
   preview,
   heroImageUrl = HERO_IMAGE_URL,
+  footerQuestionText = "Questions? Just reply to this email and our team will help.",
   children,
 }: {
   preview: string;
   heroImageUrl?: string;
+  footerQuestionText?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -157,9 +159,7 @@ export function EmailLayout({
               <br />
               {COMPANY_ADDRESS[1]}
             </Text>
-            <Text style={{ ...footerText, margin: 0 }}>
-              Questions? Just reply to this email and our team will help.
-            </Text>
+            <Text style={{ ...footerText, margin: 0 }}>{footerQuestionText}</Text>
           </Section>
         </Container>
       </Body>
