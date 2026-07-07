@@ -9,6 +9,42 @@ export interface PoIssuedEmailProps {
   poDate?: string | null;
   amountLabel?: string | null;
   senderName?: string | null;
+  issuerName?: string | null;
+  issuerEmail?: string | null;
+  issuerPhone?: string | null;
+}
+
+export interface IssuerContact {
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+}
+
+export function formatIssuerQuestionLine({ name, email, phone }: IssuerContact) {
+  const cleanName = name?.trim();
+  const cleanEmail = email?.trim();
+  const cleanPhone = phone?.trim();
+
+  if (cleanName && cleanEmail && cleanPhone) {
+    return `Questions? Contact ${cleanName} at ${cleanEmail} / ${cleanPhone}.`;
+  }
+  if (cleanName && cleanEmail) {
+    return `Questions? Contact ${cleanName} at ${cleanEmail}.`;
+  }
+  if (cleanName && cleanPhone) {
+    return `Questions? Contact ${cleanName} at ${cleanPhone}.`;
+  }
+  if (cleanEmail) {
+    return `Questions? Contact the person who issued this PO at ${cleanEmail}.`;
+  }
+  if (cleanPhone) {
+    return `Questions? Contact the person who issued this PO at ${cleanPhone}.`;
+  }
+  if (cleanName) {
+    return `Questions? Contact ${cleanName}.`;
+  }
+
+  return "Questions? Contact TVPH Procurement.";
 }
 
 /**
@@ -22,9 +58,19 @@ export function PoIssuedEmail({
   poDate,
   amountLabel,
   senderName,
+  issuerName,
+  issuerEmail,
+  issuerPhone,
 }: PoIssuedEmailProps) {
   return (
-    <EmailLayout preview={`Purchase Order ${poNumber} from TVPH`}>
+    <EmailLayout
+      preview={`Purchase Order ${poNumber} from TVPH`}
+      footerQuestionText={formatIssuerQuestionLine({
+        name: issuerName,
+        email: issuerEmail,
+        phone: issuerPhone,
+      })}
+    >
       <Text style={styles.heading}>Purchase Order {poNumber}</Text>
       <Text style={styles.paragraph}>
         Dear {vendorContact || vendorName},

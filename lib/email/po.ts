@@ -42,7 +42,7 @@ export async function sendPoIssuedEmail(
     .select(
       `po_number, amount, currency, issued_date, created_by, vendor_id,
        vendors ( name, contact_person, contact_email ),
-       creator:profiles!created_by ( full_name, email )`,
+       creator:profiles!created_by ( full_name, email, phone )`,
     )
     .eq("id", poId)
     .single();
@@ -56,7 +56,11 @@ export async function sendPoIssuedEmail(
     contact_person?: string | null;
     contact_email?: string | null;
   };
-  const creator = (po.creator ?? {}) as { full_name?: string | null; email?: string | null };
+  const creator = (po.creator ?? {}) as {
+    full_name?: string | null;
+    email?: string | null;
+    phone?: string | null;
+  };
 
   const rendered = await renderPoPdf(poId);
   if (!rendered) {
@@ -78,6 +82,9 @@ export async function sendPoIssuedEmail(
       poDate: formatDate(po.issued_date as string),
       amountLabel: formatAmount(po.amount as number, currency),
       senderName: creator.full_name,
+      issuerName: creator.full_name,
+      issuerEmail: creator.email,
+      issuerPhone: creator.phone,
     }),
     attachments: [{ filename: rendered.filename, content: rendered.buffer }],
     createdBy: opts.actorId ?? (po.created_by as string | null),
