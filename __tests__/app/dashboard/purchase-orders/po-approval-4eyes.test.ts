@@ -295,3 +295,83 @@ describe('approvePO — 4-eyes', () => {
     );
   });
 });
+
+describe('rejectPO — 4-eyes', () => {
+  let mockSupabase: ReturnType<typeof makeMockSupabase>;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockSupabase = makeMockSupabase();
+
+    mockCreateClient.mockResolvedValue(mockSupabase as any);
+    mockRequireCapability.mockResolvedValue({
+      user: { id: 'approver-user' },
+      role: 'admin',
+      error: null,
+    });
+    mockRecordAuditLog.mockResolvedValue(undefined);
+    mockCreateNotification.mockResolvedValue(undefined);
+    mockRevalidatePath.mockReturnValue(undefined);
+
+    mockSupabase.selectChain.single.mockResolvedValue({
+      data: { status: 'pending_approval' },
+      error: null,
+    });
+  });
+
+  it('sends a pending_approval PO back to draft with the rejection reason', async () => {
+    const result = await rejectPO('po-123', 'Missing supporting docs');
+    expect(result).toEqual({ success: true });
+
+    const updateFn = mockSupabase.from('purchase_orders').update;
+    expect(updateFn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'draft',
+        rejection_reason: 'Missing supporting docs',
+      })
+    );
+    expect(mockSupabase.updateChain.eq).toHaveBeenCalledWith('id', 'po-123');
+    expect(mockRecordAuditLog).toHaveBeenCalled();
+    expect(mockCreateNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'po' })
+    );
+  });
+
+  it('trims the rejection reason before storing it', async () => {
+    await rejectPO('po-trim', '   needs revision   ');
+
+    const updateFn = mockSupabase.from('purchase_orders').update;
+    expect(updateFn).toHaveBeenCalledWith(
+      expect.objectContaining({ rejection_reason: 'needs revision' })
+    );
+  });
+
+  it('requires a non-empty rejection reason', async () => {
+    const result = await rejectPO('po-noreason', '   ');
+    expect(result).toEqual({ error: 'A rejection reason is required.' });
+    expect(mockSupabase.updateChain.eq).not.toHaveBeenCalled();
+  });
+
+  it('rejects when the PO is not pending_approval', async () => {
+    mockSupabase.selectChain.single.mockResolvedValue({
+      data: { status: 'issued' },
+      error: null,
+    });
+
+    const result = await rejectPO('po-issued', 'too late');
+    expect(result).toEqual({ error: 'This PO is not pending approval.' });
+    expect(mockSupabase.updateChain.eq).not.toHaveBeenCalled();
+  });
+
+  it('returns auth error when user lacks po.approve capability', async () => {
+    mockRequireCapability.mockResolvedValue({
+      user: null,
+      role: null,
+      error: 'User does not have po.approve capability',
+    });
+
+    const result = await rejectPO('po-noauth', 'reason');
+    expect(result).toEqual({ error: 'User does not have po.approve capability' });
+    expect(mockSupabase.updateChain.eq).not.toHaveBeenCalled();
+  });
+});
