@@ -1,6 +1,11 @@
 /**
- * Unit tests for updatePOStatus server action
- * Tests idempotency guard that prevents double-click issues on "Issue PO" button
+ * Unit tests for the updatePOStatus server action.
+ *
+ * updatePOStatus is a generic status updater. Issuance (-> 'issued') is NOT
+ * permitted here: POs can only be issued through the 4-eyes approval flow
+ * (submitPOForApproval -> approvePO, which enforces the self-approval and waiver
+ * gates). These tests verify that guard, the idempotent already-issued
+ * short-circuit, and normal non-issued transitions.
  */
 
 import { updatePOStatus } from '@/app/dashboard/purchase-orders/actions';
@@ -59,7 +64,10 @@ const mockRevalidatePath = revalidatePath as jest.MockedFunction<
   typeof revalidatePath
 >;
 
-describe('updatePOStatus - Idempotency Guard', () => {
+const ISSUE_BLOCKED_ERROR =
+  'POs can only be issued through the approval flow. Submit the PO for approval, then have a different admin or superadmin approve it.';
+
+describe('updatePOStatus', () => {
   let mockSupabase: any;
 
   beforeEach(() => {
@@ -102,7 +110,7 @@ describe('updatePOStatus - Idempotency Guard', () => {
     it('returns { success: true } immediately when PO is already issued', async () => {
       // Setup: PO already has status 'issued'
       mockSupabase.selectChain.single.mockResolvedValue({
-        data: { status: 'issued', requirements_waived: false, waiver_approved: false },
+        data: { status: 'issued' },
         error: null,
       });
 
@@ -123,7 +131,7 @@ describe('updatePOStatus - Idempotency Guard', () => {
 
     it('does not call .update(), recordAuditLog, or sendPoIssuedEmail when PO status is already issued', async () => {
       mockSupabase.selectChain.single.mockResolvedValue({
-        data: { status: 'issued', requirements_waived: false, waiver_approved: false },
+        data: { status: 'issued' },
         error: null,
       });
 
@@ -138,42 +146,33 @@ describe('updatePOStatus - Idempotency Guard', () => {
     });
   });
 
-  describe('Happy path - transitioning to issued', () => {
-    it('updates PO status, logs audit, sends notification and email when transitioning from draft to issued', async () => {
+  describe('Direct issuance is blocked (4-eyes)', () => {
+    it('blocks issuing a draft PO directly and does not update, audit, notify, or email', async () => {
       mockSupabase.selectChain.single.mockResolvedValue({
-        data: { status: 'draft', requirements_waived: false, waiver_approved: false },
+        data: { status: 'draft' },
         error: null,
       });
 
       const result = await updatePOStatus('po-789', 'issued');
 
-      expect(result).toEqual({ success: true });
-      // Verify update was called
-      expect(mockSupabase.updateChain.eq).toHaveBeenCalledWith('id', 'po-789');
-      // Verify audit log was recorded
-      expect(mockRecordAuditLog).toHaveBeenCalled();
-      // Verify notification was created
-      expect(mockCreateNotification).toHaveBeenCalled();
-      // Verify email was sent
-      expect(mockSendPoIssuedEmail).toHaveBeenCalledWith('po-789', { actorId: 'user-123' });
+      expect(result).toEqual({ error: ISSUE_BLOCKED_ERROR });
+      // The bypass is closed: nothing is issued via this action.
+      expect(mockSupabase.updateChain.eq).not.toHaveBeenCalled();
+      expect(mockRecordAuditLog).not.toHaveBeenCalled();
+      expect(mockCreateNotification).not.toHaveBeenCalled();
+      expect(mockSendPoIssuedEmail).not.toHaveBeenCalled();
     });
 
-    it('returns success with emailWarning if email send fails but PO is issued', async () => {
+    it('blocks issuing a pending_approval PO directly (must use approvePO)', async () => {
       mockSupabase.selectChain.single.mockResolvedValue({
-        data: { status: 'draft', requirements_waived: false, waiver_approved: false },
+        data: { status: 'pending_approval' },
         error: null,
       });
-      mockSendPoIssuedEmail.mockResolvedValue({
-        status: 'failed',
-        error: 'Email service unavailable',
-      });
 
-      const result = await updatePOStatus('po-email-fail', 'issued');
+      const result = await updatePOStatus('po-pending', 'issued');
 
-      expect(result.success).toBe(true);
-      expect(result.emailWarning).toBe('Email service unavailable');
-      // PO should still be updated
-      expect(mockSupabase.updateChain.eq).toHaveBeenCalled();
+      expect(result).toEqual({ error: ISSUE_BLOCKED_ERROR });
+      expect(mockSupabase.updateChain.eq).not.toHaveBeenCalled();
     });
   });
 
@@ -191,98 +190,22 @@ describe('updatePOStatus - Idempotency Guard', () => {
       expect(mockSupabase.updateChain.eq).not.toHaveBeenCalled();
     });
 
-    it('returns error when PO has waived requirements but waiver is not approved', async () => {
-      mockSupabase.selectChain.single.mockResolvedValue({
-        data: {
-          status: 'draft',
-          requirements_waived: true,
-          waiver_approved: false,
-        },
-        error: null,
-      });
-
-      const result = await updatePOStatus('po-waiver-pending', 'issued');
-
-      expect(result).toEqual({
-        error: 'Cannot issue: this PO has waived requirements pending executive approval.',
-      });
-      // Should not proceed to update
-      expect(mockSupabase.updateChain.eq).not.toHaveBeenCalled();
-    });
-
-    it('returns database error if update fails', async () => {
-      mockSupabase.selectChain.single.mockResolvedValue({
-        data: { status: 'draft', requirements_waived: false, waiver_approved: false },
-        error: null,
-      });
+    it('returns database error if a non-issued status update fails', async () => {
       mockSupabase.updateChain.eq.mockResolvedValue({
         error: new Error('Database connection failed'),
       });
 
-      const result = await updatePOStatus('po-db-error', 'issued');
+      const result = await updatePOStatus('po-db-error', 'cancelled');
 
       expect(result).toEqual({ error: 'Database connection failed' });
     });
 
-    it('allows non-issued status changes without idempotency check', async () => {
-      mockSupabase.selectChain.single.mockResolvedValue({
-        data: { status: 'draft', requirements_waived: false, waiver_approved: false },
-        error: null,
-      });
-
+    it('allows non-issued status changes (e.g. draft -> cancelled)', async () => {
       const result = await updatePOStatus('po-draft-to-cancelled', 'cancelled');
 
-      // Idempotency guard only applies to 'issued' status
-      expect(mockSupabase.updateChain.eq).toHaveBeenCalled();
+      // Issuance guard only applies to the 'issued' target; other transitions proceed.
+      expect(mockSupabase.updateChain.eq).toHaveBeenCalledWith('id', 'po-draft-to-cancelled');
       expect(result).toEqual({ success: true });
-    });
-  });
-
-  describe('Regression - double-click scenario', () => {
-    it('handles two rapid issue calls on the same PO (simulating double-click)', async () => {
-      let callCount = 0;
-
-      mockSupabase.selectChain.single.mockImplementation(() => {
-        callCount++;
-        if (callCount === 1) {
-          // First call: PO is draft
-          return Promise.resolve({
-            data: { status: 'draft', requirements_waived: false, waiver_approved: false },
-            error: null,
-          });
-        } else {
-          // Second call: PO is now issued (from first call's update)
-          return Promise.resolve({
-            data: { status: 'issued', requirements_waived: false, waiver_approved: false },
-            error: null,
-          });
-        }
-      });
-
-      // First click - transitions to issued
-      const result1 = await updatePOStatus('po-double-click', 'issued');
-      expect(result1).toEqual({ success: true });
-      expect(mockSupabase.updateChain.eq).toHaveBeenCalledTimes(1);
-      expect(mockRecordAuditLog).toHaveBeenCalledTimes(1);
-
-      // Reset mock counts for second call
-      jest.clearAllMocks();
-      mockSupabase.updateChain.eq.mockClear();
-      mockRecordAuditLog.mockClear();
-
-      // Re-setup the mock to return issued status
-      mockSupabase.selectChain.single.mockResolvedValue({
-        data: { status: 'issued', requirements_waived: false, waiver_approved: false },
-        error: null,
-      });
-
-      // Second click - idempotency guard prevents duplicate action
-      const result2 = await updatePOStatus('po-double-click', 'issued');
-      expect(result2).toEqual({ success: true });
-      // No update call on second click
-      expect(mockSupabase.updateChain.eq).not.toHaveBeenCalled();
-      // No audit log on second click
-      expect(mockRecordAuditLog).not.toHaveBeenCalled();
     });
   });
 });

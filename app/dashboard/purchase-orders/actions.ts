@@ -353,24 +353,23 @@ export async function updatePOStatus(poId: string, status: string) {
   const { user, error: authError } = await requireCapability('po.status', supabase);
   if (authError || !user) return { error: authError || 'Unauthorized' };
 
-  // Block issuance if waiver is pending executive approval
+  // Issuance is only allowed through the 4-eyes approval flow
+  // (submitPOForApproval -> approvePO, which enforces the self-approval and
+  // waiver gates). This generic status updater must NOT be able to move a PO to
+  // 'issued' directly, otherwise a po.status holder could bypass approval.
   if (status === 'issued') {
     const { data: po } = await supabase
       .from('purchase_orders')
-      .select('status, requirements_waived, waiver_approved')
+      .select('status')
       .eq('id', poId)
       .single();
 
+    // Idempotent: already issued (e.g. double-click) — succeed without re-issuing.
     if (po?.status === 'issued') return { success: true };
 
-    // pending_approval POs must go through approvePO, not direct status update
-    if (po?.status === 'pending_approval') {
-      return { error: 'This PO is awaiting approval. Use the approval action to issue it.' };
-    }
-
-    if (po?.requirements_waived && !po?.waiver_approved) {
-      return { error: 'Cannot issue: this PO has waived requirements pending executive approval.' };
-    }
+    return {
+      error: 'POs can only be issued through the approval flow. Submit the PO for approval, then have a different admin or superadmin approve it.',
+    };
   }
 
   const { error } = await supabase
