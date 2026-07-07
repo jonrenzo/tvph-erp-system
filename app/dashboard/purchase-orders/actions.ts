@@ -23,6 +23,22 @@ interface CreatePOInput {
   waive_requirements?: boolean;
 }
 
+function getTomorrowDateInTimeZone(timeZone: string, now = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now);
+
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const tomorrow = new Date(
+    Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day) + 1),
+  );
+
+  return tomorrow.toISOString().slice(0, 10);
+}
+
 export async function createPurchaseOrderCore(input: CreatePOInput) {
   const supabase = await createClient();
   const { user, role, error: authError } = await requireCapability('po.create', supabase);
@@ -30,6 +46,7 @@ export async function createPurchaseOrderCore(input: CreatePOInput) {
 
   const { vendor_id, project_id, line_items, site_details = [], description, due_date, dp_amount = 0, waive_requirements: waive = false } = input;
   const issued_date = input.issued_date ?? new Date().toISOString().slice(0, 10);
+  const mobilization_date = getTomorrowDateInTimeZone('Asia/Manila');
 
   if (!vendor_id) return { error: 'Vendor is required.' };
 
@@ -75,6 +92,7 @@ export async function createPurchaseOrderCore(input: CreatePOInput) {
     amount: totalAmount,
     dp_amount,
     issued_date,
+    mobilization_date,
     due_date: due_date || null,
     status: 'draft',
     currency,
