@@ -268,7 +268,7 @@ GOOGLE_GENERATIVE_AI_API_KEY=your_google_ai_studio_key
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
 
 RESEND_API_KEY=your_resend_key
-EMAIL_FROM="TelcoVantage ERP <noreply@example.com>"
+EMAIL_FROM="TelcoVantage ERP <no-reply@your-domain.com>"
 EMAIL_REPLY_TO=ops@example.com
 EMAIL_CC_INTERNAL=true
 
@@ -295,7 +295,7 @@ Required for AI chat, OCR, and AI import mapping:
 Required for production email and scheduled reminders:
 
 - `RESEND_API_KEY`
-- `EMAIL_FROM`
+- `EMAIL_FROM` as a no-reply sender, for example `TelcoVantage ERP <no-reply@your-domain.com>`
 - `NEXT_PUBLIC_SITE_URL`
 - `CRON_SECRET`
 
@@ -386,7 +386,7 @@ Set `GOOGLE_GENERATIVE_AI_API_KEY`. AI chat, OCR, and AI-assisted import mapping
 
 ### Emails do not send
 
-Set `RESEND_API_KEY` and `EMAIL_FROM`. For production links inside emails, set `NEXT_PUBLIC_SITE_URL` to the public deployment URL.
+Set `RESEND_API_KEY` and `EMAIL_FROM` as a no-reply sender. For production links inside emails, set `NEXT_PUBLIC_SITE_URL` to the public deployment URL.
 
 ### Document reminders are not firing
 
