@@ -49,6 +49,7 @@ const typeIcons = {
   crm: { icon: BriefcaseBusiness, color: "text-indigo-500", bg: "bg-indigo-500/10" },
   vendor: { icon: Building2, color: "text-teal-500", bg: "bg-teal-500/10" },
   hr: { icon: Users, color: "text-orange-500", bg: "bg-orange-500/10" },
+  payment_request: { icon: FileText, color: "text-cyan-500", bg: "bg-cyan-500/10" },
 };
 
 export function NotificationBell() {
