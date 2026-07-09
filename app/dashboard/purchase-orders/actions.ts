@@ -7,6 +7,7 @@ import { createNotification } from '@/utils/notifications';
 import { recordAuditLog } from '@/utils/audit';
 import { requireCapability, hasCapability } from '@/lib/auth/permissions';
 import { sendPoIssuedEmail } from '@/lib/email/po';
+import { sendPoPendingApprovalEmail } from '@/lib/email/po-pending-approval';
 
 type POLineItem = { item_code?: string; description: string; qty: number; uom?: string; unit_price: number };
 type POSiteDetail = { region: string; area_city: string; no_of_nodes: number; cable_length_km: number };
@@ -211,7 +212,7 @@ export async function createPurchaseOrder(prevState: any, formData: FormData) {
   redirect(result.url);
 }
 
-export async function submitPOForApproval(poId: string) {
+export async function submitPOForApproval(poId: string, approverIds: string[] = []) {
   const supabase = await createClient();
   const { user, role, error: authError } = await requireCapability('po.status', supabase);
   if (authError || !user) return { error: authError || 'Unauthorized' };
@@ -226,12 +227,37 @@ export async function submitPOForApproval(poId: string) {
     return { error: 'Only draft POs can be submitted for approval.' };
   }
 
+  // Validate the chosen approvers: at least one, all admins/superadmins, and
+  // never the submitter (the 4-eyes rule blocks self-approval). Notify-only —
+  // this drives who is emailed, not who is allowed to approve.
+  const uniqueApproverIds = [...new Set(approverIds)].filter(Boolean);
+  if (uniqueApproverIds.length === 0) {
+    return { error: 'Select at least one admin or superadmin to approve this PO.' };
+  }
+  if (uniqueApproverIds.includes(user.id)) {
+    return { error: 'You cannot select yourself as an approver.' };
+  }
+
+  const { data: approverProfiles } = await supabase
+    .from('profiles')
+    .select('id, role')
+    .in('id', uniqueApproverIds);
+
+  const validApproverIds = (approverProfiles || [])
+    .filter((p) => p.role === 'superadmin' || p.role === 'admin')
+    .map((p) => p.id);
+
+  if (validApproverIds.length !== uniqueApproverIds.length) {
+    return { error: 'Every selected approver must be an admin or superadmin.' };
+  }
+
   const { error } = await supabase
     .from('purchase_orders')
     .update({
       status: 'pending_approval',
       submitted_for_approval_by: user.id,
       submitted_for_approval_at: new Date().toISOString(),
+      approval_requested_from: uniqueApproverIds,
       rejection_reason: null,
       updated_at: new Date().toISOString(),
     })
@@ -243,7 +269,7 @@ export async function submitPOForApproval(poId: string) {
     entity_type: 'purchase_order',
     entity_id: poId,
     action: 'UPDATE',
-    changes: { after: { status: 'pending_approval', submitted_by: user.id } },
+    changes: { after: { status: 'pending_approval', submitted_by: user.id, approval_requested_from: uniqueApproverIds } },
     performed_by: user.id,
   });
 
@@ -254,6 +280,19 @@ export async function submitPOForApproval(poId: string) {
     link: `/dashboard/purchase-orders/${poId}`,
     created_by: user.id,
   });
+
+  // Best-effort: email the chosen approvers. A failed send must NOT fail the
+  // submit (mirrors approvePO's contract) — surface a broadcast warning instead.
+  const emailResult = await sendPoPendingApprovalEmail(poId, { actorId: user.id });
+  if (emailResult.status === 'failed') {
+    await createNotification({
+      type: 'po',
+      title: '⚠️ Approval email not sent',
+      message: `A PO was submitted for approval but the notification email to the selected approvers could not be sent. ${emailResult.error ?? ''}`.trim(),
+      link: `/dashboard/purchase-orders/${poId}`,
+      created_by: user.id,
+    });
+  }
 
   revalidatePath(`/dashboard/purchase-orders/${poId}`);
   revalidatePath('/dashboard/purchase-orders');

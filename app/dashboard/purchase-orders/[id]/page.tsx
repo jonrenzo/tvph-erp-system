@@ -157,6 +157,20 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
     }
   }
 
+  // Eligible approvers for the submit-for-approval picker: admins/superadmins
+  // other than the current user (the 4-eyes rule blocks self-approval). Only
+  // needed while the PO is a draft.
+  let eligibleApprovers: { id: string; full_name: string; email: string }[] = [];
+  if (po.status === "draft" && currentUser) {
+    const { data: admins } = await supabase
+      .from("profiles")
+      .select("id, full_name, email")
+      .in("role", ["superadmin", "admin"])
+      .neq("id", currentUser.id)
+      .order("full_name");
+    eligibleApprovers = admins || [];
+  }
+
   // Fetch completion certificates for this PO
   const { data: certs } = await supabase
     .from('po_completion_certificates')
@@ -304,7 +318,7 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
 
         <div className="flex items-center gap-3 md:ml-auto">
           {po.status === "draft" && hasCapability(currentRole, "po.status") && (
-            <PoIssueButton poId={po.id} />
+            <PoIssueButton poId={po.id} eligibleApprovers={eligibleApprovers} />
           )}
           {["issued", "paid", "overpaid"].includes(po.status) && canSendEmail && (
             <PoResendButton poId={po.id} />
