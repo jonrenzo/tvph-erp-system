@@ -173,7 +173,7 @@ Current AI tool coverage includes:
 | UI | Tailwind CSS 4, Lucide icons, Recharts, Sonner, next-themes |
 | Backend | Supabase Auth, PostgreSQL, RLS, Storage, Realtime |
 | AI | Vercel AI SDK, `@ai-sdk/google`, Gemini 2.5 Flash |
-| Documents | DOCX editor, Mammoth, PizZip, pdf-lib, pdfkit, pdf-parse |
+| Documents | DOCX editor, PizZip, pdf-lib, pdfkit |
 | Email | Resend, React Email |
 | Testing | Jest 30, Testing Library, jsdom, ts-jest |
 
