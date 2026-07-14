@@ -25,7 +25,7 @@
 | File | Responsibility |
 | --- | --- |
 | `lib/payment-terms.ts` | Manila date and pure penalty helpers. |
-| `supabase/migrations/20260714_payment_reminder_engine.sql` | Schema, RLS/grants, indexes, email kinds, vendor schedule. |
+| `supabase/migrations/*_payment_reminder_engine.sql` | Schema, RLS/grants, indexes, email kinds, vendor schedule. |
 | `app/dashboard/purchase-orders/actions.ts` | Persist/edit terms and penalty override. |
 | `components/dashboard/purchase-orders/create-po-form.tsx` | Create-time terms inputs. |
 | `app/dashboard/purchase-orders/[id]/page.tsx`, `components/dashboard/purchase-orders/po-terms-card.tsx` | Read/edit terms and show penalty. |
@@ -113,7 +113,7 @@ git commit -m "feat: add payment terms calculations"
 
 **Files:**
 
-- Create: `supabase/migrations/20260714_payment_reminder_engine.sql`
+- Create: CLI-generated `supabase/migrations/*_payment_reminder_engine.sql`
 - Test: `__tests__/supabase/payment-reminder-engine-migration.test.ts`
 
 **Interfaces:**
@@ -126,7 +126,10 @@ git commit -m "feat: add payment terms calculations"
 ```ts
 import fs from "node:fs";
 import path from "node:path";
-const migration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/20260714_payment_reminder_engine.sql"), "utf8");
+const migrations = fs.readdirSync(path.join(process.cwd(), "supabase/migrations"));
+const filename = migrations.find((name) => name.endsWith("_payment_reminder_engine.sql"));
+if (!filename) throw new Error("payment reminder migration is missing");
+const migration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations", filename), "utf8");
 
 it("protects penalties and schedules the vendor route", () => {
   expect(migration).toContain("alter table public.po_penalties enable row level security");
@@ -139,7 +142,7 @@ it("protects penalties and schedules the vendor route", () => {
 
 Run: `supabase migration new payment_reminder_engine`
 
-Expected: a generated SQL migration under `supabase/migrations/`; retain the project filename `20260714_payment_reminder_engine.sql`.
+Expected: a timestamped SQL migration under `supabase/migrations/`; use that exact generated filename everywhere in this task.
 
 ```sql
 alter table public.purchase_orders
@@ -220,7 +223,7 @@ Run: `npx jest __tests__/supabase/payment-reminder-engine-migration.test.ts`
 Expected: PASS
 
 ```bash
-git add supabase/migrations/20260714_payment_reminder_engine.sql __tests__/supabase/payment-reminder-engine-migration.test.ts
+git add supabase/migrations/*_payment_reminder_engine.sql __tests__/supabase/payment-reminder-engine-migration.test.ts
 git commit -m "feat: add payment reminder schema"
 ```
 
