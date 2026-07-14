@@ -1,10 +1,7 @@
 // Helpers for turning stored public-bucket URLs into short-lived signed URLs.
 //
-// NOTE (perf): signed URLs are regenerated on every page load. For documents-heavy
-// pages this is many storage round-trips per render. The calls are already batched
-// (Promise.all), so latency is bounded, but a future improvement is to cache signed
-// URLs (e.g. unstable_cache / Redis keyed by path) with a TTL just under the signing
-// expiry, or to serve files through a public CDN path. Deferred — see project roadmap.
+// Signed URLs are regenerated per page load, but each bucket is signed in one
+// Storage request rather than one request per document.
 
 import type { createClient } from "@/utils/supabase/server";
 
@@ -14,7 +11,7 @@ const DEFAULT_EXPIRY_SECONDS = 3600;
 
 /**
  * Replace a record's `file_url` with a signed URL when it points at the given
- * public bucket. Records that don't match are returned untouched.
+ * public-style URL. Records that don't match are returned untouched.
  */
 export async function signDocUrl<T extends { file_url?: string | null }>(
   supabase: SupabaseServerClient,
@@ -22,20 +19,34 @@ export async function signDocUrl<T extends { file_url?: string | null }>(
   doc: T,
   expiresIn: number = DEFAULT_EXPIRY_SECONDS,
 ): Promise<T> {
-  const marker = `/public/${bucket}/`;
-  if (!doc.file_url?.includes(marker)) return doc;
-
-  const path = doc.file_url.split(marker)[1];
-  const { data } = await supabase.storage.from(bucket).createSignedUrl(path, expiresIn);
-  return { ...doc, file_url: data?.signedUrl || doc.file_url };
+  return (await signDocUrls(supabase, bucket, [doc], expiresIn))[0];
 }
 
-/** Sign a list of records in parallel against a single bucket. */
-export function signDocUrls<T extends { file_url?: string | null }>(
+/** Sign a list of records with one Storage request against a single bucket. */
+export async function signDocUrls<T extends { file_url?: string | null }>(
   supabase: SupabaseServerClient,
   bucket: string,
   docs: T[] | null | undefined,
   expiresIn: number = DEFAULT_EXPIRY_SECONDS,
 ): Promise<T[]> {
-  return Promise.all((docs ?? []).map((d) => signDocUrl(supabase, bucket, d, expiresIn)));
+  const records = docs ?? [];
+  const marker = `/public/${bucket}/`;
+  const paths = records
+    .map((doc) => doc.file_url?.split(marker)[1])
+    .filter((path): path is string => !!path);
+
+  if (!paths.length) return records;
+
+  const { data } = await supabase.storage.from(bucket).createSignedUrls(paths, expiresIn);
+  const signedByPath = new Map(
+    (data ?? [])
+      .filter((item) => item.path && item.signedUrl)
+      .map((item) => [item.path as string, item.signedUrl as string]),
+  );
+
+  return records.map((doc) => {
+    const path = doc.file_url?.split(marker)[1];
+    const signedUrl = path && signedByPath.get(path);
+    return signedUrl ? { ...doc, file_url: signedUrl } : doc;
+  });
 }

@@ -1,7 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { getCurrentProfile, hasCapability } from "@/lib/auth/permissions";
 import { computeComplianceSummary } from "@/lib/reports/compliance";
-import { getProjectProgress, getMonthlyTrends } from "@/lib/dashboard/queries";
+import { EMPTY_DASHBOARD_FINANCIALS, getDashboardFinancials, getProjectProgress } from "@/lib/dashboard/queries";
 import { TrendsChart } from "@/components/dashboard/trends-chart";
 import { ProjectProgressList } from "@/components/dashboard/project-progress-list";
 import {
@@ -153,8 +153,6 @@ async function DashboardContent() {
   const todayStr = today.toISOString().split("T")[0];
   const sevenDayStr = new Date(today.getTime() + 7 * 86400000).toISOString().split("T")[0];
   const futureStr = new Date(today.getTime() + 30 * 86400000).toISOString().split("T")[0];
-  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split("T")[0];
-  const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split("T")[0];
   const monthLabel = today.toLocaleString("default", { month: "long", year: "numeric" });
 
   function daysUntil(dateStr: string) {
@@ -164,58 +162,30 @@ async function DashboardContent() {
   // Run only queries the role actually needs
   const [
     { count: pendingVendors },
-    { data: activePOs },
-    { data: unpaidInvoices },
+    activePOsResult,
     { count: expiringDocs },
-    { data: payments },
     nearDueInvoicesResult,
     nearDuePOsResult,
-    vendorPaymentsMonthResult,
-    apOverdueResult,
-    clientPaymentsMonthResult,
-    arOutstandingResult,
-    clientTotalPaymentsResult,
     recentLogsResult,
     { count: activeProjectCount },
     vendorsForComplianceResult,
     projectProgressResult,
-    monthlyTrendsResult,
+    financialsResult,
   ] = await Promise.all([
     canOps
       ? supabase.from("vendors").select("*", { count: "exact", head: true }).eq("status", "pending")
       : Promise.resolve({ count: 0 }),
-    canOps || canFinance
-      ? supabase.from("purchase_orders").select("id, amount, status").in("status", ["issued", "partially_paid"])
-      : Promise.resolve({ data: [] }),
-    canFinance
-      ? supabase.from("service_invoices").select("id, amount").neq("status", "paid")
-      : Promise.resolve({ data: [] }),
+    canOps || isAdminUp
+      ? supabase.from("purchase_orders").select("amount", { count: "exact" }).in("status", ["issued", "partially_paid"])
+      : Promise.resolve({ count: 0, data: [] }),
     canOps || isAdminUp
       ? supabase.from("vendor_documents").select("*", { count: "exact", head: true }).lte("expiry_date", futureStr).gte("expiry_date", todayStr).is("archived_at", null)
       : Promise.resolve({ count: 0 }),
-    canFinance
-      ? supabase.from("payments").select("amount_paid")
-      : Promise.resolve({ data: [] }),
     canOps || isAdminUp
       ? supabase.from("service_invoices").select("id, amount, due_date, vendors(name)").neq("status", "paid").gte("due_date", todayStr).lte("due_date", sevenDayStr).order("due_date", { ascending: true })
       : Promise.resolve({ data: [] }),
     canOps || isAdminUp
       ? supabase.from("purchase_orders").select("id, po_number, amount, due_date, vendors(name)").in("status", ["issued", "partially_paid"]).gte("due_date", todayStr).lte("due_date", sevenDayStr).order("due_date", { ascending: true })
-      : Promise.resolve({ data: [] }),
-    canFinance
-      ? supabase.from("payments").select("amount_paid").gte("payment_date", monthStart).lte("payment_date", monthEnd).is("deleted_at", null)
-      : Promise.resolve({ data: [] }),
-    canFinance
-      ? supabase.from("service_invoices").select("amount").neq("status", "paid").lt("due_date", todayStr).is("deleted_at", null)
-      : Promise.resolve({ data: [] }),
-    canFinance
-      ? supabase.from("client_payments").select("amount_paid").gte("payment_date", monthStart).lte("payment_date", monthEnd).is("deleted_at", null)
-      : Promise.resolve({ data: [] }),
-    canFinance
-      ? supabase.from("client_invoices").select("amount, due_date").not("status", "in", '("paid","cancelled")').is("deleted_at", null)
-      : Promise.resolve({ data: [] }),
-    canFinance
-      ? supabase.from("client_payments").select("amount_paid").is("deleted_at", null)
       : Promise.resolve({ data: [] }),
     canAudit
       ? supabase.from("audit_logs").select("id, action, entity_type, created_at, profiles(full_name)").order("created_at", { ascending: false }).limit(5)
@@ -229,25 +199,21 @@ async function DashboardContent() {
     canProjects
       ? getProjectProgress(supabase)
       : Promise.resolve([]),
-    canFinance || isAdminUp
-      ? getMonthlyTrends(supabase)
-      : Promise.resolve([]),
+    canFinance || isAdminUp ? getDashboardFinancials(supabase, todayStr) : Promise.resolve(null),
   ]);
 
   // Derived calculations
-  const totalPOCommitment = activePOs?.reduce((s, p) => s + Number(p.amount), 0) ?? 0;
-  const totalPaid = payments?.reduce((s, p) => s + Number(p.amount_paid), 0) ?? 0;
-  const totalInvoiced = unpaidInvoices?.reduce((s, i) => s + Number(i.amount), 0) ?? 0;
-  const outstandingLiability = Math.max(0, totalInvoiced - totalPaid);
+  const financials = financialsResult ?? EMPTY_DASHBOARD_FINANCIALS;
+  const totalPOCommitment = financialsResult?.totalPOCommitment
+    ?? activePOsResult.data?.reduce((sum, po) => sum + Number(po.amount), 0)
+    ?? 0;
+  const totalPaid = financials.totalPaid;
+  const totalInvoiced = financials.totalInvoiced;
+  const outstandingLiability = totalInvoiced;
 
-  const apPaidThisMonth = vendorPaymentsMonthResult?.data?.reduce((s, p) => s + Number(p.amount_paid), 0) ?? 0;
-  const apOverdue = apOverdueResult?.data?.reduce((s, i) => s + Number(i.amount), 0) ?? 0;
+  const { apPaidThisMonth, apOverdue, arCollectedThisMonth, arOutstanding, arOverdue, clientTotalPaid } = financials;
   const apSettledPct = (totalPaid + outstandingLiability) > 0 ? (totalPaid / (totalPaid + outstandingLiability)) * 100 : 0;
 
-  const arCollectedThisMonth = clientPaymentsMonthResult?.data?.reduce((s, p) => s + Number(p.amount_paid), 0) ?? 0;
-  const arOutstanding = arOutstandingResult?.data?.reduce((s, i) => s + Number(i.amount), 0) ?? 0;
-  const arOverdue = arOutstandingResult?.data?.filter((i: any) => i.due_date < todayStr).reduce((s: number, i: any) => s + Number(i.amount), 0) ?? 0;
-  const clientTotalPaid = clientTotalPaymentsResult?.data?.reduce((s, p) => s + Number(p.amount_paid), 0) ?? 0;
   const arSettledPct = (clientTotalPaid + arOutstanding) > 0 ? (clientTotalPaid / (clientTotalPaid + arOutstanding)) * 100 : 0;
 
   const compliance = computeComplianceSummary(vendorsForComplianceResult?.data as any);
@@ -255,7 +221,7 @@ async function DashboardContent() {
   const nearDuePOs = nearDuePOsResult?.data ?? [];
   const recentLogs = recentLogsResult?.data ?? [];
   const projectProgress = projectProgressResult ?? [];
-  const monthlyTrends = monthlyTrendsResult ?? [];
+  const monthlyTrends = financials.monthlyTrends;
 
   const showAttentionStrip = canOps || canFinance || isAdminUp;
   const showFinancePanel = canFinance;
@@ -401,7 +367,7 @@ async function DashboardContent() {
         {(canOps || isAdminUp) && (
           <KpiCard
             label="Active POs"
-            value={activePOs?.length ?? 0}
+            value={activePOsResult.count ?? 0}
             description={`₱${totalPOCommitment.toLocaleString()} committed`}
             icon={<FileText className="h-4 w-4 text-blue-500" />}
             accent="text-blue-600 dark:text-blue-400"

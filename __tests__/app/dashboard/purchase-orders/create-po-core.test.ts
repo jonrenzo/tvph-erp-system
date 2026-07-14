@@ -162,6 +162,10 @@ describe('createPurchaseOrderCore', () => {
     mockRevalidatePath.mockReturnValue(undefined);
   });
 
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   describe('Auth failure', () => {
     it('returns { error: "Unauthorized" } when requireCapability fails', async () => {
       mockRequireCapability.mockResolvedValue({
@@ -364,6 +368,19 @@ describe('createPurchaseOrderCore', () => {
       const insertedData = mockSupabase.poInsertMock.mock.calls[0][0];
 
       expect(insertedData.issued_date).toBe(customDate);
+    });
+
+    it('defaults mobilization_date to tomorrow in Manila when creating a PO', async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-07-07T16:30:00.000Z'));
+
+      await createPurchaseOrderCore({
+        vendor_id: 'vendor-1',
+        line_items: [{ description: 'Item 1', qty: 1, unit_price: 100 }],
+      });
+
+      const insertedData = mockSupabase.poInsertMock.mock.calls[0][0];
+
+      expect(insertedData.mobilization_date).toBe('2026-07-09');
     });
   });
 
