@@ -1,0 +1,13 @@
+import fs from "node:fs";
+import path from "node:path";
+
+const migrations = fs.readdirSync(path.join(process.cwd(), "supabase/migrations"));
+const filename = migrations.find((name) => name.endsWith("_payment_reminder_engine.sql"));
+if (!filename) throw new Error("payment reminder migration is missing");
+const migration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations", filename), "utf8");
+
+it("protects penalties and schedules the vendor route", () => {
+  expect(migration).toContain("alter table public.po_penalties enable row level security");
+  expect(migration).toContain("create unique index if not exists po_penalties_po_id_idx");
+  expect(migration).toContain("/api/cron/vendor-deadline-reminders");
+});
