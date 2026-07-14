@@ -192,7 +192,7 @@ export async function createInvoice(prevState: any, formData: FormData) {
 
   // PO Amount Guard (includes completion-certificate ceiling when one is approved)
   if (po_id) {
-    const [{ data: po }, { data: existingInvoices }, { data: topCert }] = await Promise.all([
+    const [{ data: po, error: poError }, { data: existingInvoices }, { data: topCert }] = await Promise.all([
       supabase.from('purchase_orders').select('amount, expense_category, net_days').eq('id', po_id).single(),
       supabase.from('service_invoices')
         .select('amount')
@@ -206,6 +206,8 @@ export async function createInvoice(prevState: any, formData: FormData) {
         .limit(1)
         .maybeSingle(),
     ]);
+
+    if (poError || !po) return { error: 'Linked purchase order could not be loaded.' };
 
     if (po) {
       linkedPo = po;

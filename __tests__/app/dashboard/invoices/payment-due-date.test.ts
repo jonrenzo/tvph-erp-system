@@ -29,6 +29,7 @@ function invoiceFormData(poId = "") {
 
 describe("invoice payment due dates", () => {
   let invoiceInsert: jest.Mock;
+  let purchaseOrderResult: { data: any; error?: any };
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -36,6 +37,7 @@ describe("invoice payment due dates", () => {
     invoiceInsert = jest.fn().mockReturnValue({
       select: jest.fn().mockReturnValue({ single: jest.fn().mockResolvedValue({ data: { id: "invoice-1" }, error: null }) }),
     });
+    purchaseOrderResult = { data: { amount: 1000, expense_category: "materials", net_days: 45 } };
     const duplicateQuery = {
       eq: jest.fn().mockReturnThis(),
       is: jest.fn().mockReturnThis(),
@@ -62,7 +64,7 @@ describe("invoice payment due dates", () => {
           };
         }
         if (table === "purchase_orders") {
-          return { select: jest.fn().mockReturnValue({ eq: jest.fn().mockReturnValue({ single: jest.fn().mockResolvedValue({ data: { amount: 1000, expense_category: "materials", net_days: 30 } }) }) }) };
+          return { select: jest.fn().mockReturnValue({ eq: jest.fn().mockReturnValue({ single: jest.fn().mockImplementation(() => Promise.resolve(purchaseOrderResult)) }) }) };
         }
         return { select: jest.fn().mockReturnValue(certificateQuery) };
       }),
@@ -76,7 +78,25 @@ describe("invoice payment due dates", () => {
   it("uses the linked PO's net days from the server submission date", async () => {
     await createInvoice(null, invoiceFormData("po-1"));
 
-    expect(invoiceInsert).toHaveBeenCalledWith(expect.objectContaining({ due_date: "2026-08-14" }));
+    expect(invoiceInsert).toHaveBeenCalledWith(expect.objectContaining({ due_date: "2026-08-29" }));
+  });
+
+  it("rejects a linked invoice when its PO is missing", async () => {
+    purchaseOrderResult = { data: null };
+
+    await expect(createInvoice(null, invoiceFormData("po-missing"))).resolves.toEqual({
+      error: "Linked purchase order could not be loaded.",
+    });
+    expect(invoiceInsert).not.toHaveBeenCalled();
+  });
+
+  it("rejects a linked invoice when its PO query fails", async () => {
+    purchaseOrderResult = { data: null, error: { message: "database unavailable" } };
+
+    await expect(createInvoice(null, invoiceFormData("po-error"))).resolves.toEqual({
+      error: "Linked purchase order could not be loaded.",
+    });
+    expect(invoiceInsert).not.toHaveBeenCalled();
   });
 
   it("retains an unlinked manual due date", async () => {
