@@ -17,7 +17,7 @@ export default async function NewInvoicePage() {
   // Fetch all issued POs to allow linking
   const { data: pos } = await supabase
     .from('purchase_orders')
-    .select('id, po_number, vendor_id, amount')
+    .select('id, po_number, vendor_id, amount, net_days')
     .in('status', ['issued', 'partially_paid'])
     .is('deleted_at', null)
     .order('po_number');
