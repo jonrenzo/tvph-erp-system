@@ -75,7 +75,7 @@ export function NotificationBell() {
         { event: "INSERT", schema: "public", table: "notifications" },
         (payload) => {
           const newNotif = payload.new as Notification;
-          setNotifications((prev) => [newNotif, ...prev]);
+          setNotifications((prev) => [newNotif, ...prev].slice(0, 50));
         },
       )
       .on(

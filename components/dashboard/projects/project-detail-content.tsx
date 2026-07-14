@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   FolderGit2, Edit2, ExternalLink, Clock, FileText, Building2,
   Package, Plus, Unlink, Loader2, AlertCircle, Users, Upload,
-  TrendingUp, CircleDollarSign, CreditCard, CheckCircle2,
+  TrendingUp, CheckCircle2,
 } from "lucide-react";
 import { updateProject, uploadContractDocument } from "@/app/dashboard/projects/actions";
 import { linkVendorToProject, removeVendorFromProject } from "@/app/dashboard/projects/actions";
@@ -147,6 +147,15 @@ export function ProjectDetailContent({
   };
 
   const totalPOValue = pos.reduce((sum, po) => sum + Number(po.amount), 0);
+  const totalDpAmount = pos.reduce((sum, po) => sum + Number((po as any).dp_amount || 0), 0);
+  const posByVendor = new Map<string, PO[]>();
+  for (const po of pos) {
+    const vendorId = po.vendors?.id;
+    if (!vendorId) continue;
+    const vendorPOs = posByVendor.get(vendorId);
+    if (vendorPOs) vendorPOs.push(po);
+    else posByVendor.set(vendorId, [po]);
+  }
   const client = project.crm_accounts;
 
   return (
@@ -323,13 +332,13 @@ export function ProjectDetailContent({
               <div>
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">PO Remaining Value</label>
                 <div className="text-xl font-bold text-amber-600 dark:text-amber-400">
-                  ₱{Math.max(0, billingSummary.totalPOValue - (billingSummary.totalInvoiced + pos.reduce((s, po) => s + Number((po as any).dp_amount || 0), 0))).toLocaleString()}
+                  ₱{Math.max(0, billingSummary.totalPOValue - (billingSummary.totalInvoiced + totalDpAmount)).toLocaleString()}
                 </div>
               </div>
               <div>
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Total Invoiced (+DP)</label>
                 <div className="flex items-center gap-3">
-                  <span className="text-xl font-bold text-blue-600 dark:text-blue-400">₱{(billingSummary.totalInvoiced + pos.reduce((s, po) => s + Number((po as any).dp_amount || 0), 0)).toLocaleString()}</span>
+                  <span className="text-xl font-bold text-blue-600 dark:text-blue-400">₱{(billingSummary.totalInvoiced + totalDpAmount).toLocaleString()}</span>
                   <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">{billingSummary.billingPct}%</span>
                 </div>
                 <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden mt-1.5">
@@ -491,7 +500,7 @@ export function ProjectDetailContent({
 
           <div className="space-y-3">
             {linkedVendors.length > 0 ? linkedVendors.map((vendor) => {
-              const vendorPOs = pos.filter((po) => po.vendors?.id === vendor.id);
+              const vendorPOs = posByVendor.get(vendor.id) || [];
               return (
                 <div key={vendor.id} className="bg-white dark:bg-[#0a0a0a] border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm hover:border-primary/50 transition-colors group">
                   <div className="flex items-center justify-between mb-2">
