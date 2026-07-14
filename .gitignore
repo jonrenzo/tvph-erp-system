@@ -43,6 +43,7 @@ next-env.d.ts
 # scratch files
 scratch/
 .worktrees/
+.superpowers/
 
 # SharePoint vendor migration working data (contains extracted TINs, bank info, raw docs)
 /sharepoint-import-work/
