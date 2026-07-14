@@ -9,5 +9,7 @@ const migration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations"
 it("protects penalties and schedules the vendor route", () => {
   expect(migration).toContain("alter table public.po_penalties enable row level security");
   expect(migration).toContain("create unique index if not exists po_penalties_po_id_idx");
+  expect(migration).toContain("first_overdue_on date,");
+  expect(migration).toContain("last_calculated_on date,");
   expect(migration).toContain("/api/cron/vendor-deadline-reminders");
 });

@@ -51,4 +51,35 @@ describe("purchase order payment terms", () => {
       error: "Provide a reason for the penalty override.",
     });
   });
+
+  it("creates a manual-only penalty row for a first override", async () => {
+    const upsert = jest.fn().mockResolvedValue({ error: null });
+    mockCreateClient.mockResolvedValue({ from: jest.fn().mockReturnValue({ upsert }) } as any);
+    const form = new FormData();
+    form.set("override_amount", "2500");
+    form.set("override_reason", "Approved settlement");
+
+    await expect(overridePurchaseOrderPenalty("po-1", form)).resolves.toEqual({ success: true });
+    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({
+      po_id: "po-1",
+      override_amount: 2500,
+      override_reason: "Approved settlement",
+      overridden_by: "user-1",
+    }), { onConflict: "po_id" });
+  });
+
+  it("reports a PO that left draft status before the guarded terms update", async () => {
+    const guardedUpdate = { eq: jest.fn().mockReturnThis() };
+    guardedUpdate.eq.mockReturnValueOnce(guardedUpdate).mockResolvedValueOnce({ error: null, count: 0 });
+    const select = { eq: jest.fn().mockReturnValue({ single: jest.fn().mockResolvedValue({ data: { status: "draft" } }) }) };
+    mockCreateClient.mockResolvedValue({ from: jest.fn().mockReturnValue({ select: jest.fn().mockReturnValue(select), update: jest.fn().mockReturnValue(guardedUpdate) }) } as any);
+    const form = new FormData();
+    form.set("net_days", "30");
+    form.set("dp_due_days", "");
+    form.set("penalty_rate", "");
+    form.set("penalty_type", "monthly");
+
+    await expect(updatePurchaseOrderTerms("po-1", form)).resolves.toEqual({ error: "Terms can only be edited while the PO is a draft." });
+    expect(guardedUpdate.eq).toHaveBeenCalledWith("status", "draft");
+  });
 });

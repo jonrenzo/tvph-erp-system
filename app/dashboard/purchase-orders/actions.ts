@@ -260,8 +260,13 @@ export async function updatePurchaseOrderTerms(poId: string, formData: FormData)
   const terms = parseTerms(formData);
   if ('error' in terms) return terms;
   const updated_at = new Date().toISOString();
-  const { error } = await supabase.from('purchase_orders').update({ ...terms, terms_configured_at: updated_at }).eq('id', poId);
+  const { error, count } = await supabase
+    .from('purchase_orders')
+    .update({ ...terms, terms_configured_at: updated_at }, { count: 'exact' })
+    .eq('id', poId)
+    .eq('status', 'draft');
   if (error) return { error: error.message };
+  if (count === 0) return { error: 'Terms can only be edited while the PO is a draft.' };
 
   await recordAuditLog({ entity_type: 'purchase_order', entity_id: poId, action: 'UPDATE', changes: { after: terms }, performed_by: user.id });
   revalidatePath(`/dashboard/purchase-orders/${poId}`);
