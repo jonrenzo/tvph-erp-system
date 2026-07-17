@@ -78,9 +78,21 @@ describe('submitCompletionCertificate', () => {
       }),
     };
 
+    // submitCompletionCertificate now calls checkProjectCompletionLimit, which
+    // reads purchase_orders via .select(...).eq(...).single(). Returning a row
+    // with a null project_id makes that check a no-op (no project cap to enforce)
+    // so these cert-submission tests stay focused on submission behaviour.
+    const projectSelectChain = {
+      eq: jest.fn().mockReturnThis(),
+      is: jest.fn().mockReturnThis(),
+      in: jest.fn().mockReturnThis(),
+      single: jest.fn().mockResolvedValue({ data: { project_id: null }, error: null }),
+    };
+
     mockSupabase = {
       from: jest.fn().mockReturnValue({
         insert: jest.fn().mockReturnValue(insertChain),
+        select: jest.fn().mockReturnValue(projectSelectChain),
       }),
       storage: {
         from: jest.fn().mockReturnValue(storageChain),

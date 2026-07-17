@@ -35,6 +35,7 @@ import { PoApprovalActions } from "@/components/dashboard/purchase-orders/po-app
 import { PoCertUpload } from "@/components/dashboard/purchase-orders/po-cert-upload";
 import { NotifyFinanceButton } from "@/components/dashboard/purchase-orders/notify-finance-button";
 import { PaymentRequestButton } from "@/components/dashboard/purchase-orders/payment-request-button";
+import { PoTermsCard } from "@/components/dashboard/purchase-orders/po-terms-card";
 import { getCurrentProfile, hasCapability } from "@/lib/auth/permissions";
 import { signDocUrls } from "@/utils/storage";
 
@@ -106,6 +107,12 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
     .eq("po_id", po.id)
     .order("sn");
 
+  const { data: penalty } = await supabase
+    .from("po_penalties")
+    .select("calculated_amount, override_amount, override_reason")
+    .eq("po_id", po.id)
+    .maybeSingle();
+
   // Latest PO email attempt — drives the "email not sent" banner.
   const { data: lastPoEmail } = await supabase
     .from("email_log")
@@ -118,6 +125,8 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
 
   const canSendEmail = hasCapability(currentRole, "email.send");
   const canApprovePO = hasCapability(currentRole, "po.approve");
+  const canEditTerms = hasCapability(currentRole, "po.write");
+  const canOverridePenalty = ["finance", "admin", "superadmin"].includes(currentRole || "");
 
   const invoiceIds = invoices?.map((i) => i.id) || [];
 
@@ -155,6 +164,20 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
     for (const p of profiles || []) {
       poProfiles[p.id] = { full_name: p.full_name, role: p.role };
     }
+  }
+
+  // Eligible approvers for the submit-for-approval picker: admins/superadmins
+  // other than the current user (the 4-eyes rule blocks self-approval). Only
+  // needed while the PO is a draft.
+  let eligibleApprovers: { id: string; full_name: string; email: string }[] = [];
+  if (po.status === "draft" && currentUser) {
+    const { data: admins } = await supabase
+      .from("profiles")
+      .select("id, full_name, email")
+      .in("role", ["superadmin", "admin"])
+      .neq("id", currentUser.id)
+      .order("full_name");
+    eligibleApprovers = admins || [];
   }
 
   // Fetch completion certificates for this PO
@@ -313,7 +336,7 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
 
         <div className="flex items-center gap-3 md:ml-auto">
           {po.status === "draft" && hasCapability(currentRole, "po.status") && (
-            <PoIssueButton poId={po.id} />
+            <PoIssueButton poId={po.id} eligibleApprovers={eligibleApprovers} />
           )}
           {["issued", "paid", "overpaid"].includes(po.status) && canSendEmail && (
             <PoResendButton poId={po.id} />
@@ -821,6 +844,14 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left Column: Details */}
         <div className="lg:col-span-2 space-y-8">
+          <PoTermsCard
+            poId={po.id}
+            status={po.status}
+            terms={po}
+            penalty={penalty}
+            canEdit={canEditTerms}
+            canOverride={canOverridePenalty}
+          />
           <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
             <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-[#0a0a0a]/50 flex items-center justify-between">
               <h2 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">

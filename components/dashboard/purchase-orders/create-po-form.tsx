@@ -345,6 +345,30 @@ export function CreatePOForm({
               />
             </div>
           </div>
+
+          <div className="space-y-2">
+            <label htmlFor="net_days" className="text-sm font-medium text-slate-700 dark:text-slate-300">Payment Terms (Net Days)</label>
+            <input id="net_days" name="net_days" type="number" min="1" step="1" defaultValue="30" required className={inputClass} />
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="dp_due_days" className="text-sm font-medium text-slate-700 dark:text-slate-300">DP Due Days <span className="text-slate-400 font-normal ml-1">(Optional)</span></label>
+            <input id="dp_due_days" name="dp_due_days" type="number" min="0" step="1" className={inputClass} />
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="penalty_rate" className="text-sm font-medium text-slate-700 dark:text-slate-300">Penalty Rate <span className="text-slate-400 font-normal ml-1">(Optional)</span></label>
+            <input id="penalty_rate" name="penalty_rate" type="number" min="0" max="1" step="0.0001" placeholder="0.1" className={inputClass} />
+            <p className="text-xs text-slate-500">Enter 0.1 for a 10% penalty rate.</p>
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="penalty_type" className="text-sm font-medium text-slate-700 dark:text-slate-300">Penalty Type</label>
+            <select id="penalty_type" name="penalty_type" defaultValue="monthly" className={inputClass}>
+              <option value="monthly">Monthly (prorated daily)</option>
+              <option value="fixed">Fixed</option>
+            </select>
+          </div>
         </div>
       </div>
 
