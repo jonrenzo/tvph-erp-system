@@ -31,7 +31,9 @@ jest.mock('sonner', () => ({
 
 // Mock the providers
 jest.mock('@/components/theme-provider', () => ({
-  ThemeProvider: ({ children }: any) => <div data-testid="theme-provider">{children}</div>,
+  ThemeProvider: ({ children, defaultTheme }: any) => (
+    <div data-testid="theme-provider" data-default-theme={defaultTheme}>{children}</div>
+  ),
 }));
 
 jest.mock('@/components/accent-provider', () => ({
@@ -43,6 +45,7 @@ jest.mock('@/components/accent-provider', () => ({
 import { Toaster } from 'sonner';
 import { ThemeProvider } from '@/components/theme-provider';
 import { AccentProvider } from '@/components/accent-provider';
+import RootLayout from '@/app/layout';
 
 // Create a test wrapper that mimics RootLayout structure without the html/body
 function RootLayoutWrapper({ children }: { children: React.ReactNode }) {
@@ -132,6 +135,12 @@ describe('RootLayout - Toaster Component', () => {
   });
 
   describe('Layout structure', () => {
+    it('defaults the root theme provider to light', () => {
+      render(<RootLayout><div>Test Content</div></RootLayout>);
+
+      expect(screen.getByTestId('theme-provider')).toHaveAttribute('data-default-theme', 'light');
+    });
+
     it('renders children content passed to layout', () => {
       render(
         <RootLayoutWrapper>
