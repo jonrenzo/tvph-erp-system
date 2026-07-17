@@ -185,7 +185,7 @@ export async function DashboardContent() {
       ? supabase.from("service_invoices").select("id, amount, due_date, vendors(name)").neq("status", "paid").is("deleted_at", null).gte("due_date", todayStr).lte("due_date", fourteenDayStr).order("due_date", { ascending: true })
       : Promise.resolve({ data: [] }),
     canOps || isAdminUp
-      ? supabase.from("purchase_orders").select("id, po_number, amount, due_date, vendors(name)").in("status", ["issued", "partially_paid"]).is("deleted_at", null).gte("due_date", todayStr).lte("due_date", fourteenDayStr).order("due_date", { ascending: true })
+      ? supabase.from("purchase_orders")      .select("id, po_number, description, amount, due_date, vendors(name)").in("status", ["issued", "partially_paid"]).is("deleted_at", null).gte("due_date", todayStr).lte("due_date", fourteenDayStr).order("due_date", { ascending: true })
       : Promise.resolve({ data: [] }),
     canAudit
       ? supabase.from("audit_logs").select("id, action, entity_type, created_at, profiles(full_name)").order("created_at", { ascending: false }).limit(5)
@@ -330,8 +330,8 @@ export async function DashboardContent() {
                 </div>
               ) : (
                 <div className="divide-y divide-slate-50 dark:divide-slate-800/40">
-                  <div className="px-4 py-2 grid grid-cols-[1fr_auto_auto_auto] gap-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                    <span>Vendor</span><span className="text-right">Amount</span><span className="text-right">Due Date</span><span className="text-right">Left</span>
+                  <div className="px-4 py-2 grid grid-cols-[auto_1fr_1fr_auto_auto_auto] gap-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                    <span>PO #</span><span>Vendor</span><span>Description</span><span className="text-right">Amount</span><span className="text-right">Due Date</span><span className="text-right">Left</span>
                   </div>
                   {nearDuePOs.map((po: any) => {
                     const days = daysUntil(po.due_date);
@@ -339,9 +339,11 @@ export async function DashboardContent() {
                       <Link
                         key={po.id}
                         href={`/dashboard/purchase-orders/${po.id}`}
-                        className={`px-4 py-3 grid grid-cols-[1fr_auto_auto_auto] gap-3 items-center text-sm transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-800/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-md ${urgencyRowClass(days)}`}
+                        className={`px-4 py-3 grid grid-cols-[auto_1fr_1fr_auto_auto_auto] gap-3 items-center text-sm transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-800/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-md ${urgencyRowClass(days)}`}
                       >
+                        <span className="font-mono text-xs font-medium text-slate-700 dark:text-slate-300">{po.po_number}</span>
                         <span className="font-medium text-slate-800 dark:text-slate-200 truncate">{po.vendors?.name ?? "—"}</span>
+                        <span className="text-xs text-slate-500 dark:text-slate-400 truncate">{po.description ?? "—"}</span>
                         <span className="text-right font-mono text-xs text-slate-700 dark:text-slate-300 tabular-nums">₱{Number(po.amount).toLocaleString()}</span>
                         <span className="text-right text-xs text-slate-500 dark:text-slate-400 tabular-nums">{po.due_date}</span>
                         <UrgencyBadge days={days} />

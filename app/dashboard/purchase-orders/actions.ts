@@ -1123,6 +1123,18 @@ export async function createPaymentRequest(
     created_by: user.id,
   });
 
+  const { sendPaymentRequestNotification } = await import('@/lib/email/payment-request');
+  await sendPaymentRequestNotification(
+    poId,
+    po.vendor_id,
+    amount,
+    dueInDays ?? 30,
+    notes || null,
+    user.id,
+    po.po_number as string,
+    vendorName,
+  );
+
   revalidatePath(`/dashboard/purchase-orders/${poId}`);
   revalidatePath('/dashboard/accounting');
   return { success: true };

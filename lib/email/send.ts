@@ -10,7 +10,8 @@ export type EmailKind =
   | "po_pending_approval"
   | "doc_reminder"
   | "doc_request"
-  | "invoice_due_reminder";
+  | "invoice_due_reminder"
+  | "payment_request_notification";
 
 /**
  * Internal Cc (e.g. the PO creator / requester). Disabled when
