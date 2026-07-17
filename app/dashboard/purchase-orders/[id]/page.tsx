@@ -87,10 +87,10 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
     .is("deleted_at", null)
     .order("name");
 
-  // Fetch all invoices linked to this PO
+  // Fetch all invoices linked to this PO (include PR and carry-forward data)
   const { data: invoices } = await supabase
     .from("service_invoices")
-    .select("id, amount, status, invoice_number")
+    .select("id, amount, status, invoice_number, payment_request_id, carry_forward_amount")
     .eq("po_id", po.id);
 
   // Fetch line items
@@ -258,12 +258,21 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
   // Fetch latest payment request for this PO
   const { data: paymentRequest } = await supabase
     .from('payment_requests')
-    .select('id, amount, due_in_days, notes, status, completion_cert_id, percent_complete, created_at, rejection_reason')
+    .select('id, request_number, amount, due_in_days, notes, status, completion_cert_id, percent_complete, created_at, rejection_reason')
     .eq('po_id', po.id)
-    .in('status', ['pending', 'approved', 'rejected'])
+    .in('status', ['pending', 'approved', 'rejected', 'fully_invoiced'])
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  // Compute PR consumption
+  const prInvoices = (invoices || []).filter(
+    (inv: any) => inv.payment_request_id === paymentRequest?.id
+  );
+  const prConsumed = prInvoices
+    .filter((inv: any) => ['approved', 'partially_paid', 'paid'].includes(inv.status))
+    .reduce((sum: number, inv: any) => sum + Number(inv.amount), 0);
+  const prRemaining = paymentRequest ? Math.max(0, Number(paymentRequest.amount) - prConsumed) : 0;
 
   // Approved completion certs available to reference in a PR
   const approvedCerts = (certs || []).filter(c => c.status === 'approved').map(c => ({
@@ -559,6 +568,8 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
         approvedCerts={approvedCerts}
         canCreate={canCreatePR}
         canApprove={canApprovePR}
+        consumed={prConsumed}
+        remaining={prRemaining}
       />
 
       {/* Payment Notification */}
@@ -787,6 +798,45 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
                 </div>
               )}
             </div>
+
+            {/* Payment Request Consumption */}
+            {paymentRequest && (
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-3">
+                  Payment Request: {paymentRequest.request_number}
+                </label>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-500">Approved Amount</span>
+                    <span className="font-bold text-slate-900 dark:text-white">₱{Number(paymentRequest.amount).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-500">Invoiced</span>
+                    <span className="font-bold text-slate-900 dark:text-white">₱{prConsumed.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs pt-1 border-t border-slate-100 dark:border-slate-800">
+                    <span className="text-slate-500">Remaining / Carry-Forward</span>
+                    <span className={`font-bold ${prRemaining > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>
+                      {paymentRequest.status === 'fully_invoiced' ? 'Fully Invoiced' : `₱${prRemaining.toLocaleString()}`}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-500">Status</span>
+                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold border ${
+                      paymentRequest.status === 'fully_invoiced'
+                        ? 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400'
+                        : paymentRequest.status === 'approved'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400'
+                        : paymentRequest.status === 'rejected'
+                        ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400'
+                        : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400'
+                    }`}>
+                      {paymentRequest.status.replace(/_/g, ' ').toUpperCase()}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -970,7 +1020,7 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
             </div>
           )}
 
-          {/* Linked Invoices Section Placeholder */}
+          {/* Linked Invoices Section */}
           <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
             <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
               <h2 className="font-semibold text-slate-900 dark:text-white">
@@ -986,7 +1036,9 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
                   <tr>
                     <th className="px-6 py-3 font-semibold">Invoice #</th>
                     <th className="px-6 py-3 font-semibold">Amount</th>
+                    <th className="px-6 py-3 font-semibold">Payment Request</th>
                     <th className="px-6 py-3 font-semibold">Status</th>
+                    <th className="px-6 py-3 font-semibold text-right">Carry-Forward</th>
                     <th className="px-6 py-3 text-right">Action</th>
                   </tr>
                 </thead>
@@ -994,7 +1046,7 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
                   {invoices?.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={4}
+                        colSpan={6}
                         className="px-6 py-12 text-center text-slate-400 italic"
                       >
                         No invoices linked to this PO yet.
@@ -1012,16 +1064,44 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
                         <td className="px-6 py-4 font-semibold text-slate-900 dark:text-white">
                           ₱{Number(inv.amount).toLocaleString()}
                         </td>
+                        <td className="px-6 py-4 text-xs text-slate-500">
+                          {inv.payment_request_id
+                            ? (invoices as any[])?.find((i: any) => i.id === inv.id)?.carry_forward_amount != null
+                              ? 'PR linked'
+                              : 'PR linked'
+                            : '—'}
+                        </td>
                         <td className="px-6 py-4">
                           <span
                             className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                               inv.status === "paid"
                                 ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400"
+                                : inv.status === "approved"
+                                ? "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400"
+                                : inv.status === "disputed"
+                                ? "bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400"
                                 : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400"
                             }`}
                           >
                             {inv.status.toUpperCase()}
                           </span>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          {inv.carry_forward_amount != null && (
+                            <span className={`text-xs font-semibold ${
+                              Number(inv.carry_forward_amount) > 0
+                                ? 'text-emerald-600 dark:text-emerald-400'
+                                : Number(inv.carry_forward_amount) < 0
+                                ? 'text-red-600 dark:text-red-400'
+                                : 'text-slate-400'
+                            }`}>
+                              {Number(inv.carry_forward_amount) > 0
+                                ? `₱${Number(inv.carry_forward_amount).toLocaleString()}`
+                                : Number(inv.carry_forward_amount) < 0
+                                ? `(₱${Math.abs(Number(inv.carry_forward_amount)).toLocaleString()})`
+                                : '—'}
+                            </span>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-right">
                           <Link

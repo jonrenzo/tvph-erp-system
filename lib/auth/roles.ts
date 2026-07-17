@@ -58,7 +58,8 @@ export type Capability =
   | "payment_reservation.notify"
   | "payment_reservation.acknowledge"
   | "payment_request.create"
-  | "payment_request.approve";
+  | "payment_request.approve"
+  | "invoice.override";
 
 // superadmin is granted on every capability. admin gets everything EXCEPT the
 // three superadmin-only items (audit.read, vendor.delete, po.delete).
@@ -102,6 +103,7 @@ export const CAPABILITY_ROLES = {
   "payment_reservation.acknowledge": ["superadmin", "admin", "finance"],
   "payment_request.create": ["superadmin", "admin", "operations"],
   "payment_request.approve": ["superadmin", "admin", "finance"],
+  "invoice.override": ["superadmin", "admin", "finance"],
 } as const satisfies Record<Capability, readonly Role[]>;
 
 export function hasCapability(role: string | null | undefined, capability: Capability) {

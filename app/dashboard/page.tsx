@@ -139,7 +139,7 @@ function CardHeader({
 
 // ── main data component ──────────────────────────────────────────────────────
 
-async function DashboardContent() {
+export async function DashboardContent() {
   const supabase = await createClient();
   const { role } = await getCurrentProfile(supabase);
 
@@ -151,7 +151,7 @@ async function DashboardContent() {
 
   const today = new Date();
   const todayStr = today.toISOString().split("T")[0];
-  const sevenDayStr = new Date(today.getTime() + 7 * 86400000).toISOString().split("T")[0];
+  const fourteenDayStr = new Date(today.getTime() + 14 * 86400000).toISOString().split("T")[0];
   const futureStr = new Date(today.getTime() + 30 * 86400000).toISOString().split("T")[0];
   const monthLabel = today.toLocaleString("default", { month: "long", year: "numeric" });
 
@@ -182,10 +182,10 @@ async function DashboardContent() {
       ? supabase.from("vendor_documents").select("*", { count: "exact", head: true }).lte("expiry_date", futureStr).gte("expiry_date", todayStr).is("archived_at", null)
       : Promise.resolve({ count: 0 }),
     canOps || isAdminUp
-      ? supabase.from("service_invoices").select("id, amount, due_date, vendors(name)").neq("status", "paid").gte("due_date", todayStr).lte("due_date", sevenDayStr).order("due_date", { ascending: true })
+      ? supabase.from("service_invoices").select("id, amount, due_date, vendors(name)").neq("status", "paid").is("deleted_at", null).gte("due_date", todayStr).lte("due_date", fourteenDayStr).order("due_date", { ascending: true })
       : Promise.resolve({ data: [] }),
     canOps || isAdminUp
-      ? supabase.from("purchase_orders").select("id, po_number, amount, due_date, vendors(name)").in("status", ["issued", "partially_paid"]).gte("due_date", todayStr).lte("due_date", sevenDayStr).order("due_date", { ascending: true })
+      ? supabase.from("purchase_orders").select("id, po_number, amount, due_date, vendors(name)").in("status", ["issued", "partially_paid"]).is("deleted_at", null).gte("due_date", todayStr).lte("due_date", fourteenDayStr).order("due_date", { ascending: true })
       : Promise.resolve({ data: [] }),
     canAudit
       ? supabase.from("audit_logs").select("id, action, entity_type, created_at, profiles(full_name)").order("created_at", { ascending: false }).limit(5)
@@ -270,7 +270,7 @@ async function DashboardContent() {
               <CardHeader
                 icon={<AlertCircle className="h-4 w-4 text-red-500" />}
                 title="Near-Due Invoices"
-                subtitle="Within 7 days"
+                subtitle="Within 14 days"
                 badge={
                   <span className="inline-flex items-center justify-center min-w-[1.5rem] h-6 px-2 rounded-full text-[11px] font-bold bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400">
                     {nearDueInvoices.length}
@@ -279,7 +279,7 @@ async function DashboardContent() {
               />
               {nearDueInvoices.length === 0 ? (
                 <div className="px-5 py-10 text-center text-slate-400 text-sm">
-                  No invoices due within 7 days.
+                  No invoices due within 14 days.
                 </div>
               ) : (
                 <div className="divide-y divide-slate-50 dark:divide-slate-800/40">
@@ -289,12 +289,16 @@ async function DashboardContent() {
                   {nearDueInvoices.map((inv: any) => {
                     const days = daysUntil(inv.due_date);
                     return (
-                      <div key={inv.id} className={`px-4 py-3 grid grid-cols-[1fr_auto_auto_auto] gap-3 items-center text-sm transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-800/10 ${urgencyRowClass(days)}`}>
+                      <Link
+                        key={inv.id}
+                        href={`/dashboard/invoices/${inv.id}`}
+                        className={`px-4 py-3 grid grid-cols-[1fr_auto_auto_auto] gap-3 items-center text-sm transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-800/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-md ${urgencyRowClass(days)}`}
+                      >
                         <span className="font-medium text-slate-800 dark:text-slate-200 truncate">{inv.vendors?.name ?? "—"}</span>
                         <span className="text-right font-mono text-xs text-slate-700 dark:text-slate-300 tabular-nums">₱{Number(inv.amount).toLocaleString()}</span>
                         <span className="text-right text-xs text-slate-500 dark:text-slate-400 tabular-nums">{inv.due_date}</span>
                         <UrgencyBadge days={days} />
-                      </div>
+                      </Link>
                     );
                   })}
                 </div>
@@ -313,7 +317,7 @@ async function DashboardContent() {
               <CardHeader
                 icon={<CalendarClock className="h-4 w-4 text-amber-500" />}
                 title="Near-Due Purchase Orders"
-                subtitle="Within 7 days"
+                subtitle="Within 14 days"
                 badge={
                   <span className="inline-flex items-center justify-center min-w-[1.5rem] h-6 px-2 rounded-full text-[11px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400">
                     {nearDuePOs.length}
@@ -322,7 +326,7 @@ async function DashboardContent() {
               />
               {nearDuePOs.length === 0 ? (
                 <div className="px-5 py-10 text-center text-slate-400 text-sm">
-                  No purchase orders due within 7 days.
+                  No purchase orders due within 14 days.
                 </div>
               ) : (
                 <div className="divide-y divide-slate-50 dark:divide-slate-800/40">
@@ -332,12 +336,16 @@ async function DashboardContent() {
                   {nearDuePOs.map((po: any) => {
                     const days = daysUntil(po.due_date);
                     return (
-                      <div key={po.id} className={`px-4 py-3 grid grid-cols-[1fr_auto_auto_auto] gap-3 items-center text-sm transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-800/10 ${urgencyRowClass(days)}`}>
+                      <Link
+                        key={po.id}
+                        href={`/dashboard/purchase-orders/${po.id}`}
+                        className={`px-4 py-3 grid grid-cols-[1fr_auto_auto_auto] gap-3 items-center text-sm transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-800/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-md ${urgencyRowClass(days)}`}
+                      >
                         <span className="font-medium text-slate-800 dark:text-slate-200 truncate">{po.vendors?.name ?? "—"}</span>
                         <span className="text-right font-mono text-xs text-slate-700 dark:text-slate-300 tabular-nums">₱{Number(po.amount).toLocaleString()}</span>
                         <span className="text-right text-xs text-slate-500 dark:text-slate-400 tabular-nums">{po.due_date}</span>
                         <UrgencyBadge days={days} />
-                      </div>
+                      </Link>
                     );
                   })}
                 </div>
