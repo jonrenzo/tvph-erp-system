@@ -5,7 +5,12 @@ import { render } from "@react-email/render";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import { getResend } from "./resend";
 
-export type EmailKind = "po_issued" | "doc_reminder" | "doc_request" | "invoice_due_reminder";
+export type EmailKind =
+  | "po_issued"
+  | "po_pending_approval"
+  | "doc_reminder"
+  | "doc_request"
+  | "invoice_due_reminder";
 
 /**
  * Internal Cc (e.g. the PO creator / requester). Disabled when

@@ -15,10 +15,26 @@ jest.mock("@/lib/reports/compliance", () => ({
   computeComplianceSummary: jest.fn(),
 }));
 
-jest.mock("@/lib/dashboard/queries", () => ({
-  getProjectProgress: jest.fn().mockResolvedValue([]),
-  getMonthlyTrends: jest.fn().mockResolvedValue([]),
-}));
+jest.mock("@/lib/dashboard/queries", () => {
+  const EMPTY_DASHBOARD_FINANCIALS = {
+    totalPOCommitment: 0,
+    totalPaid: 0,
+    totalInvoiced: 0,
+    apPaidThisMonth: 0,
+    apOverdue: 0,
+    arCollectedThisMonth: 0,
+    arOutstanding: 0,
+    arOverdue: 0,
+    clientTotalPaid: 0,
+    monthlyTrends: [],
+  };
+  return {
+    EMPTY_DASHBOARD_FINANCIALS,
+    getDashboardFinancials: jest.fn().mockResolvedValue(EMPTY_DASHBOARD_FINANCIALS),
+    getProjectProgress: jest.fn().mockResolvedValue([]),
+    getMonthlyTrends: jest.fn().mockResolvedValue([]),
+  };
+});
 
 jest.mock("next/link", () => {
   return ({ children, href, ...props }: any) => (

@@ -4,6 +4,7 @@ import { useState, useActionState, useTransition, useEffect } from "react";
 import { Save, FileText, Upload, Link as LinkIcon, Tag, AlertTriangle, Info, ArrowRight } from "lucide-react";
 import { createInvoice, discardStagedInvoiceFile, getEligiblePaymentRequests, type EligiblePR } from "@/app/dashboard/invoices/actions";
 import { InvoiceOcrUpload } from "@/components/dashboard/invoices/invoice-ocr-upload";
+import { addCalendarDays, manilaDateString } from "@/lib/payment-terms";
 
 interface Vendor {
   id: string;
@@ -16,6 +17,7 @@ interface PO {
   vendor_id: string;
   amount: number;
   expense_category?: string | null;
+  net_days: number;
 }
 
 interface StagedExtraction {
@@ -65,6 +67,11 @@ export function CreateInvoiceForm({ vendors, pos }: { vendors: Vendor[], pos: PO
   const carryForward = currentPR ? balanceRemaining - parsedAmount : 0;
   const isOverage = currentPR ? parsedAmount > balanceRemaining : false;
   const overageAmount = Math.max(0, carryForward * -1);
+
+  const selectedPurchaseOrder = pos.find(po => po.id === selectedPo);
+  const linkedDueDate = selectedPurchaseOrder
+    ? addCalendarDays(manilaDateString(), selectedPurchaseOrder.net_days)
+    : "";
 
   // Fetch PRs when a PO is selected
   useEffect(() => {
@@ -254,15 +261,24 @@ export function CreateInvoiceForm({ vendors, pos }: { vendors: Vendor[], pos: PO
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                    Due Date <span className="text-slate-400 font-normal">(Net-30 pre-filled)</span>
+                    Due Date {selectedPurchaseOrder && <span className="text-slate-400 font-normal">(from PO terms)</span>}
                   </label>
-                  <input
-                    name="due_date"
-                    type="date"
-                    value={dueDate}
-                    onChange={(e) => setDueDate(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                  />
+                  {selectedPurchaseOrder ? (
+                    <input
+                      type="date"
+                      value={linkedDueDate}
+                      readOnly
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm"
+                    />
+                  ) : (
+                    <input
+                      name="due_date"
+                      type="date"
+                      value={dueDate}
+                      onChange={(e) => setDueDate(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                    />
+                  )}
                 </div>
 
                 <div className="space-y-2">

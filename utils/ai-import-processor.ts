@@ -1,5 +1,4 @@
-import * as XLSX from "xlsx";
-import { buildRichColumnMap } from "./import-export";
+import { buildRichColumnMap, parseFile } from "./import-export";
 import type { RichColumnMapping } from "./import-export";
 import { createServiceRoleClient } from "./supabase/service";
 import { recordAuditLog } from "@/utils/audit";
@@ -23,13 +22,6 @@ const VALID_CRM_ACCOUNT_FIELDS = new Set([
   "company_name", "registered_address", "tin", "status",
   "company_type", "primary_site_location", "industry_note", "notes",
 ]);
-
-function parseFile(buffer: ArrayBuffer): Record<string, string>[] {
-  const data = new Uint8Array(buffer);
-  const workbook = XLSX.read(data, { type: "array", codepage: 65001 });
-  const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  return XLSX.utils.sheet_to_json<Record<string, string>>(sheet, { defval: "" });
-}
 
 function extractSecondaryContact(
   row: Record<string, string>,

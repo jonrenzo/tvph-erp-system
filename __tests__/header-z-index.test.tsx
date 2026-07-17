@@ -136,7 +136,7 @@ describe('Header - Z-Index Stacking Context Fix', () => {
       await waitFor(() => {
         const dropdown = screen.getByText('Profile Settings').closest('div.shadow-xl');
         expect(dropdown).toBeInTheDocument();
-        expect(dropdown?.className).toMatch(/z-\[var\(--z-dropdown\)\]/);
+        expect(dropdown?.className).toMatch(/z-\[var\(--z-header-dropdown\)\]/);
       });
     });
 
@@ -237,15 +237,17 @@ describe('Header - Z-Index Stacking Context Fix', () => {
       expect(headerClasses).not.toMatch(/z-50/);
     });
 
-    it('only dropdown uses z-index CSS variable, not header', () => {
+    it('header uses the --z-dropdown stacking var (no legacy z-50)', () => {
       const { container } = render(<Header {...defaultProps} />);
 
       const header = container.querySelector('header');
 
-      // Header should not have any z-index class or variable
+      // The header establishes a stacking context via --z-dropdown; the user
+      // menu dropdown sits above it via --z-header-dropdown. Neither should use
+      // the legacy numeric z-50 that caused the original stacking bug.
       const headerClasses = header?.className || '';
-      expect(headerClasses).not.toMatch(/z-\d+/);
-      expect(headerClasses).not.toMatch(/z-\[var/);
+      expect(headerClasses).toMatch(/z-\[var\(--z-dropdown\)\]/);
+      expect(headerClasses).not.toMatch(/z-50/);
     });
 
     it('header maintains relative positioning without z-index elevation', () => {

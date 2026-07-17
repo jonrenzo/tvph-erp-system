@@ -7,6 +7,7 @@ import { createNotification } from '@/utils/notifications';
 import { recordAuditLog } from '@/utils/audit';
 import { requireCapability } from '@/lib/auth/permissions';
 import { extractDocumentMetadata } from '@/app/actions/ocr';
+import { calculatePaymentDueDate } from '@/lib/payment-terms';
 
 const ALLOWED_MIME = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -209,6 +210,7 @@ export async function createInvoice(prevState: any, formData: FormData) {
   const supabase = await createClient();
   const { user, error: authError } = await requireCapability('invoice.write', supabase);
   if (authError || !user) return { error: authError || 'Unauthorized' };
+  const submittedAt = new Date();
 
   const vendor_id = formData.get('vendor_id') as string;
   const po_id = formData.get('po_id') as string;
@@ -239,11 +241,13 @@ export async function createInvoice(prevState: any, formData: FormData) {
     .maybeSingle();
   if (existing) return { error: `An invoice with number ${invoice_number} already exists.` };
 
+  let linkedPo: { net_days?: number | null } | null = null;
+
   // PO Amount Guard (includes completion-certificate ceiling when one is approved)
   let carryForwardAmount: number | null = null;
   if (po_id) {
-    const [{ data: po }, { data: existingInvoices }, { data: topCert }] = await Promise.all([
-      supabase.from('purchase_orders').select('amount, expense_category').eq('id', po_id).single(),
+    const [{ data: po, error: poError }, { data: existingInvoices }, { data: topCert }] = await Promise.all([
+      supabase.from('purchase_orders').select('amount, expense_category, net_days').eq('id', po_id).single(),
       supabase.from('service_invoices')
         .select('amount')
         .eq('po_id', po_id)
@@ -257,7 +261,10 @@ export async function createInvoice(prevState: any, formData: FormData) {
         .maybeSingle(),
     ]);
 
+    if (poError || !po) return { error: 'Linked purchase order could not be loaded.' };
+
     if (po) {
+      linkedPo = po;
       const poAmount = Number(po.amount);
       // If there is an approved cert, cap at that percentage of the PO; otherwise no cap beyond po.amount
       const ceiling = topCert ? (topCert.percent_complete / 100) * poAmount : poAmount;
@@ -363,12 +370,9 @@ export async function createInvoice(prevState: any, formData: FormData) {
     }
   }
 
-  // Auto-compute Net-30 due date if none provided, starting from invoice_date.
-  const finalDueDate = due_date || (() => {
-    const d = new Date(invoice_date);
-    d.setDate(d.getDate() + 30);
-    return d.toISOString().split('T')[0];
-  })();
+  const finalDueDate = po_id
+    ? calculatePaymentDueDate(submittedAt, Number(linkedPo?.net_days ?? 30))
+    : due_date || calculatePaymentDueDate(submittedAt, 30);
 
   const { data: newInvoice, error } = await supabase.from('service_invoices').insert({
     vendor_id,
@@ -385,7 +389,7 @@ export async function createInvoice(prevState: any, formData: FormData) {
     expense_category: expense_category || null,
     payment_request_id: payment_request_id || null,
     carry_forward_amount: carryForwardAmount,
-    submitted_at: new Date().toISOString(),
+    submitted_at: submittedAt.toISOString(),
     created_by: user.id
   }).select('id').single();
 

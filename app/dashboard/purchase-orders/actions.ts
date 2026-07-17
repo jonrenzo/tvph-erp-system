@@ -5,8 +5,9 @@ import { createClient } from '@/utils/supabase/server';
 import { redirect } from 'next/navigation';
 import { createNotification } from '@/utils/notifications';
 import { recordAuditLog } from '@/utils/audit';
-import { requireCapability, hasCapability } from '@/lib/auth/permissions';
+import { getCurrentProfile, requireCapability, hasCapability } from '@/lib/auth/permissions';
 import { sendPoIssuedEmail } from '@/lib/email/po';
+import { sendPoPendingApprovalEmail } from '@/lib/email/po-pending-approval';
 
 type POLineItem = { item_code?: string; description: string; qty: number; uom?: string; unit_price: number };
 type POSiteDetail = { region: string; area_city: string; no_of_nodes: number; cable_length_km: number };
@@ -20,7 +21,27 @@ interface CreatePOInput {
   issued_date?: string;
   due_date?: string;
   dp_amount?: number;
+  net_days?: number;
+  dp_due_days?: number;
+  penalty_rate?: number;
+  penalty_type?: 'monthly' | 'fixed';
   waive_requirements?: boolean;
+}
+
+function getTomorrowDateInTimeZone(timeZone: string, now = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now);
+
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const tomorrow = new Date(
+    Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day) + 1),
+  );
+
+  return tomorrow.toISOString().slice(0, 10);
 }
 
 export async function createPurchaseOrderCore(input: CreatePOInput) {
@@ -30,8 +51,17 @@ export async function createPurchaseOrderCore(input: CreatePOInput) {
 
   const { vendor_id, project_id, line_items, site_details = [], description, due_date, dp_amount = 0, waive_requirements: waive = false } = input;
   const issued_date = input.issued_date ?? new Date().toISOString().slice(0, 10);
+  const mobilization_date = getTomorrowDateInTimeZone('Asia/Manila');
+  const net_days = input.net_days ?? 30;
+  const dp_due_days = input.dp_due_days ?? null;
+  const penalty_rate = input.penalty_rate ?? null;
+  const penalty_type = input.penalty_type ?? null;
 
   if (!vendor_id) return { error: 'Vendor is required.' };
+  if (!Number.isInteger(net_days) || net_days <= 0) return { error: 'Net days must be a positive whole number.' };
+  if (dp_due_days !== null && (!Number.isInteger(dp_due_days) || dp_due_days < 0)) return { error: 'DP due days must be a nonnegative whole number.' };
+  if (penalty_rate !== null && (!Number.isFinite(penalty_rate) || penalty_rate < 0 || penalty_rate > 1)) return { error: 'Penalty rate must be between 0 and 1.' };
+  if (penalty_type !== null && penalty_type !== 'monthly' && penalty_type !== 'fixed') return { error: 'Penalty type must be monthly or fixed.' };
 
   const totalAmount = line_items.reduce((sum, li) => sum + (Number(li.qty) || 0) * (Number(li.unit_price) || 0), 0);
   if (totalAmount <= 0) return { error: 'Total amount must be greater than zero. Add at least one line item with a price.' };
@@ -75,7 +105,13 @@ export async function createPurchaseOrderCore(input: CreatePOInput) {
     amount: totalAmount,
     dp_amount,
     issued_date,
+    mobilization_date,
     due_date: due_date || null,
+    net_days,
+    dp_due_days,
+    penalty_rate,
+    penalty_type,
+    terms_configured_at: new Date().toISOString(),
     status: 'draft',
     currency,
     internal_entity_id: entity?.id || null,
@@ -177,6 +213,9 @@ export async function createPurchaseOrder(prevState: any, formData: FormData) {
     lineItems = [{ description: formData.get('description') as string || 'Service', qty: 1, unit_price: rawAmount }];
   }
 
+  const dpDueDays = formData.get('dp_due_days');
+  const penaltyRate = formData.get('penalty_rate');
+  const penaltyType = formData.get('penalty_type');
   const result = await createPurchaseOrderCore({
     vendor_id: formData.get('vendor_id') as string,
     project_id: formData.get('project_id') as string || undefined,
@@ -186,6 +225,10 @@ export async function createPurchaseOrder(prevState: any, formData: FormData) {
     issued_date: formData.get('issued_date') as string || undefined,
     due_date: formData.get('due_date') as string || undefined,
     dp_amount: parseFloat(formData.get('dp_amount') as string) || 0,
+    net_days: Number(formData.get('net_days') || 30),
+    dp_due_days: dpDueDays == null || dpDueDays === '' ? undefined : Number(dpDueDays),
+    penalty_rate: penaltyRate == null || penaltyRate === '' ? undefined : Number(penaltyRate),
+    penalty_type: penaltyType == null || penaltyType === '' ? undefined : penaltyType as 'monthly' | 'fixed',
     waive_requirements: formData.get('waive_requirements') === 'on',
   });
 
@@ -193,7 +236,64 @@ export async function createPurchaseOrder(prevState: any, formData: FormData) {
   redirect(result.url);
 }
 
-export async function submitPOForApproval(poId: string) {
+function parseTerms(formData: FormData) {
+  const net_days = Number(formData.get('net_days'));
+  const dp_due_days = formData.get('dp_due_days') === '' ? null : Number(formData.get('dp_due_days'));
+  const penalty_rate = formData.get('penalty_rate') === '' ? null : Number(formData.get('penalty_rate'));
+  const penalty_type = formData.get('penalty_type') === '' ? null : formData.get('penalty_type');
+
+  if (!Number.isInteger(net_days) || net_days <= 0) return { error: 'Net days must be a positive whole number.' } as const;
+  if (dp_due_days !== null && (!Number.isInteger(dp_due_days) || dp_due_days < 0)) return { error: 'DP due days must be a nonnegative whole number.' } as const;
+  if (penalty_rate !== null && (!Number.isFinite(penalty_rate) || penalty_rate < 0 || penalty_rate > 1)) return { error: 'Penalty rate must be between 0 and 1.' } as const;
+  if (penalty_type !== null && penalty_type !== 'monthly' && penalty_type !== 'fixed') return { error: 'Penalty type must be monthly or fixed.' } as const;
+  return { net_days, dp_due_days, penalty_rate, penalty_type } as const;
+}
+
+export async function updatePurchaseOrderTerms(poId: string, formData: FormData) {
+  const supabase = await createClient();
+  const { user, error: authError } = await requireCapability('po.write', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
+
+  const { data: po } = await supabase.from('purchase_orders').select('status').eq('id', poId).single();
+  if (po?.status !== 'draft') return { error: 'Terms can only be edited while the PO is a draft.' };
+
+  const terms = parseTerms(formData);
+  if ('error' in terms) return terms;
+  const updated_at = new Date().toISOString();
+  const { error, count } = await supabase
+    .from('purchase_orders')
+    .update({ ...terms, terms_configured_at: updated_at }, { count: 'exact' })
+    .eq('id', poId)
+    .eq('status', 'draft');
+  if (error) return { error: error.message };
+  if (count === 0) return { error: 'Terms can only be edited while the PO is a draft.' };
+
+  await recordAuditLog({ entity_type: 'purchase_order', entity_id: poId, action: 'UPDATE', changes: { after: terms }, performed_by: user.id });
+  revalidatePath(`/dashboard/purchase-orders/${poId}`);
+  return { success: true };
+}
+
+export async function overridePurchaseOrderPenalty(poId: string, formData: FormData) {
+  const supabase = await createClient();
+  const { user, role, error: authError } = await getCurrentProfile(supabase);
+  if (authError || !user || !['finance', 'admin', 'superadmin'].includes(role || '')) return { error: authError || 'Unauthorized' };
+
+  const rawAmount = formData.get('override_amount');
+  const override_amount = rawAmount === '' ? null : Number(rawAmount);
+  const override_reason = String(formData.get('override_reason') || '').trim();
+  if (override_amount !== null && !override_reason) return { error: 'Provide a reason for the penalty override.' };
+  if (override_amount !== null && (!Number.isFinite(override_amount) || override_amount < 0)) return { error: 'Penalty override amount must be a nonnegative number.' };
+
+  const overridden_at = new Date().toISOString();
+  const { error } = await supabase.from('po_penalties').upsert({ po_id: poId, override_amount, override_reason: override_amount === null ? null : override_reason, overridden_by: user.id, overridden_at }, { onConflict: 'po_id' });
+  if (error) return { error: error.message };
+
+  await recordAuditLog({ entity_type: 'purchase_order', entity_id: poId, action: 'UPDATE', changes: { after: { override_amount, override_reason } }, performed_by: user.id });
+  revalidatePath(`/dashboard/purchase-orders/${poId}`);
+  return { success: true };
+}
+
+export async function submitPOForApproval(poId: string, approverIds: string[] = []) {
   const supabase = await createClient();
   const { user, role, error: authError } = await requireCapability('po.status', supabase);
   if (authError || !user) return { error: authError || 'Unauthorized' };
@@ -208,12 +308,37 @@ export async function submitPOForApproval(poId: string) {
     return { error: 'Only draft POs can be submitted for approval.' };
   }
 
+  // Validate the chosen approvers: at least one, all admins/superadmins, and
+  // never the submitter (the 4-eyes rule blocks self-approval). Notify-only —
+  // this drives who is emailed, not who is allowed to approve.
+  const uniqueApproverIds = [...new Set(approverIds)].filter(Boolean);
+  if (uniqueApproverIds.length === 0) {
+    return { error: 'Select at least one admin or superadmin to approve this PO.' };
+  }
+  if (uniqueApproverIds.includes(user.id)) {
+    return { error: 'You cannot select yourself as an approver.' };
+  }
+
+  const { data: approverProfiles } = await supabase
+    .from('profiles')
+    .select('id, role')
+    .in('id', uniqueApproverIds);
+
+  const validApproverIds = (approverProfiles || [])
+    .filter((p) => p.role === 'superadmin' || p.role === 'admin')
+    .map((p) => p.id);
+
+  if (validApproverIds.length !== uniqueApproverIds.length) {
+    return { error: 'Every selected approver must be an admin or superadmin.' };
+  }
+
   const { error } = await supabase
     .from('purchase_orders')
     .update({
       status: 'pending_approval',
       submitted_for_approval_by: user.id,
       submitted_for_approval_at: new Date().toISOString(),
+      approval_requested_from: uniqueApproverIds,
       rejection_reason: null,
       updated_at: new Date().toISOString(),
     })
@@ -225,7 +350,7 @@ export async function submitPOForApproval(poId: string) {
     entity_type: 'purchase_order',
     entity_id: poId,
     action: 'UPDATE',
-    changes: { after: { status: 'pending_approval', submitted_by: user.id } },
+    changes: { after: { status: 'pending_approval', submitted_by: user.id, approval_requested_from: uniqueApproverIds } },
     performed_by: user.id,
   });
 
@@ -236,6 +361,19 @@ export async function submitPOForApproval(poId: string) {
     link: `/dashboard/purchase-orders/${poId}`,
     created_by: user.id,
   });
+
+  // Best-effort: email the chosen approvers. A failed send must NOT fail the
+  // submit (mirrors approvePO's contract) — surface a broadcast warning instead.
+  const emailResult = await sendPoPendingApprovalEmail(poId, { actorId: user.id });
+  if (emailResult.status === 'failed') {
+    await createNotification({
+      type: 'po',
+      title: '⚠️ Approval email not sent',
+      message: `A PO was submitted for approval but the notification email to the selected approvers could not be sent. ${emailResult.error ?? ''}`.trim(),
+      link: `/dashboard/purchase-orders/${poId}`,
+      created_by: user.id,
+    });
+  }
 
   revalidatePath(`/dashboard/purchase-orders/${poId}`);
   revalidatePath('/dashboard/purchase-orders');
@@ -353,24 +491,23 @@ export async function updatePOStatus(poId: string, status: string) {
   const { user, error: authError } = await requireCapability('po.status', supabase);
   if (authError || !user) return { error: authError || 'Unauthorized' };
 
-  // Block issuance if waiver is pending executive approval
+  // Issuance is only allowed through the 4-eyes approval flow
+  // (submitPOForApproval -> approvePO, which enforces the self-approval and
+  // waiver gates). This generic status updater must NOT be able to move a PO to
+  // 'issued' directly, otherwise a po.status holder could bypass approval.
   if (status === 'issued') {
     const { data: po } = await supabase
       .from('purchase_orders')
-      .select('status, requirements_waived, waiver_approved')
+      .select('status')
       .eq('id', poId)
       .single();
 
+    // Idempotent: already issued (e.g. double-click) — succeed without re-issuing.
     if (po?.status === 'issued') return { success: true };
 
-    // pending_approval POs must go through approvePO, not direct status update
-    if (po?.status === 'pending_approval') {
-      return { error: 'This PO is awaiting approval. Use the approval action to issue it.' };
-    }
-
-    if (po?.requirements_waived && !po?.waiver_approved) {
-      return { error: 'Cannot issue: this PO has waived requirements pending executive approval.' };
-    }
+    return {
+      error: 'POs can only be issued through the approval flow. Submit the PO for approval, then have a different admin or superadmin approve it.',
+    };
   }
 
   const { error } = await supabase

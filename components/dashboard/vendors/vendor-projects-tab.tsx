@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { FolderGit2, Plus, ExternalLink, ChevronDown, ChevronUp, Clock, AlertCircle, Unlink, Loader2 } from "lucide-react";
+import { FolderGit2, Plus, ExternalLink, Clock, AlertCircle, Unlink, Loader2 } from "lucide-react";
 import { linkVendorToProject, removeVendorFromProject } from "@/app/dashboard/projects/actions";
 import Link from "next/link";
 
@@ -44,8 +44,8 @@ export function VendorProjectsTab({
   const [isPendingRemove, startRemoveTransition] = useTransition();
   const [removingProjectId, setRemovingProjectId] = useState<string | null>(null);
 
-  const linkedProjectIds = projects.map(p => p.id);
-  const availableProjects = (allProjects || []).filter(p => !linkedProjectIds.includes(p.id));
+  const linkedProjectIds = new Set(projects.map((project) => project.id));
+  const availableProjects = (allProjects || []).filter((project) => !linkedProjectIds.has(project.id));
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
