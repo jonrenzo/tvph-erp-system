@@ -11,6 +11,7 @@ import {
 
 interface PaymentRequest {
   id: string;
+  request_number: string;
   po_id: string;
   amount: number;
   due_in_days: number;
@@ -48,7 +49,7 @@ export function PaymentRequestsTable({ requests, canApprove }: Props) {
 
   if (requests.length === 0) {
     return (
-      <p className="text-sm text-slate-400 italic py-4">No pending payment requests.</p>
+      <p className="text-sm text-slate-400 italic py-4">No payment requests found.</p>
     );
   }
 
@@ -59,8 +60,9 @@ export function PaymentRequestsTable({ requests, canApprove }: Props) {
         <table className="w-full text-sm text-left">
           <thead className="text-[10px] text-slate-500 uppercase border-b border-slate-200 dark:border-slate-800">
             <tr>
+              <th className="pb-2 pr-4 font-semibold">Request ID</th>
               <th className="pb-2 pr-4 font-semibold">Vendor / PO</th>
-              <th className="pb-2 pr-4 font-semibold">Project</th>
+              <th className="pb-2 pr-4 font-semibold">Status</th>
               <th className="pb-2 pr-4 font-semibold text-right">Amount</th>
               <th className="pb-2 pr-4 font-semibold">% Complete</th>
               <th className="pb-2 pr-4 font-semibold">Due In</th>
@@ -76,6 +78,11 @@ export function PaymentRequestsTable({ requests, canApprove }: Props) {
                 <>
                   <tr key={r.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors">
                     <td className="py-3 pr-4">
+                      <span className="font-mono text-xs font-bold text-slate-900 dark:text-white">
+                        {r.request_number || "—"}
+                      </span>
+                    </td>
+                    <td className="py-3 pr-4">
                       <div className="font-semibold text-slate-900 dark:text-white">
                         {r.purchase_orders?.vendors?.name ?? "—"}
                       </div>
@@ -86,8 +93,16 @@ export function PaymentRequestsTable({ requests, canApprove }: Props) {
                         {r.purchase_orders?.po_number ?? r.po_id}
                       </Link>
                     </td>
-                    <td className="py-3 pr-4 text-slate-600 dark:text-slate-400 text-xs">
-                      {r.projects?.name ?? "—"}
+                    <td className="py-3 pr-4">
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold border ${
+                        r.status === 'approved' || r.status === 'fully_invoiced'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400'
+                          : r.status === 'rejected'
+                          ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400'
+                          : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400'
+                      }`}>
+                        {r.status.replace(/_/g, ' ').toUpperCase()}
+                      </span>
                     </td>
                     <td className="py-3 pr-4 text-right font-bold text-slate-900 dark:text-white">
                       ₱{Number(r.amount).toLocaleString()}
@@ -102,7 +117,7 @@ export function PaymentRequestsTable({ requests, canApprove }: Props) {
                       {new Date(r.created_at).toLocaleDateString(undefined, { dateStyle: "medium" })}
                     </td>
                     <td className="py-3">
-                      {canApprove && (
+                      {r.status === 'pending' && canApprove && (
                         <div className="flex items-center gap-2 justify-end">
                           <button
                             onClick={() => act(r.id, () => approvePaymentRequest(r.id))}
@@ -126,7 +141,7 @@ export function PaymentRequestsTable({ requests, canApprove }: Props) {
                   </tr>
                   {isRejecting && (
                     <tr key={`${r.id}-reject`}>
-                      <td colSpan={7} className="pb-3 pt-1 px-2">
+                      <td colSpan={8} className="pb-3 pt-1 px-2">
                         <div className="flex items-center gap-2">
                           <input
                             autoFocus

@@ -14,10 +14,10 @@ export default async function NewInvoicePage() {
     .is('deleted_at', null)
     .order('name');
 
-  // Fetch all issued POs to allow linking
+  // Fetch all issued POs to allow linking (include expense_category for PR gating)
   const { data: pos } = await supabase
     .from('purchase_orders')
-    .select('id, po_number, vendor_id, amount')
+    .select('id, po_number, vendor_id, amount, expense_category')
     .in('status', ['issued', 'partially_paid'])
     .is('deleted_at', null)
     .order('po_number');

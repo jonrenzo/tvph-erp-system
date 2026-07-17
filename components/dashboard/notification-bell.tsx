@@ -12,6 +12,7 @@ import {
   Users,
   BriefcaseBusiness,
   CheckCircle2,
+  Landmark,
   X,
 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
@@ -49,6 +50,11 @@ const typeIcons = {
   crm: { icon: BriefcaseBusiness, color: "text-indigo-500", bg: "bg-indigo-500/10" },
   vendor: { icon: Building2, color: "text-teal-500", bg: "bg-teal-500/10" },
   hr: { icon: Users, color: "text-orange-500", bg: "bg-orange-500/10" },
+  payment_request: {
+    icon: Landmark,
+    color: "text-sky-500",
+    bg: "bg-sky-500/10",
+  },
 };
 
 export function NotificationBell() {

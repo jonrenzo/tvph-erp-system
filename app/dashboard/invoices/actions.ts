@@ -152,6 +152,57 @@ export async function discardStagedInvoiceFile(path: string) {
   return { success: true };
 }
 
+// --- Fetch eligible payment requests for a PO (client-side helper) ---
+
+export interface EligiblePR {
+  id: string;
+  request_number: string;
+  amount: number;
+  consumed: number;
+  remaining: number;
+  status: string;
+}
+
+export async function getEligiblePaymentRequests(poId: string): Promise<{ data?: EligiblePR[]; error?: string }> {
+  const supabase = await createClient();
+  const { user, error: authError } = await requireCapability('invoice.write', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
+
+  // Fetch all PRs for this PO (not just approved ones)
+  const { data: prs, error } = await supabase
+    .from('payment_requests')
+    .select('id, request_number, amount, status')
+    .eq('po_id', poId)
+    .order('created_at', { ascending: false });
+
+  if (error) return { error: error.message };
+  if (!prs) return { data: [] };
+
+  // Compute consumed + remaining for each PR
+  const result: EligiblePR[] = await Promise.all(
+    prs.map(async (pr) => {
+      const { data: consuming } = await supabase
+        .from('service_invoices')
+        .select('amount')
+        .eq('payment_request_id', pr.id)
+        .in('status', ['approved', 'partially_paid', 'paid'])
+        .is('deleted_at', null);
+
+      const consumed = consuming?.reduce((sum, inv) => sum + Number(inv.amount), 0) ?? 0;
+      return {
+        id: pr.id,
+        request_number: pr.request_number,
+        amount: Number(pr.amount),
+        consumed,
+        remaining: Number(pr.amount) - consumed,
+        status: pr.status,
+      };
+    })
+  );
+
+  return { data: result };
+}
+
 // --- Create invoice ---
 
 export async function createInvoice(prevState: any, formData: FormData) {
@@ -171,6 +222,8 @@ export async function createInvoice(prevState: any, formData: FormData) {
   const file = formData.get('file') as File;
   const staged_file_path = formData.get('staged_file_path') as string;
   const staged_file_name = formData.get('staged_file_name') as string;
+  const payment_request_id = formData.get('payment_request_id') as string;
+  const overage_confirmed = formData.get('overage_confirmed') === 'true';
 
   if (!vendor_id || !invoice_number || !amount || !invoice_date) {
     return { error: 'Missing required fields.' };
@@ -187,6 +240,7 @@ export async function createInvoice(prevState: any, formData: FormData) {
   if (existing) return { error: `An invoice with number ${invoice_number} already exists.` };
 
   // PO Amount Guard (includes completion-certificate ceiling when one is approved)
+  let carryForwardAmount: number | null = null;
   if (po_id) {
     const [{ data: po }, { data: existingInvoices }, { data: topCert }] = await Promise.all([
       supabase.from('purchase_orders').select('amount, expense_category').eq('id', po_id).single(),
@@ -220,26 +274,56 @@ export async function createInvoice(prevState: any, formData: FormData) {
         };
       }
 
-      // Subcontractor PR gate: if the PO is for a subcontractor, require an approved Payment Request
-      if (po.expense_category === 'subcontractor') {
-        const { data: approvedPR } = await supabase
+      // PR validation: if a payment_request_id is provided, validate it
+      if (payment_request_id) {
+        const { data: selectedPR } = await supabase
           .from('payment_requests')
-          .select('id, amount')
-          .eq('po_id', po_id)
-          .eq('status', 'approved')
-          .maybeSingle();
+          .select('id, request_number, amount, vendor_id, status, po_id')
+          .eq('id', payment_request_id)
+          .single();
 
-        if (!approvedPR) {
-          return {
-            error: 'This subcontractor PO requires an approved Payment Request before an invoice can be submitted. An operations user must create and get approval for a Payment Request first.',
-          };
+        if (!selectedPR) {
+          return { error: 'Selected Payment Request not found.' };
         }
 
-        const prAmount = Number(approvedPR.amount);
-        if (parseFloat(amount) > prAmount) {
-          return {
-            error: `Invoice amount (₱${Number(amount).toLocaleString()}) exceeds the approved Payment Request amount (₱${prAmount.toLocaleString()}).`,
-          };
+        if (selectedPR.po_id !== po_id) {
+          return { error: 'The selected Payment Request does not belong to the linked PO.' };
+        }
+
+        if (selectedPR.status !== 'approved') {
+          return { error: 'The selected Payment Request must be approved before an invoice can reference it.' };
+        }
+
+        if (selectedPR.vendor_id !== vendor_id) {
+          return { error: 'The selected Payment Request vendor does not match the invoice vendor.' };
+        }
+
+        // Compute consumed balance from existing consuming invoices
+        const { data: consumingInvoices } = await supabase
+          .from('service_invoices')
+          .select('amount')
+          .eq('payment_request_id', payment_request_id)
+          .in('status', ['approved', 'partially_paid', 'paid'])
+          .is('deleted_at', null);
+
+        const consumed = consumingInvoices?.reduce((sum, inv) => sum + Number(inv.amount), 0) ?? 0;
+        const remaining = Number(selectedPR.amount) - consumed;
+        const invoiceAmount = parseFloat(amount);
+        const overage = Math.max(0, invoiceAmount - remaining);
+
+        // Compute carry-forward (remaining after this invoice); negative means overage
+        carryForwardAmount = remaining - invoiceAmount;
+
+        // Validate amount vs remaining balance
+        if (invoiceAmount > remaining) {
+          if (!overage_confirmed) {
+            return {
+              error: `Invoice amount (₱${invoiceAmount.toLocaleString()}) exceeds available Payment Request balance (₱${remaining.toLocaleString()}). Overage: ₱${overage.toLocaleString()}. Please check the confirmation box to proceed, or lower the amount.`,
+              overage: true,
+              remaining,
+              overageAmount: overage,
+            };
+          }
         }
       }
     }
@@ -299,6 +383,8 @@ export async function createInvoice(prevState: any, formData: FormData) {
     notes,
     payment_method: payment_method || null,
     expense_category: expense_category || null,
+    payment_request_id: payment_request_id || null,
+    carry_forward_amount: carryForwardAmount,
     submitted_at: new Date().toISOString(),
     created_by: user.id
   }).select('id').single();
@@ -329,13 +415,90 @@ export async function createInvoice(prevState: any, formData: FormData) {
   redirect(`/dashboard/invoices/${newInvoice.id}`);
 }
 
-// --- Update invoice status ---
+// --- Update invoice status (with PR balance consumption / release) ---
 
-export async function updateInvoiceStatus(invoiceId: string, status: string) {
+export async function updateInvoiceStatus(
+  invoiceId: string,
+  status: string,
+  overrideReason?: string,
+) {
   const supabase = await createClient();
   const { user, error: authError } = await requireCapability('invoice.write', supabase);
   if (authError || !user) return { error: authError || 'Unauthorized' };
 
+  // Consuming-status transitions use the atomic RPC to prevent double-consumption
+  if (status === 'approved') {
+    const canOverride = overrideReason
+      ? (await requireCapability('invoice.override', supabase)).user !== null
+      : false;
+
+    const { data: rpcResult, error: rpcError } = await supabase
+      .rpc('approve_invoice_consume_balance', {
+        p_invoice_id: invoiceId,
+        p_override_by: canOverride ? user.id : null,
+        p_override_reason: canOverride ? overrideReason : null,
+      });
+
+    if (rpcError) return { error: rpcError.message };
+
+    const result = rpcResult as Record<string, any>;
+    if (result?.error) return { error: result.error };
+
+    await recordAuditLog({
+      entity_type: 'service_invoice',
+      entity_id: invoiceId,
+      action: 'UPDATE',
+      changes: { after: { status: 'approved', carry_forward_amount: result.carry_forward_amount, pr_status: result.pr_status } },
+      performed_by: user.id,
+    });
+
+    await createNotification({
+      type: 'invoice',
+      title: '🧾 Invoice Approved',
+      message: `Invoice approved. ₱${Number(result.carry_forward_amount).toLocaleString()} carry-forward remaining.`,
+      link: `/dashboard/invoices/${invoiceId}`,
+      created_by: user.id,
+    });
+
+    revalidatePath(`/dashboard/invoices/${invoiceId}`);
+    return { success: true, carry_forward_amount: result.carry_forward_amount };
+  }
+
+  if (status === 'disputed') {
+    const { data: rpcResult, error: rpcError } = await supabase
+      .rpc('dispute_or_delete_invoice_release_balance', {
+        p_invoice_id: invoiceId,
+        p_new_status: 'disputed',
+      });
+
+    if (rpcError) return { error: rpcError.message };
+
+    const result = rpcResult as Record<string, any>;
+    if (result?.error) return { error: result.error };
+
+    await recordAuditLog({
+      entity_type: 'service_invoice',
+      entity_id: invoiceId,
+      action: 'UPDATE',
+      changes: { after: { status: 'disputed', pr_reopened: result.pr_reopened, pr_new_status: result.pr_new_status } },
+      performed_by: user.id,
+    });
+
+    await createNotification({
+      type: 'invoice',
+      title: '🧾 Invoice Disputed',
+      message: result.pr_reopened
+        ? `Invoice disputed. The linked payment request has been reopened with ₱${Number(result.remaining_balance).toLocaleString()} remaining.`
+        : 'Invoice marked as disputed.',
+      link: `/dashboard/invoices/${invoiceId}`,
+      created_by: user.id,
+    });
+
+    revalidatePath(`/dashboard/invoices/${invoiceId}`);
+    return { success: true, pr_reopened: result.pr_reopened, remaining_balance: result.remaining_balance };
+  }
+
+  // Non-consuming transitions: simple status update
   const { error } = await supabase
     .from('service_invoices')
     .update({ status, updated_at: new Date().toISOString() })
@@ -348,18 +511,51 @@ export async function updateInvoiceStatus(invoiceId: string, status: string) {
     entity_id: invoiceId,
     action: 'UPDATE',
     changes: { after: { status } },
-    performed_by: user.id
+    performed_by: user.id,
   });
 
   await createNotification({
     type: 'invoice',
-    title: `🧾 Invoice Status Updated`,
+    title: '🧾 Invoice Status Updated',
     message: `Invoice status changed to ${status}.`,
     link: `/dashboard/invoices/${invoiceId}`,
-    created_by: user.id
+    created_by: user.id,
   });
 
   revalidatePath(`/dashboard/invoices/${invoiceId}`);
+  return { success: true };
+}
+
+export async function deleteInvoice(invoiceId: string) {
+  const supabase = await createClient();
+  const { user, error: authError } = await requireCapability('invoice.write', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
+
+  const { data: invoice } = await supabase
+    .from('service_invoices')
+    .select('invoice_number, payment_request_id')
+    .eq('id', invoiceId)
+    .single();
+
+  const { data: rpcResult, error: rpcError } = await supabase
+    .rpc('dispute_or_delete_invoice_release_balance', {
+      p_invoice_id: invoiceId,
+      p_new_status: 'deleted',
+    });
+
+  if (rpcError) return { error: rpcError.message };
+  const result = rpcResult as Record<string, any>;
+  if (result?.error) return { error: result.error };
+
+  await recordAuditLog({
+    entity_type: 'service_invoice',
+    entity_id: invoiceId,
+    action: 'DELETE',
+    changes: { before: { invoice_number: invoice?.invoice_number } },
+    performed_by: user.id,
+  });
+
+  revalidatePath('/dashboard/invoices');
   return { success: true };
 }
 
@@ -470,7 +666,7 @@ export async function recordPayment(prevState: any, formData: FormData) {
     performed_by: user.id
   });
 
-  // Update invoice status
+  // Update invoice status (consume PR balance if transitioning to a consuming state)
   const { data: allPayments } = await supabase
     .from('payments')
     .select('amount_paid')
@@ -483,6 +679,29 @@ export async function recordPayment(prevState: any, formData: FormData) {
     invoiceStatus = 'paid';
   } else if (totalPaidOnInvoice > 0) {
     invoiceStatus = 'partially_paid';
+  }
+
+  // If transitioning to a consuming state without having gone through approve,
+  // consume the PR balance now (e.g. direct payment on a received invoice)
+  const consumingStates = ['approved', 'partially_paid', 'paid'];
+  const isNowConsuming = consumingStates.includes(invoiceStatus);
+  const wasConsuming = consumingStates.includes(invoice.status);
+  if (isNowConsuming && !wasConsuming && invoice.payment_request_id) {
+    const { data: rpcResult, error: rpcError } = await supabase
+      .rpc('approve_invoice_consume_balance', {
+        p_invoice_id: invoice_id,
+        p_override_by: null,
+        p_override_reason: null,
+      });
+    if (rpcError) {
+      // Non-blocking: log but don't fail the payment
+      console.error('Failed to consume PR balance on payment record:', rpcError);
+    } else {
+      const result = rpcResult as Record<string, any>;
+      if (result?.error) {
+        console.error('Failed to consume PR balance on payment record:', result.error);
+      }
+    }
   }
 
   await supabase.from('service_invoices').update({ status: invoiceStatus }).eq('id', invoice_id);

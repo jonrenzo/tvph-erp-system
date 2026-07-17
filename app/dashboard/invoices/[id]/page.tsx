@@ -4,6 +4,7 @@ import { ArrowLeft, Building2, FileText, CreditCard, History, ExternalLink, Aler
 import { notFound } from 'next/navigation';
 import { RecordPaymentModal } from '@/components/dashboard/invoices/record-payment-modal';
 import { AttachPaymentDocModal } from '@/components/dashboard/invoices/attach-payment-doc-modal';
+import { InvoiceStatusActions } from '@/components/dashboard/invoices/invoice-status-actions';
 import { Suspense } from 'react';
 import { getCurrentProfile, hasCapability } from '@/lib/auth/permissions';
 import { signDocUrls } from '@/utils/storage';
@@ -47,6 +48,14 @@ async function InvoiceDetailContent({ paramsPromise }: { paramsPromise: Promise<
   ]);
 
   if (error || !invoice) notFound();
+
+  const { data: paymentRequest } = invoice.payment_request_id
+    ? await supabase
+        .from('payment_requests')
+        .select('id, request_number, amount, status')
+        .eq('id', invoice.payment_request_id)
+        .single()
+    : { data: null };
 
   const canPay = role ? hasCapability(role, 'invoice.pay') : false;
 
@@ -119,6 +128,12 @@ async function InvoiceDetailContent({ paramsPromise }: { paramsPromise: Promise<
               View Original
             </a>
           )}
+          <InvoiceStatusActions
+            invoiceId={invoice.id}
+            currentStatus={invoice.status}
+            hasPaymentRequest={!!paymentRequest}
+            canOverride={hasCapability(role, 'invoice.override')}
+          />
           {balance > 0 && canPay && (
             <RecordPaymentModal invoiceId={invoice.id} remainingBalance={balance} />
           )}
@@ -244,6 +259,56 @@ async function InvoiceDetailContent({ paramsPromise }: { paramsPromise: Promise<
                   <div className="mt-1 text-slate-400 text-sm">Standalone Invoice</div>
                 )}
               </div>
+
+              {paymentRequest && (
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/30 border border-slate-100 dark:border-slate-800">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Payment Request</label>
+                  <Link
+                    href={`/dashboard/purchase-orders/${invoice.po_id}`}
+                    className="block mt-1 font-bold text-primary hover:underline"
+                  >
+                    {paymentRequest.request_number}
+                  </Link>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-xs text-slate-500">₱{Number(paymentRequest.amount).toLocaleString()} approved</span>
+                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold border ${
+                      paymentRequest.status === 'fully_invoiced'
+                        ? 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400'
+                        : paymentRequest.status === 'approved'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400'
+                        : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400'
+                    }`}>
+                      {paymentRequest.status === 'fully_invoiced' ? 'FULLY INVOICED' : paymentRequest.status.toUpperCase()}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {invoice.carry_forward_amount != null && (
+                <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800/50">
+                  <label className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase">
+                    {invoice.carry_forward_amount >= 0 ? 'Carry-Forward' : 'Overage'}
+                  </label>
+                  <p className="mt-1 font-bold text-emerald-700 dark:text-emerald-400">
+                    {invoice.carry_forward_amount >= 0
+                      ? `₱${Number(invoice.carry_forward_amount).toLocaleString()}`
+                      : `₱${Math.abs(Number(invoice.carry_forward_amount)).toLocaleString()} over approved balance`}
+                  </p>
+                  {paymentRequest && invoice.carry_forward_amount >= 0 && (
+                    <p className="text-[10px] text-emerald-600/80 dark:text-emerald-400/60 mt-0.5">
+                      Remaining on {paymentRequest.request_number}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {invoice.override_reason && (
+                <div className="p-3 rounded-xl bg-orange-50 dark:bg-orange-900/10 border border-orange-200 dark:border-orange-800/50">
+                  <label className="text-[10px] font-bold text-orange-600 dark:text-orange-400 uppercase">Override</label>
+                  <p className="mt-1 text-xs text-orange-700 dark:text-orange-300">{invoice.override_reason}</p>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-[10px] font-bold text-slate-500 uppercase">Inv. Date</label>

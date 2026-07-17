@@ -17,10 +17,11 @@ interface CompletionCert {
 
 interface PaymentRequest {
   id: string;
+  request_number: string;
   amount: number;
   due_in_days: number;
   notes: string | null;
-  status: "pending" | "approved" | "rejected";
+  status: "pending" | "approved" | "rejected" | "fully_invoiced";
   completion_cert_id: string | null;
   percent_complete: number | null;
   created_at: string;
@@ -34,6 +35,8 @@ interface Props {
   approvedCerts: CompletionCert[];
   canCreate: boolean;
   canApprove: boolean;
+  consumed?: number;
+  remaining?: number;
 }
 
 export function PaymentRequestButton({
@@ -43,6 +46,8 @@ export function PaymentRequestButton({
   approvedCerts,
   canCreate,
   canApprove,
+  consumed = 0,
+  remaining = 0,
 }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -291,17 +296,41 @@ export function PaymentRequestButton({
           </>
         )}
 
-        {/* Approved */}
-        {paymentRequest?.status === "approved" && (
-          <div className="flex items-start gap-3 p-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800/50">
-            <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+        {/* Approved or Fully Invoiced */}
+        {(paymentRequest?.status === "approved" || paymentRequest?.status === "fully_invoiced") && (
+          <div className={`flex items-start gap-3 p-4 rounded-xl border ${
+            paymentRequest.status === "fully_invoiced"
+              ? 'bg-slate-50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-800 opacity-80'
+              : 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800/50'
+          }`}>
+            {paymentRequest.status === "fully_invoiced" ? (
+              <CheckCircle2 className="h-5 w-5 text-slate-400 shrink-0 mt-0.5" />
+            ) : (
+              <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+            )}
             <div>
-              <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">Payment Request Approved</p>
-              <p className="text-xs text-emerald-600/80 dark:text-emerald-400/60 mt-1">
-                The subcontractor is authorized to bill <span className="font-semibold">₱{Number(paymentRequest.amount).toLocaleString()}</span>
-                {paymentRequest.percent_complete ? ` (based on ${paymentRequest.percent_complete}% verified completion)` : ""}.
-                Due in {paymentRequest.due_in_days} days from invoice date.
+              <p className={`text-sm font-semibold ${
+                paymentRequest.status === "fully_invoiced"
+                  ? 'text-slate-500 dark:text-slate-400'
+                  : 'text-emerald-700 dark:text-emerald-400'
+              }`}>
+                {paymentRequest.status === "fully_invoiced" ? 'Payment Request Fully Invoiced' : 'Payment Request Approved'}
               </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                <span className="font-semibold">{paymentRequest.request_number}</span> — ₱{Number(paymentRequest.amount).toLocaleString()}
+                {paymentRequest.percent_complete ? ` (${paymentRequest.percent_complete}% completion)` : ""}.
+                {paymentRequest.status === "fully_invoiced"
+                  ? ' All available balance has been invoiced. A new payment request may be created.'
+                  : ` The subcontractor is authorized to bill up to this amount.`}
+              </p>
+              {remaining != null && (
+                <div className="mt-2 flex items-center gap-4 text-xs">
+                  <span className="text-slate-500">Consumed: <strong className="text-slate-700 dark:text-slate-300">₱{Number(consumed || 0).toLocaleString()}</strong></span>
+                  <span className={`font-semibold ${remaining > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>
+                    {remaining > 0 ? `₱${remaining.toLocaleString()} remaining` : 'Fully consumed'}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         )}
