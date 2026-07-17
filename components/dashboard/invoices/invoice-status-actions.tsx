@@ -8,11 +8,10 @@ import { updateInvoiceStatus, deleteInvoice } from "@/app/dashboard/invoices/act
 interface Props {
   invoiceId: string;
   currentStatus: string;
-  hasPaymentRequest: boolean;
   canOverride: boolean;
 }
 
-export function InvoiceStatusActions({ invoiceId, currentStatus, hasPaymentRequest, canOverride }: Props) {
+export function InvoiceStatusActions({ invoiceId, currentStatus, canOverride }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -24,17 +23,32 @@ export function InvoiceStatusActions({ invoiceId, currentStatus, hasPaymentReque
   const canApprove = currentStatus === "received" || currentStatus === "under_review";
   const canDispute = currentStatus !== "disputed" && currentStatus !== "paid";
   const canDelete = currentStatus !== "paid" && currentStatus !== "deleted";
-  const needsOverride = hasPaymentRequest && canOverride;
 
-  function approve() {
-    if (!overrideReason.trim() && needsOverride && showApproveDialog) return;
+  // Step 1: try approve without override
+  function tryApprove() {
     setError(null);
     startTransition(async () => {
-      const res = await updateInvoiceStatus(
-        invoiceId,
-        "approved",
-        overrideReason.trim() || undefined,
-      );
+      const res = await updateInvoiceStatus(invoiceId, "approved");
+      if (res.error) {
+        // If overage error and user can override, show the dialog
+        if (canOverride && res.error.toLowerCase().includes("override")) {
+          setShowApproveDialog(true);
+          setError(null);
+          return;
+        }
+        setError(res.error);
+      } else {
+        router.refresh();
+      }
+    });
+  }
+
+  // Step 2: retry with override reason
+  function approveWithOverride() {
+    if (!overrideReason.trim()) return;
+    setError(null);
+    startTransition(async () => {
+      const res = await updateInvoiceStatus(invoiceId, "approved", overrideReason.trim());
       if (res.error) setError(res.error);
       else {
         setShowApproveDialog(false);
@@ -70,7 +84,7 @@ export function InvoiceStatusActions({ invoiceId, currentStatus, hasPaymentReque
 
       {canApprove && !showApproveDialog && (
         <button
-          onClick={() => needsOverride ? setShowApproveDialog(true) : approve()}
+          onClick={tryApprove}
           disabled={isPending}
           className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-all active:scale-95 disabled:opacity-60"
         >
@@ -95,7 +109,7 @@ export function InvoiceStatusActions({ invoiceId, currentStatus, hasPaymentReque
             />
             <div className="flex items-center gap-2">
               <button
-                onClick={approve}
+                onClick={approveWithOverride}
                 disabled={isPending || !overrideReason.trim()}
                 className="inline-flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded-lg text-xs font-medium transition-all disabled:opacity-60"
               >

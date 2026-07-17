@@ -131,7 +131,6 @@ async function InvoiceDetailContent({ paramsPromise }: { paramsPromise: Promise<
           <InvoiceStatusActions
             invoiceId={invoice.id}
             currentStatus={invoice.status}
-            hasPaymentRequest={!!paymentRequest}
             canOverride={hasCapability(role, 'invoice.override')}
           />
           {balance > 0 && canPay && (
