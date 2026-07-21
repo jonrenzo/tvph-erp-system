@@ -8,6 +8,7 @@ import { InvoiceStatusActions } from '@/components/dashboard/invoices/invoice-st
 import { Suspense } from 'react';
 import { getCurrentProfile, hasCapability } from '@/lib/auth/permissions';
 import { signDocUrls } from '@/utils/storage';
+import { invoiceStatusLabel, invoiceStatusBadgeClasses } from '@/lib/invoices/status';
 
 export const unstable_instant = {
   prefetch: 'static',
@@ -102,13 +103,8 @@ async function InvoiceDetailContent({ paramsPromise }: { paramsPromise: Promise<
               <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-plus-jakarta tracking-tight">
                 {invoice.invoice_number}
               </h1>
-              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${
-                invoice.status === 'paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800/50' :
-                invoice.status === 'approved' ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800/50' :
-                invoice.status === 'disputed' ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800/50' :
-                'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800/50'
-              }`}>
-                {invoice.status.toUpperCase()}
+              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${invoiceStatusBadgeClasses(invoice.status)}`}>
+                {invoiceStatusLabel(invoice.status)}
               </span>
             </div>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-2">
@@ -131,8 +127,6 @@ async function InvoiceDetailContent({ paramsPromise }: { paramsPromise: Promise<
           <InvoiceStatusActions
             invoiceId={invoice.id}
             currentStatus={invoice.status}
-            hasPaymentRequest={!!paymentRequest}
-            canOverride={hasCapability(role, 'invoice.override')}
           />
           {balance > 0 && canPay && (
             <RecordPaymentModal invoiceId={invoice.id} remainingBalance={balance} />
