@@ -11,6 +11,7 @@ import { Suspense } from 'react';
 import { RecentActivity } from '@/components/dashboard/shared/recent-activity';
 import { isVendorProfileComplete, getVendorMissingFields } from '@/utils/completeness';
 import { Tooltip } from '@/components/ui/tooltip';
+import { invoiceStatusLabel, invoiceStatusBadgeClasses } from '@/lib/invoices/status';
 
 export const unstable_instant = { 
   prefetch: 'static',
@@ -321,12 +322,8 @@ async function VendorDetailContent({
                         </td>
                         <td className="px-6 py-4 font-semibold text-slate-900 dark:text-white">{(vendor.currency || 'PHP') === 'USD' ? '$' : '₱'}{Number(inv.amount).toLocaleString()}</td>
                         <td className="px-6 py-4">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                            inv.status === 'paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400' :
-                            inv.status === 'disputed' ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400' :
-                            'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400'
-                          }`}>
-                            {inv.status.toUpperCase()}
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${invoiceStatusBadgeClasses(inv.status)}`}>
+                            {invoiceStatusLabel(inv.status)}
                           </span>
                         </td>
                         <td className="px-6 py-4 text-right">
