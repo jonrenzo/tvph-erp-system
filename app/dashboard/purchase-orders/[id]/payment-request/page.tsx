@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import { Suspense } from "react";
 import { createClient } from "@/utils/supabase/server";
 import { getCurrentProfile, hasCapability } from "@/lib/auth/permissions";
 import { SendPaymentRequestPanel } from "@/components/dashboard/purchase-orders/send-payment-request-panel";
@@ -12,7 +13,18 @@ export default function SendPaymentRequestPage(props: {
   params: Promise<{ id: string }>;
 }) {
   return (
-    <SendPaymentRequestContent paramsPromise={props.params} />
+    <Suspense fallback={<SendPaymentRequestSkeleton />}>
+      <SendPaymentRequestContent paramsPromise={props.params} />
+    </Suspense>
+  );
+}
+
+function SendPaymentRequestSkeleton() {
+  return (
+    <div className="animate-pulse space-y-4">
+      <div className="h-8 w-64 rounded-lg bg-slate-200 dark:bg-slate-800" />
+      <div className="h-64 w-full rounded-xl bg-slate-200 dark:bg-slate-800" />
+    </div>
   );
 }
 
