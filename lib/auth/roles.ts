@@ -101,8 +101,8 @@ export const CAPABILITY_ROLES = {
   "client_invoice.pay": ["superadmin", "admin", "finance"],
   "payment_reservation.notify": ["superadmin", "admin", "operations"],
   "payment_reservation.acknowledge": ["superadmin", "admin", "finance"],
-  "payment_request.create": ["superadmin", "admin", "operations"],
-  "payment_request.approve": ["superadmin", "admin", "finance"],
+  "payment_request.create": ["superadmin", "admin", "operations", "finance"],
+  "payment_request.approve": ["superadmin", "admin", "finance", "operations"],
   "invoice.override": ["superadmin", "admin", "finance"],
 } as const satisfies Record<Capability, readonly Role[]>;
 

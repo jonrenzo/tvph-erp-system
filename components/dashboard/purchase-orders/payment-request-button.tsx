@@ -2,9 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, CheckCircle2, XCircle, Loader2, AlertCircle, ThumbsUp, ThumbsDown } from "lucide-react";
+import Link from "next/link";
+import { FileText, CheckCircle2, XCircle, Loader2, AlertCircle, ThumbsUp, ThumbsDown, Send } from "lucide-react";
 import {
-  createPaymentRequest,
   approvePaymentRequest,
   rejectPaymentRequest,
 } from "@/app/dashboard/purchase-orders/actions";
@@ -52,10 +52,6 @@ export function PaymentRequestButton({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [amount, setAmount] = useState("");
-  const [dueInDays, setDueInDays] = useState("30");
-  const [notes, setNotes] = useState("");
-  const [selectedCertId, setSelectedCertId] = useState(approvedCerts[0]?.id ?? "");
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectForm, setShowRejectForm] = useState(false);
 
@@ -91,84 +87,29 @@ export function PaymentRequestButton({
       </div>
 
       <div className="p-6 space-y-4">
-        {/* No PR yet — show create form */}
+        {/* No PR yet — redirect to Send Payment Request page */}
         {!hasActive && canCreate && paymentRequest?.status !== "rejected" && (
-          <>
-            <p className="text-sm text-slate-600 dark:text-slate-400">
-              Create a Payment Request to authorize the subcontractor to submit a progress-billing invoice.
-            </p>
-
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Amount (₱)</label>
-                <input
-                  type="number"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder={`Max: ₱${poAmount.toLocaleString()}`}
-                  className="w-full text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-3 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Due In (Days)</label>
-                <input
-                  type="number"
-                  value={dueInDays}
-                  onChange={(e) => setDueInDays(e.target.value)}
-                  min={1}
-                  className="w-full text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-3 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30"
-                />
-              </div>
-
-              {approvedCerts.length > 0 && (
-                <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Completion Certificate</label>
-                  <select
-                    value={selectedCertId}
-                    onChange={(e) => setSelectedCertId(e.target.value)}
-                    className="w-full text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/30"
-                  >
-                    <option value="">No certificate (use PO total)</option>
-                    {approvedCerts.map((cert) => (
-                      <option key={cert.id} value={cert.id}>
-                        {cert.percent_complete}% Complete
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Notes (Optional)</label>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Reason for this payment request..."
-                  className="w-full text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-3 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
-                  rows={2}
-                />
-              </div>
+          <div className="flex flex-col items-center gap-4 py-6 text-center">
+            <Send className="h-10 w-10 text-primary/40" />
+            <div>
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                No active payment request
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Use the comprehensive flow with accreditation compliance check to create one.
+              </p>
             </div>
-
-            <button
-              onClick={() => act(() => createPaymentRequest(
-                poId,
-                parseFloat(amount),
-                parseInt(dueInDays) || 30,
-                notes || undefined,
-                selectedCertId || undefined,
-              ))}
-              disabled={isPending || !amount}
-              className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all active:scale-95 disabled:opacity-60"
+            <Link
+              href={`/dashboard/purchase-orders/${poId}/payment-request`}
+              className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all active:scale-95 shadow-sm"
             >
-              {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-              Create Payment Request
-            </button>
-          </>
+              <Send className="h-4 w-4" />
+              Send Payment Request
+            </Link>
+          </div>
         )}
 
-        {/* Rejected — show reason and allow re-create */}
+        {/* Rejected — show reason and redirect to re-create */}
         {paymentRequest?.status === "rejected" && canCreate && (
           <>
             <div className="flex items-start gap-3 p-4 rounded-xl bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800/50">
@@ -180,81 +121,19 @@ export function PaymentRequestButton({
                 </p>
               </div>
             </div>
-            <p className="text-sm text-slate-600 dark:text-slate-400">
-              You may create a new Payment Request with adjusted details.
-            </p>
-            {/* We show the create form below by not having the !hasActive guard */}
-          </>
-        )}
-
-        {/* Rejected + allow re-create form */}
-        {paymentRequest?.status === "rejected" && canCreate && (
-          <div className="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-            <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Create a New Payment Request</p>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Amount (₱)</label>
-                <input
-                  type="number"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder={`Max: ₱${poAmount.toLocaleString()}`}
-                  className="w-full text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-3 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Due In (Days)</label>
-                <input
-                  type="number"
-                  value={dueInDays}
-                  onChange={(e) => setDueInDays(e.target.value)}
-                  min={1}
-                  className="w-full text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-3 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30"
-                />
-              </div>
-              {approvedCerts.length > 0 && (
-                <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Completion Certificate</label>
-                  <select
-                    value={selectedCertId}
-                    onChange={(e) => setSelectedCertId(e.target.value)}
-                    className="w-full text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/30"
-                  >
-                    <option value="">No certificate (use PO total)</option>
-                    {approvedCerts.map((cert) => (
-                      <option key={cert.id} value={cert.id}>
-                        {cert.percent_complete}% Complete
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Notes (Optional)</label>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Reason for this payment request..."
-                  className="w-full text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-3 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
-                  rows={2}
-                />
-              </div>
+            <div className="flex flex-col items-center gap-4 py-4 text-center">
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                You may create a new Payment Request with adjusted details.
+              </p>
+              <Link
+                href={`/dashboard/purchase-orders/${poId}/payment-request`}
+                className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all active:scale-95 shadow-sm"
+              >
+                <Send className="h-4 w-4" />
+                Send Payment Request
+              </Link>
             </div>
-            <button
-              onClick={() => act(() => createPaymentRequest(
-                poId,
-                parseFloat(amount),
-                parseInt(dueInDays) || 30,
-                notes || undefined,
-                selectedCertId || undefined,
-              ))}
-              disabled={isPending || !amount}
-              className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all active:scale-95 disabled:opacity-60"
-            >
-              {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-              Create Payment Request
-            </button>
-          </div>
+          </>
         )}
 
         {/* Pending — show awaiting approval */}
