@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
   targetDate.setDate(targetDate.getDate() + 14);
   const targetDateStr = targetDate.toISOString().slice(0, 10);
 
-  // --- Fetch approved invoices due in exactly 14 days ---
+  // --- Fetch unpaid invoices due in exactly 14 days ---
   const { data: invoices, error } = await supabase
     .from("service_invoices")
     .select(`
@@ -34,7 +34,8 @@ export async function POST(request: NextRequest) {
       vendor_id,
       vendors ( id, name, contact_email )
     `)
-    .eq("status", "approved")
+    .neq("status", "paid")
+    .is("deleted_at", null)
     .eq("due_date", targetDateStr);
 
   if (error) {

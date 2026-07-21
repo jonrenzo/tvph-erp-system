@@ -6,6 +6,7 @@ import { SearchInput } from '@/components/ui/search-input';
 import { StatusSelect } from '@/components/ui/status-select';
 import { Pagination } from '@/components/ui/pagination';
 import { LIST_PAGE_SIZE, parsePage, pageRange } from '@/components/ui/pagination-utils';
+import { invoiceStatusLabel, invoiceStatusBadgeClasses } from '@/lib/invoices/status';
 
 export const unstable_instant = {
   prefetch: 'static',
@@ -75,11 +76,9 @@ async function InvoicesContent({ searchParams: searchParamsPromise }: { searchPa
             paramName="status"
             options={[
               { value: 'all', label: 'All Statuses' },
-              { value: 'received', label: 'Received' },
-              { value: 'approved', label: 'Approved' },
+              { value: 'pending_payment', label: 'Pending Payment' },
               { value: 'partially_paid', label: 'Partially Paid' },
-              { value: 'paid', label: 'Paid' },
-              { value: 'disputed', label: 'Disputed' }
+              { value: 'paid', label: 'Paid' }
             ]}
           />
         </div>
@@ -138,13 +137,8 @@ async function InvoicesContent({ searchParams: searchParamsPromise }: { searchPa
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold border ${
-                        inv.status === 'paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400' :
-                        inv.status === 'approved' ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400' :
-                        inv.status === 'disputed' ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400' :
-                        'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400'
-                      }`}>
-                        {inv.status.toUpperCase()}
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold border ${invoiceStatusBadgeClasses(inv.status)}`}>
+                        {invoiceStatusLabel(inv.status)}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right">

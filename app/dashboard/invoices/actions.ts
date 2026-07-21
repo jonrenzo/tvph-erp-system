@@ -186,7 +186,7 @@ export async function getEligiblePaymentRequests(poId: string): Promise<{ data?:
         .from('service_invoices')
         .select('amount')
         .eq('payment_request_id', pr.id)
-        .in('status', ['approved', 'partially_paid', 'paid'])
+        .in('status', ['pending_payment', 'partially_paid', 'paid'])
         .is('deleted_at', null);
 
       const consumed = consuming?.reduce((sum, inv) => sum + Number(inv.amount), 0) ?? 0;
@@ -310,7 +310,7 @@ export async function createInvoice(prevState: any, formData: FormData) {
           .from('service_invoices')
           .select('amount')
           .eq('payment_request_id', payment_request_id)
-          .in('status', ['approved', 'partially_paid', 'paid'])
+          .in('status', ['pending_payment', 'partially_paid', 'paid'])
           .is('deleted_at', null);
 
         const consumed = consumingInvoices?.reduce((sum, inv) => sum + Number(inv.amount), 0) ?? 0;
@@ -381,7 +381,7 @@ export async function createInvoice(prevState: any, formData: FormData) {
     amount: parseFloat(amount),
     invoice_date,
     due_date: finalDueDate,
-    status: 'received',
+    status: 'pending_payment',
     file_url,
     file_name,
     notes,
@@ -419,116 +419,7 @@ export async function createInvoice(prevState: any, formData: FormData) {
   redirect(`/dashboard/invoices/${newInvoice.id}`);
 }
 
-// --- Update invoice status (with PR balance consumption / release) ---
-
-export async function updateInvoiceStatus(
-  invoiceId: string,
-  status: string,
-  overrideReason?: string,
-) {
-  const supabase = await createClient();
-  const { user, error: authError } = await requireCapability('invoice.write', supabase);
-  if (authError || !user) return { error: authError || 'Unauthorized' };
-
-  // Consuming-status transitions use the atomic RPC to prevent double-consumption
-  if (status === 'approved') {
-    const canOverride = overrideReason
-      ? (await requireCapability('invoice.override', supabase)).user !== null
-      : false;
-
-    const { data: rpcResult, error: rpcError } = await supabase
-      .rpc('approve_invoice_consume_balance', {
-        p_invoice_id: invoiceId,
-        p_override_by: canOverride ? user.id : null,
-        p_override_reason: canOverride ? overrideReason : null,
-      });
-
-    if (rpcError) return { error: rpcError.message };
-
-    const result = rpcResult as Record<string, any>;
-    if (result?.error) return { error: result.error };
-
-    await recordAuditLog({
-      entity_type: 'service_invoice',
-      entity_id: invoiceId,
-      action: 'UPDATE',
-      changes: { after: { status: 'approved', carry_forward_amount: result.carry_forward_amount, pr_status: result.pr_status } },
-      performed_by: user.id,
-    });
-
-    await createNotification({
-      type: 'invoice',
-      title: '🧾 Invoice Approved',
-      message: `Invoice approved. ₱${Number(result.carry_forward_amount).toLocaleString()} carry-forward remaining.`,
-      link: `/dashboard/invoices/${invoiceId}`,
-      created_by: user.id,
-    });
-
-    revalidatePath(`/dashboard/invoices/${invoiceId}`);
-    return { success: true, carry_forward_amount: result.carry_forward_amount };
-  }
-
-  if (status === 'disputed') {
-    const { data: rpcResult, error: rpcError } = await supabase
-      .rpc('dispute_or_delete_invoice_release_balance', {
-        p_invoice_id: invoiceId,
-        p_new_status: 'disputed',
-      });
-
-    if (rpcError) return { error: rpcError.message };
-
-    const result = rpcResult as Record<string, any>;
-    if (result?.error) return { error: result.error };
-
-    await recordAuditLog({
-      entity_type: 'service_invoice',
-      entity_id: invoiceId,
-      action: 'UPDATE',
-      changes: { after: { status: 'disputed', pr_reopened: result.pr_reopened, pr_new_status: result.pr_new_status } },
-      performed_by: user.id,
-    });
-
-    await createNotification({
-      type: 'invoice',
-      title: '🧾 Invoice Disputed',
-      message: result.pr_reopened
-        ? `Invoice disputed. The linked payment request has been reopened with ₱${Number(result.remaining_balance).toLocaleString()} remaining.`
-        : 'Invoice marked as disputed.',
-      link: `/dashboard/invoices/${invoiceId}`,
-      created_by: user.id,
-    });
-
-    revalidatePath(`/dashboard/invoices/${invoiceId}`);
-    return { success: true, pr_reopened: result.pr_reopened, remaining_balance: result.remaining_balance };
-  }
-
-  // Non-consuming transitions: simple status update
-  const { error } = await supabase
-    .from('service_invoices')
-    .update({ status, updated_at: new Date().toISOString() })
-    .eq('id', invoiceId);
-
-  if (error) return { error: error.message };
-
-  await recordAuditLog({
-    entity_type: 'service_invoice',
-    entity_id: invoiceId,
-    action: 'UPDATE',
-    changes: { after: { status } },
-    performed_by: user.id,
-  });
-
-  await createNotification({
-    type: 'invoice',
-    title: '🧾 Invoice Status Updated',
-    message: `Invoice status changed to ${status}.`,
-    link: `/dashboard/invoices/${invoiceId}`,
-    created_by: user.id,
-  });
-
-  revalidatePath(`/dashboard/invoices/${invoiceId}`);
-  return { success: true };
-}
+// --- Delete invoice (releases reserved payment-request balance via trigger) ---
 
 export async function deleteInvoice(invoiceId: string) {
   const supabase = await createClient();
@@ -537,19 +428,22 @@ export async function deleteInvoice(invoiceId: string) {
 
   const { data: invoice } = await supabase
     .from('service_invoices')
-    .select('invoice_number, payment_request_id')
+    .select('invoice_number, status')
     .eq('id', invoiceId)
     .single();
 
-  const { data: rpcResult, error: rpcError } = await supabase
-    .rpc('dispute_or_delete_invoice_release_balance', {
-      p_invoice_id: invoiceId,
-      p_new_status: 'deleted',
-    });
+  if (invoice?.status === 'paid') {
+    return { error: 'Paid invoices cannot be deleted.' };
+  }
 
-  if (rpcError) return { error: rpcError.message };
-  const result = rpcResult as Record<string, any>;
-  if (result?.error) return { error: result.error };
+  // Soft-delete. The service_invoice_sync_pr trigger recomputes the linked payment
+  // request and reopens it (fully_invoiced -> approved) if this frees up balance.
+  const { error } = await supabase
+    .from('service_invoices')
+    .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq('id', invoiceId);
+
+  if (error) return { error: error.message };
 
   await recordAuditLog({
     entity_type: 'service_invoice',
@@ -678,36 +572,16 @@ export async function recordPayment(prevState: any, formData: FormData) {
 
   const totalPaidOnInvoice = allPayments?.reduce((sum, p) => sum + Number(p.amount_paid), 0) || 0;
 
-  let invoiceStatus = 'received';
+  let invoiceStatus = 'pending_payment';
   if (totalPaidOnInvoice >= invoice.amount) {
     invoiceStatus = 'paid';
   } else if (totalPaidOnInvoice > 0) {
     invoiceStatus = 'partially_paid';
   }
 
-  // If transitioning to a consuming state without having gone through approve,
-  // consume the PR balance now (e.g. direct payment on a received invoice)
-  const consumingStates = ['approved', 'partially_paid', 'paid'];
-  const isNowConsuming = consumingStates.includes(invoiceStatus);
-  const wasConsuming = consumingStates.includes(invoice.status);
-  if (isNowConsuming && !wasConsuming && invoice.payment_request_id) {
-    const { data: rpcResult, error: rpcError } = await supabase
-      .rpc('approve_invoice_consume_balance', {
-        p_invoice_id: invoice_id,
-        p_override_by: null,
-        p_override_reason: null,
-      });
-    if (rpcError) {
-      // Non-blocking: log but don't fail the payment
-      console.error('Failed to consume PR balance on payment record:', rpcError);
-    } else {
-      const result = rpcResult as Record<string, any>;
-      if (result?.error) {
-        console.error('Failed to consume PR balance on payment record:', result.error);
-      }
-    }
-  }
-
+  // The payment request balance is already reserved when the invoice is created
+  // (a pending_payment invoice consumes it), and the service_invoice_sync_pr trigger
+  // keeps the payment request status in sync — so no manual consumption step here.
   await supabase.from('service_invoices').update({ status: invoiceStatus }).eq('id', invoice_id);
 
   // Update PO status if linked
