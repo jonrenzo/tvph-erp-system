@@ -5,8 +5,9 @@ import { createClient } from '@/utils/supabase/server';
 import { redirect } from 'next/navigation';
 import { createNotification } from '@/utils/notifications';
 import { recordAuditLog } from '@/utils/audit';
-import { requireCapability } from '@/lib/auth/permissions';
+import { requireCapability, getCurrentProfile, hasCapability } from '@/lib/auth/permissions';
 import { sendPrPendingApprovalEmail } from '@/lib/email/pr-pending-approval';
+import { sendPrPendingFinanceEmail } from '@/lib/email/pr-pending-finance';
 import { sendPrApprovedEmail } from '@/lib/email/pr-approved';
 
 type PRLineItem = { item_code?: string; description: string; qty: number; uom?: string; unit_price: number };
@@ -367,7 +368,7 @@ export async function approvePR(prId: string) {
     .single();
 
   if (pr?.status !== 'pending_approval') {
-    return { error: 'This PR is not pending approval.' };
+    return { error: 'This PR is not pending the admin approval.' };
   }
 
   if (pr.submitted_for_approval_by === user.id) {
@@ -377,25 +378,87 @@ export async function approvePR(prId: string) {
   const now = new Date().toISOString();
   const { error, count } = await supabase
     .from('purchase_requests')
-    .update({ status: 'approved', approved_by_user_id: user.id, approved_at: now, updated_at: now }, { count: 'exact' })
+    .update({ status: 'pending_finance', approved_by_user_id: user.id, approved_at: now, updated_at: now }, { count: 'exact' })
     .eq('id', prId)
     .eq('status', 'pending_approval');
 
   if (error) return { error: error.message };
-  if (count === 0) return { error: 'This PR is not pending approval.' };
+  if (count === 0) return { error: 'This PR is not pending the admin approval.' };
 
   await recordAuditLog({
     entity_type: 'purchase_request',
     entity_id: prId,
     action: 'UPDATE',
-    changes: { after: { status: 'approved', approved_by_user_id: user.id } },
+    changes: { after: { status: 'pending_finance', admin_approved_by: user.id } },
+    performed_by: user.id,
+  });
+
+  await createNotification({
+    type: 'pr',
+    title: '👤 PR Admin Approved',
+    message: 'A purchase request was approved by the admin and is pending the finance budget check.',
+    link: `/dashboard/purchase-requests/${prId}`,
+    created_by: user.id,
+  });
+
+  // Best-effort: notify the finance pool. A failed send never blocks approval.
+  const emailResult = await sendPrPendingFinanceEmail(prId, { actorId: user.id });
+  if (emailResult.status === 'failed') {
+    await createNotification({
+      type: 'pr',
+      title: '⚠️ Finance email not sent',
+      message: `A PR passed the admin stage but the finance notification email could not be sent. ${emailResult.error ?? ''}`.trim(),
+      link: `/dashboard/purchase-requests/${prId}`,
+      created_by: user.id,
+    });
+  }
+
+  revalidatePath(`/dashboard/purchase-requests/${prId}`);
+  revalidatePath('/dashboard/purchase-requests');
+  return { success: true, emailWarning: emailResult.status === 'failed' ? emailResult.error : undefined };
+}
+
+export async function approvePRFinance(prId: string) {
+  const supabase = await createClient();
+  const { user, error: authError } = await requireCapability('pr.approve_finance', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
+
+  const { data: pr } = await supabase
+    .from('purchase_requests')
+    .select('status, approved_by_user_id')
+    .eq('id', prId)
+    .single();
+
+  if (pr?.status !== 'pending_finance') {
+    return { error: 'This PR is not pending the finance approval.' };
+  }
+
+  if (pr.approved_by_user_id === user.id) {
+    return { error: 'You cannot approve a PR you approved at the admin stage. Another finance or superadmin user must do the budget check.' };
+  }
+
+  const now = new Date().toISOString();
+  const { error, count } = await supabase
+    .from('purchase_requests')
+    .update({ status: 'approved', finance_approved_by_user_id: user.id, finance_approved_at: now, updated_at: now }, { count: 'exact' })
+    .eq('id', prId)
+    .eq('status', 'pending_finance');
+
+  if (error) return { error: error.message };
+  if (count === 0) return { error: 'This PR is not pending the finance approval.' };
+
+  await recordAuditLog({
+    entity_type: 'purchase_request',
+    entity_id: prId,
+    action: 'UPDATE',
+    changes: { after: { status: 'approved', finance_approved_by: user.id } },
     performed_by: user.id,
   });
 
   await createNotification({
     type: 'pr',
     title: '✅ PR Approved',
-    message: 'A purchase request was approved and is ready to be converted into a purchase order.',
+    message: 'A purchase request passed the finance budget check and is ready to be converted into a purchase order.',
     link: `/dashboard/purchase-requests/${prId}`,
     created_by: user.id,
   });
@@ -421,7 +484,7 @@ export async function approvePR(prId: string) {
 
 export async function rejectPR(prId: string, reason: string) {
   const supabase = await createClient();
-  const { user, error: authError } = await requireCapability('pr.approve', supabase);
+  const { user, role, error: authError } = await getCurrentProfile(supabase);
   if (authError || !user) return { error: authError || 'Unauthorized' };
 
   if (!reason?.trim()) return { error: 'A rejection reason is required.' };
@@ -432,11 +495,14 @@ export async function rejectPR(prId: string, reason: string) {
     .eq('id', prId)
     .single();
 
-  if (pr?.status !== 'pending_approval') {
+  // Rejection is allowed at either stage; the capability follows the stage the
+  // PR is currently in. The update below guards the transition so a stale
+  // status can never be rejected.
+  const stageCapability = pr?.status === 'pending_finance' ? 'pr.approve_finance' : pr?.status === 'pending_approval' ? 'pr.approve' : null;
+  if (!stageCapability || !hasCapability(role, stageCapability)) {
     return { error: 'This PR is not pending approval.' };
   }
 
-  // Mirrors rejectPO: back to draft so the requester can edit and resubmit.
   const { error, count } = await supabase
     .from('purchase_requests')
     .update({
@@ -445,7 +511,7 @@ export async function rejectPR(prId: string, reason: string) {
       updated_at: new Date().toISOString(),
     }, { count: 'exact' })
     .eq('id', prId)
-    .eq('status', 'pending_approval');
+    .in('status', ['pending_approval', 'pending_finance']);
 
   if (error) return { error: error.message };
   if (count === 0) return { error: 'This PR is not pending approval.' };
@@ -491,7 +557,7 @@ export async function cancelPurchaseRequest(prId: string) {
     .from('purchase_requests')
     .update({ status: 'cancelled', updated_at: new Date().toISOString() }, { count: 'exact' })
     .eq('id', prId)
-    .in('status', ['draft', 'pending_approval', 'approved']);
+    .in('status', ['draft', 'pending_approval', 'pending_finance', 'approved']);
 
   if (error) return { error: error.message };
   if (count === 0) return { error: 'A converted PR cannot be cancelled.' };

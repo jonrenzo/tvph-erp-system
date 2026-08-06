@@ -1,6 +1,7 @@
 import {
   submitPRForApproval,
   approvePR,
+  approvePRFinance,
   rejectPR,
   cancelPurchaseRequest,
 } from '@/app/dashboard/purchase-requests/actions';
@@ -11,6 +12,8 @@ jest.mock('@/utils/supabase/server', () => ({
 
 jest.mock('@/lib/auth/permissions', () => ({
   requireCapability: jest.fn(),
+  getCurrentProfile: jest.fn(),
+  hasCapability: jest.fn(),
 }));
 
 jest.mock('@/utils/audit', () => ({
@@ -29,24 +32,32 @@ jest.mock('@/lib/email/pr-approved', () => ({
   sendPrApprovedEmail: jest.fn(),
 }));
 
+jest.mock('@/lib/email/pr-pending-finance', () => ({
+  sendPrPendingFinanceEmail: jest.fn(),
+}));
+
 jest.mock('next/cache', () => ({
   revalidatePath: jest.fn(),
 }));
 
 import { createClient } from '@/utils/supabase/server';
-import { requireCapability } from '@/lib/auth/permissions';
+import { requireCapability, getCurrentProfile, hasCapability } from '@/lib/auth/permissions';
 import { recordAuditLog } from '@/utils/audit';
 import { createNotification } from '@/utils/notifications';
 import { sendPrPendingApprovalEmail } from '@/lib/email/pr-pending-approval';
 import { sendPrApprovedEmail } from '@/lib/email/pr-approved';
+import { sendPrPendingFinanceEmail } from '@/lib/email/pr-pending-finance';
 import { revalidatePath } from 'next/cache';
 
 const mockCreateClient = createClient as jest.MockedFunction<typeof createClient>;
 const mockRequireCapability = requireCapability as jest.MockedFunction<typeof requireCapability>;
+const mockGetCurrentProfile = getCurrentProfile as jest.MockedFunction<typeof getCurrentProfile>;
+const mockHasCapability = hasCapability as jest.MockedFunction<typeof hasCapability>;
 const mockRecordAuditLog = recordAuditLog as jest.MockedFunction<typeof recordAuditLog>;
 const mockCreateNotification = createNotification as jest.MockedFunction<typeof createNotification>;
 const mockSendPrPendingApprovalEmail = sendPrPendingApprovalEmail as jest.MockedFunction<typeof sendPrPendingApprovalEmail>;
 const mockSendPrApprovedEmail = sendPrApprovedEmail as jest.MockedFunction<typeof sendPrApprovedEmail>;
+const mockSendPrPendingFinanceEmail = sendPrPendingFinanceEmail as jest.MockedFunction<typeof sendPrPendingFinanceEmail>;
 const mockRevalidatePath = revalidatePath as jest.MockedFunction<typeof revalidatePath>;
 
 function makeMockSupabase() {
@@ -181,6 +192,7 @@ describe('approvePR — 4-eyes', () => {
     mockRecordAuditLog.mockResolvedValue(undefined);
     mockCreateNotification.mockResolvedValue(undefined);
     mockSendPrApprovedEmail.mockResolvedValue({ status: 'sent' });
+    mockSendPrPendingFinanceEmail.mockResolvedValue({ status: 'sent' });
     mockRevalidatePath.mockReturnValue(undefined);
 
     mockSupabase.selectChain.single.mockResolvedValue({
@@ -192,21 +204,22 @@ describe('approvePR — 4-eyes', () => {
     });
   });
 
-  it('allows a different admin to approve the PR', async () => {
+  it('allows a different admin to approve and move the PR to finance', async () => {
     const result = await approvePR('pr-123');
     expect(result).toEqual({ success: true });
 
     const updateFn = mockSupabase.from('purchase_requests').update;
     expect(updateFn).toHaveBeenCalledWith(
       expect.objectContaining({
-        status: 'approved',
+        status: 'pending_finance',
         approved_by_user_id: 'approver-user',
         approved_at: expect.any(String),
       }),
       { count: 'exact' }
     );
     expect(mockRecordAuditLog).toHaveBeenCalled();
-    expect(mockSendPrApprovedEmail).toHaveBeenCalledWith('pr-123', { actorId: 'approver-user' });
+    expect(mockSendPrPendingFinanceEmail).toHaveBeenCalledWith('pr-123', { actorId: 'approver-user' });
+    expect(mockSendPrApprovedEmail).not.toHaveBeenCalled();
   });
 
   it('blocks self-approval', async () => {
@@ -232,7 +245,7 @@ describe('approvePR — 4-eyes', () => {
     });
 
     const result = await approvePR('pr-draft');
-    expect(result).toEqual({ error: 'This PR is not pending approval.' });
+    expect(result).toEqual({ error: 'This PR is not pending the admin approval.' });
   });
 
   it('returns auth error when user lacks pr.approve capability', async () => {
@@ -246,11 +259,77 @@ describe('approvePR — 4-eyes', () => {
     expect(result).toEqual({ error: 'User does not have pr.approve capability' });
   });
 
-  it('still succeeds when the procurement email fails', async () => {
-    mockSendPrApprovedEmail.mockResolvedValue({ status: 'failed', error: 'SMTP down' });
+  it('still succeeds when the finance email fails', async () => {
+    mockSendPrPendingFinanceEmail.mockResolvedValue({ status: 'failed', error: 'SMTP down' });
 
     const result = await approvePR('pr-email');
     expect(result).toEqual({ success: true, emailWarning: 'SMTP down' });
+  });
+});
+
+describe('approvePRFinance', () => {
+  let mockSupabase: ReturnType<typeof makeMockSupabase>;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockSupabase = makeMockSupabase();
+
+    mockCreateClient.mockResolvedValue(mockSupabase as any);
+    mockRequireCapability.mockResolvedValue({
+      user: { id: 'finance-user' },
+      role: 'finance',
+      error: null,
+    });
+    mockRecordAuditLog.mockResolvedValue(undefined);
+    mockCreateNotification.mockResolvedValue(undefined);
+    mockSendPrApprovedEmail.mockResolvedValue({ status: 'sent' });
+    mockRevalidatePath.mockReturnValue(undefined);
+
+    mockSupabase.selectChain.single.mockResolvedValue({
+      data: { status: 'pending_finance', approved_by_user_id: 'admin-user' },
+      error: null,
+    });
+  });
+
+  it('approves a pending_finance PR when the finance user did not approve at the admin stage', async () => {
+    const result = await approvePRFinance('pr-123');
+    expect(result).toEqual({ success: true });
+
+    const updateFn = mockSupabase.from('purchase_requests').update;
+    expect(updateFn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'approved',
+        finance_approved_by_user_id: 'finance-user',
+        finance_approved_at: expect.any(String),
+      }),
+      { count: 'exact' }
+    );
+    expect(mockRecordAuditLog).toHaveBeenCalled();
+    expect(mockSendPrApprovedEmail).toHaveBeenCalledWith('pr-123', { actorId: 'finance-user' });
+  });
+
+  it('blocks the admin-stage approver from doing the finance check (4-eyes across stages)', async () => {
+    mockSupabase.selectChain.single.mockResolvedValue({
+      data: { status: 'pending_finance', approved_by_user_id: 'finance-user' },
+      error: null,
+    });
+
+    const result = await approvePRFinance('pr-self');
+    expect(result).toEqual({
+      error: 'You cannot approve a PR you approved at the admin stage. Another finance or superadmin user must do the budget check.',
+    });
+    expect(mockSupabase.updateChain.eq).not.toHaveBeenCalled();
+  });
+
+  it('rejects when the PR is not pending_finance', async () => {
+    mockSupabase.selectChain.single.mockResolvedValue({
+      data: { status: 'draft', approved_by_user_id: 'admin-user' },
+      error: null,
+    });
+
+    const result = await approvePRFinance('pr-draft');
+    expect(result).toEqual({ error: 'This PR is not pending the finance approval.' });
+    expect(mockSupabase.updateChain.eq).not.toHaveBeenCalled();
   });
 });
 
@@ -262,11 +341,12 @@ describe('rejectPR', () => {
     mockSupabase = makeMockSupabase();
 
     mockCreateClient.mockResolvedValue(mockSupabase as any);
-    mockRequireCapability.mockResolvedValue({
+    mockGetCurrentProfile.mockResolvedValue({
       user: { id: 'approver-user' },
       role: 'admin',
       error: null,
-    });
+    } as any);
+    mockHasCapability.mockReturnValue(true);
     mockRecordAuditLog.mockResolvedValue(undefined);
     mockCreateNotification.mockResolvedValue(undefined);
     mockRevalidatePath.mockReturnValue(undefined);
@@ -305,6 +385,14 @@ describe('rejectPR', () => {
 
     const result = await rejectPR('pr-converted', 'too late');
     expect(result).toEqual({ error: 'This PR is not pending approval.' });
+  });
+
+  it('returns auth error when the user lacks stage capability', async () => {
+    mockHasCapability.mockReturnValue(false);
+
+    const result = await rejectPR('pr-noauth', 'reason');
+    expect(result).toEqual({ error: 'This PR is not pending approval.' });
+    expect(mockSupabase.updateChain.eq).not.toHaveBeenCalled();
   });
 });
 

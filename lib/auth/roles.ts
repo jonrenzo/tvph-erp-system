@@ -40,6 +40,7 @@ export type Capability =
   | "pr.delete"
   | "pr.status"
   | "pr.approve"
+  | "pr.approve_finance"
   | "project.write"
   | "settings.manage"
   | "user.manage"
@@ -54,6 +55,7 @@ export type Capability =
   | "asset.write"
   | "project_status.read"
   | "po.approve"
+  | "po.approve_finance"
   | "po.waive_requirements"
   | "po.approve_waiver"
   | "po.approve_completion"
@@ -89,6 +91,7 @@ export const CAPABILITY_ROLES = {
   "pr.delete": ["superadmin"],
   "pr.status": ["superadmin", "admin", "operations", "finance"],
   "pr.approve": ["superadmin", "admin"],
+  "pr.approve_finance": ["superadmin", "finance"],
   "project.write": ["superadmin", "admin", "operations"],
   "settings.manage": ["superadmin", "admin"],
   "user.manage": ["superadmin", "admin"],
@@ -103,6 +106,7 @@ export const CAPABILITY_ROLES = {
   "asset.write": ["superadmin", "admin", "operations"],
   "project_status.read": ["superadmin", "admin", "operations", "finance"],
   "po.approve": ["superadmin", "admin"],
+  "po.approve_finance": ["superadmin", "finance"],
   "po.waive_requirements": ["superadmin", "admin", "operations"],
   "po.approve_waiver": ["superadmin", "admin"],
   "po.approve_completion": ["superadmin", "admin"],

@@ -65,7 +65,7 @@ const mockRevalidatePath = revalidatePath as jest.MockedFunction<
 >;
 
 const ISSUE_BLOCKED_ERROR =
-  'POs can only be issued through the approval flow. Submit the PO for approval, then have a different admin or superadmin approve it.';
+  'POs can only be issued through the two-stage approval flow. Submit the PO for approval, then have an admin approve it and finance run the budget check.';
 
 describe('updatePOStatus', () => {
   let mockSupabase: any;

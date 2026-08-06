@@ -41,6 +41,7 @@ export default function PurchaseRequestDetailPage(props: {
 const STATUS_BADGE: Record<string, string> = {
   draft: "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400",
   pending_approval: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400",
+  pending_finance: "bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-900/20 dark:text-violet-400",
   approved: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400",
   converted: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400",
   cancelled: "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-500",
@@ -84,7 +85,7 @@ async function PRDetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
     .maybeSingle();
 
   // Resolve creator/submitter/approver names
-  const profileIds = [pr.created_by, pr.submitted_for_approval_by, pr.approved_by_user_id].filter(Boolean) as string[];
+  const profileIds = [pr.created_by, pr.submitted_for_approval_by, pr.approved_by_user_id, pr.finance_approved_by_user_id].filter(Boolean) as string[];
   const profiles: Record<string, string> = {};
   if (profileIds.length > 0) {
     const { data: rows } = await supabase
@@ -108,6 +109,7 @@ async function PRDetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
 
   const canSubmit = hasCapability(currentRole, "pr.status");
   const canApprove = hasCapability(currentRole, "pr.approve");
+  const canApproveFinance = hasCapability(currentRole, "pr.approve_finance");
   const canCancel = hasCapability(currentRole, "pr.create") && pr.created_by === currentUser?.id;
   const canDelete = hasCapability(currentRole, "pr.delete");
   const canConvert = hasCapability(currentRole, "po.create");
@@ -162,7 +164,7 @@ async function PRDetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
               Convert to PO
             </Link>
           )}
-          {["draft", "pending_approval", "approved"].includes(pr.status) && canCancel && (
+          {["draft", "pending_approval", "pending_finance", "approved"].includes(pr.status) && canCancel && (
             <PrCancelButton prId={pr.id} />
           )}
           {["draft", "cancelled"].includes(pr.status) && canDelete && (
@@ -171,25 +173,49 @@ async function PRDetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
         </div>
       </div>
 
-      {/* Pending approval banner */}
+      {/* Admin approval banner */}
       {pr.status === "pending_approval" && (
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-2xl bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/50">
           <div className="flex items-start gap-3 flex-1">
             <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
             <div>
               <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
-                Awaiting Approval
+                Awaiting Admin Approval
               </p>
               <p className="text-xs text-amber-600/80 dark:text-amber-400/60 mt-1">
-                This request has been submitted and <span className="font-semibold">cannot be converted</span> until an admin approves it.
+                This request has been submitted and <span className="font-semibold">cannot be converted</span> until an admin approves it, then finance runs the budget check.
               </p>
             </div>
           </div>
           {canApprove && pr.submitted_for_approval_by !== currentUser?.id ? (
-            <PrApprovalActions prId={pr.id} />
+            <PrApprovalActions prId={pr.id} stage="admin" />
           ) : canApprove ? (
             <p className="text-xs text-amber-600/80 dark:text-amber-400/60">
               You submitted this PR for approval. Another admin or superadmin must approve it.
+            </p>
+          ) : null}
+        </div>
+      )}
+
+      {/* Finance approval banner */}
+      {pr.status === "pending_finance" && (
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-2xl bg-violet-50 dark:bg-violet-900/10 border border-violet-200 dark:border-violet-800/50">
+          <div className="flex items-start gap-3 flex-1">
+            <Clock className="h-5 w-5 text-violet-600 dark:text-violet-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-violet-700 dark:text-violet-400">
+                Awaiting Finance Approval
+              </p>
+              <p className="text-xs text-violet-600/80 dark:text-violet-400/60 mt-1">
+                This request passed the admin stage and now awaits the <span className="font-semibold">finance budget check</span> before it can be converted to a PO.
+              </p>
+            </div>
+          </div>
+          {canApproveFinance && pr.approved_by_user_id !== currentUser?.id ? (
+            <PrApprovalActions prId={pr.id} stage="finance" />
+          ) : canApproveFinance ? (
+            <p className="text-xs text-violet-600/80 dark:text-violet-400/60">
+              You approved this PR at the admin stage. Another finance or superadmin user must run the budget check.
             </p>
           ) : null}
         </div>
@@ -314,12 +340,24 @@ async function PRDetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
           </div>
           <div>
             <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-              <CheckCircle2 className="h-3.5 w-3.5" /> Approved by
+              <CheckCircle2 className="h-3.5 w-3.5" /> Admin Approval
             </label>
             <p className="mt-1 text-slate-900 dark:text-slate-300 font-medium">
               {pr.approved_by_user_id
                 ? `${profiles[pr.approved_by_user_id] || "Unknown"} on ${new Date(pr.approved_at).toLocaleDateString(undefined, { dateStyle: "long" })}`
                 : "Not yet approved"}
+            </p>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Wallet className="h-3.5 w-3.5" /> Finance Approval
+            </label>
+            <p className="mt-1 text-slate-900 dark:text-slate-300 font-medium">
+              {pr.finance_approved_by_user_id
+                ? `${profiles[pr.finance_approved_by_user_id] || "Unknown"} on ${new Date(pr.finance_approved_at).toLocaleDateString(undefined, { dateStyle: "long" })}`
+                : pr.status === "pending_finance"
+                  ? "Pending finance budget check"
+                  : "Not yet approved"}
             </p>
           </div>
           <div>

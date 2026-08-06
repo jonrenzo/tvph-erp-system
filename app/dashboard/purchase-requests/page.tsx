@@ -19,6 +19,7 @@ export const unstable_instant = {
 const STATUS_BADGE: Record<string, string> = {
   draft: 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400',
   pending_approval: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400',
+  pending_finance: 'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-900/20 dark:text-violet-400',
   approved: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400',
   converted: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400',
   cancelled: 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-500',
@@ -84,7 +85,8 @@ async function PurchaseRequestsContent({ searchParams: searchParamsPromise }: { 
             options={[
               { value: 'all', label: 'All Statuses' },
               { value: 'draft', label: 'Draft' },
-              { value: 'pending_approval', label: 'Pending Approval' },
+              { value: 'pending_approval', label: 'Pending Admin Approval' },
+              { value: 'pending_finance', label: 'Pending Finance Approval' },
               { value: 'approved', label: 'Approved (Ready to Convert)' },
               { value: 'converted', label: 'Converted' },
               { value: 'cancelled', label: 'Cancelled' },

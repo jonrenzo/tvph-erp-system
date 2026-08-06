@@ -150,6 +150,7 @@ async function PurchaseOrdersContent({ searchParams: searchParamsPromise }: { se
               { value: 'all', label: 'All Statuses' },
               { value: 'draft', label: 'Draft' },
               { value: 'pending_approval', label: 'Pending Approval' },
+              { value: 'pending_finance', label: 'Pending Finance Approval' },
               { value: 'issued', label: 'Issued' },
               { value: 'partially_paid', label: 'Partially Paid' },
               { value: 'paid', label: 'Paid' },

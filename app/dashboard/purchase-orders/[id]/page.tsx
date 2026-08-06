@@ -22,6 +22,7 @@ import {
   TrendingUp,
   Pencil,
   Eye,
+  Wallet,
 } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
@@ -44,7 +45,7 @@ import { getCurrentProfile, hasCapability } from "@/lib/auth/permissions";
 import { signDocUrls } from "@/utils/storage";
 
 const menuItemClass = "flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors";
-const DRAFT_OR_PENDING = ["draft", "pending_approval"];
+const DRAFT_OR_PENDING = ["draft", "pending_approval", "pending_finance"];
 const ISSUED_OR_LATER = ["issued", "paid", "overpaid"];
 
 export const unstable_instant = {
@@ -133,6 +134,7 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
 
   const canSendEmail = hasCapability(currentRole, "email.send");
   const canApprovePO = hasCapability(currentRole, "po.approve");
+  const canApprovePOFinance = hasCapability(currentRole, "po.approve_finance");
   const canEditTerms = hasCapability(currentRole, "po.write");
   const canOverridePenalty = ["finance", "admin", "superadmin"].includes(currentRole || "");
 
@@ -170,7 +172,7 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
   }
 
   // Resolve PO creator and approver names
-  const poProfileIds = [po.created_by, po.approved_by_user_id].filter(Boolean) as string[];
+  const poProfileIds = [po.created_by, po.approved_by_user_id, po.finance_approved_by_user_id].filter(Boolean) as string[];
   const poProfiles: Record<string, { full_name: string; role: string }> = {};
   if (poProfileIds.length > 0) {
     const { data: profiles } = await supabase
@@ -192,6 +194,11 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
   const approvedByLabel = po.approved_by_user_id
     ? `${poProfiles[po.approved_by_user_id] ? `${poProfiles[po.approved_by_user_id].full_name} (${poProfiles[po.approved_by_user_id].role})` : "Unknown"} on ${new Date(po.approved_at).toLocaleDateString(undefined, { dateStyle: "long" })}`
     : "Not yet approved";
+  const financeApprovedByLabel = po.finance_approved_by_user_id
+    ? `${poProfiles[po.finance_approved_by_user_id] ? `${poProfiles[po.finance_approved_by_user_id].full_name} (${poProfiles[po.finance_approved_by_user_id].role})` : "Unknown"} on ${new Date(po.finance_approved_at).toLocaleDateString(undefined, { dateStyle: "long" })}`
+    : po.status === "pending_finance"
+      ? "Pending finance budget check"
+      : "Not yet approved";
 
   // Eligible approvers for the submit-for-approval picker: admins/superadmins
   // other than the current user (the 4-eyes rule blocks self-approval). Only
@@ -347,7 +354,9 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
                         ? "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400"
                         : po.status === "pending_approval"
                           ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400"
-                          : "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400"
+                          : po.status === "pending_finance"
+                            ? "bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-900/20 dark:text-violet-400"
+                            : "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400"
                 }`}
               >
                 {po.status.replace(/_/g, " ").toUpperCase()}
@@ -478,6 +487,29 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
           ) : canApprovePO ? (
             <p className="text-xs text-amber-600/80 dark:text-amber-400/60">
               You submitted this PO for approval. Another admin or superadmin must approve it.
+            </p>
+          ) : null}
+        </div>
+      )}
+
+      {po.status === "pending_finance" && (
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-2xl bg-violet-50 dark:bg-violet-900/10 border border-violet-200 dark:border-violet-800/50">
+          <div className="flex items-start gap-3 flex-1">
+            <Wallet className="h-5 w-5 text-violet-600 dark:text-violet-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-violet-700 dark:text-violet-400">
+                Awaiting Finance Approval
+              </p>
+              <p className="text-xs text-violet-600/80 dark:text-violet-400/60 mt-1">
+                This PO has been approved by admin and <span className="font-semibold">cannot be sent to the vendor</span> until finance completes the budget check.
+              </p>
+            </div>
+          </div>
+          {canApprovePOFinance && po.approved_by_user_id !== currentUser?.id ? (
+            <PoApprovalActions poId={po.id} stage="finance" />
+          ) : canApprovePOFinance ? (
+            <p className="text-xs text-violet-600/80 dark:text-violet-400/60">
+              You approved this PO as admin. Another finance or superadmin must do the budget check.
             </p>
           ) : null}
         </div>
@@ -1000,6 +1032,7 @@ async function PODetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
               dueDate={po.due_date}
               draftedBy={draftedByLabel}
               approvedBy={approvedByLabel}
+              financeApprovedBy={financeApprovedByLabel}
               canEdit={false}
               embedded
             />

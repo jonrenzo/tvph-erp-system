@@ -7,6 +7,7 @@ import { recordAuditLog } from '@/utils/audit';
 import { getCurrentProfile, requireCapability, hasCapability } from '@/lib/auth/permissions';
 import { sendPoIssuedEmail } from '@/lib/email/po';
 import { sendPoPendingApprovalEmail } from '@/lib/email/po-pending-approval';
+import { sendPoPendingFinanceEmail } from '@/lib/email/po-pending-finance';
 
 type POLineItem = { item_code?: string; description: string; qty: number; uom?: string; unit_price: number };
 type POSiteDetail = { region: string; area_city: string; no_of_nodes: number; cable_length_km: number; node_id?: string; phase?: string };
@@ -737,7 +738,7 @@ export async function approvePO(poId: string) {
     .single();
 
   if (po?.status !== 'pending_approval') {
-    return { error: 'This PO is not pending approval.' };
+    return { error: 'This PO is not pending the admin approval.' };
   }
 
   if (po.submitted_for_approval_by === user.id) {
@@ -745,22 +746,90 @@ export async function approvePO(poId: string) {
   }
 
   if (po.requirements_waived && !po.waiver_approved) {
-    return { error: 'Cannot issue: this PO has waived requirements pending executive approval.' };
+    return { error: 'Cannot approve: this PO has waived requirements pending executive approval.' };
   }
 
   const now = new Date().toISOString();
-  const { error } = await supabase
+  const { error, count } = await supabase
     .from('purchase_orders')
-    .update({ status: 'issued', approved_by_user_id: user.id, approved_at: now, updated_at: now })
-    .eq('id', poId);
+    .update({ status: 'pending_finance', approved_by_user_id: user.id, approved_at: now, updated_at: now }, { count: 'exact' })
+    .eq('id', poId)
+    .eq('status', 'pending_approval');
 
   if (error) return { error: error.message };
+  if (count === 0) return { error: 'This PO is not pending the admin approval.' };
 
   await recordAuditLog({
     entity_type: 'purchase_order',
     entity_id: poId,
     action: 'UPDATE',
-    changes: { after: { status: 'issued', approved_by_user_id: user.id } },
+    changes: { after: { status: 'pending_finance', admin_approved_by: user.id } },
+    performed_by: user.id,
+  });
+
+  await createNotification({
+    type: 'po',
+    title: '👤 PO Admin Approved',
+    message: 'A purchase order was approved by the admin and is pending the finance budget check before issuing.',
+    link: `/dashboard/purchase-orders/${poId}`,
+    created_by: user.id,
+  });
+
+  // Best-effort: notify the finance pool. A failed send never blocks approval.
+  const financeEmailResult = await sendPoPendingFinanceEmail(poId, { actorId: user.id });
+  if (financeEmailResult.status === 'failed') {
+    await createNotification({
+      type: 'po',
+      title: '⚠️ Finance email not sent',
+      message: `A PO passed the admin stage but the finance notification email could not be sent. ${financeEmailResult.error ?? ''}`.trim(),
+      link: `/dashboard/purchase-orders/${poId}`,
+      created_by: user.id,
+    });
+  }
+
+  revalidatePath(`/dashboard/purchase-orders/${poId}`);
+  revalidatePath('/dashboard/purchase-orders');
+  return { success: true, emailWarning: financeEmailResult.status === 'failed' ? financeEmailResult.error : undefined };
+}
+
+export async function approvePOFinance(poId: string) {
+  const supabase = await createClient();
+  const { user, error: authError } = await requireCapability('po.approve_finance', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
+
+  const { data: po } = await supabase
+    .from('purchase_orders')
+    .select('status, requirements_waived, waiver_approved, approved_by_user_id')
+    .eq('id', poId)
+    .single();
+
+  if (po?.status !== 'pending_finance') {
+    return { error: 'This PO is not pending the finance approval.' };
+  }
+
+  if (po.approved_by_user_id === user.id) {
+    return { error: 'You cannot approve a PO you approved at the admin stage. Another finance or superadmin user must do the budget check.' };
+  }
+
+  if (po.requirements_waived && !po.waiver_approved) {
+    return { error: 'Cannot issue: this PO has waived requirements pending executive approval.' };
+  }
+
+  const now = new Date().toISOString();
+  const { error, count } = await supabase
+    .from('purchase_orders')
+    .update({ status: 'issued', finance_approved_by_user_id: user.id, finance_approved_at: now, updated_at: now }, { count: 'exact' })
+    .eq('id', poId)
+    .eq('status', 'pending_finance');
+
+  if (error) return { error: error.message };
+  if (count === 0) return { error: 'This PO is not pending the finance approval.' };
+
+  await recordAuditLog({
+    entity_type: 'purchase_order',
+    entity_id: poId,
+    action: 'UPDATE',
+    changes: { after: { status: 'issued', finance_approved_by: user.id } },
     performed_by: user.id,
   });
 
@@ -784,7 +853,7 @@ export async function approvePO(poId: string) {
 
 export async function rejectPO(poId: string, reason: string) {
   const supabase = await createClient();
-  const { user, error: authError } = await requireCapability('po.approve', supabase);
+  const { user, role, error: authError } = await getCurrentProfile(supabase);
   if (authError || !user) return { error: authError || 'Unauthorized' };
 
   if (!reason?.trim()) return { error: 'A rejection reason is required.' };
@@ -795,20 +864,26 @@ export async function rejectPO(poId: string, reason: string) {
     .eq('id', poId)
     .single();
 
-  if (po?.status !== 'pending_approval') {
+  // Rejection is allowed at either stage; the capability follows the stage the
+  // PO is currently in. The update below guards the transition so a stale
+  // status can never be rejected.
+  const stageCapability = po?.status === 'pending_finance' ? 'po.approve_finance' : po?.status === 'pending_approval' ? 'po.approve' : null;
+  if (!stageCapability || !hasCapability(role, stageCapability)) {
     return { error: 'This PO is not pending approval.' };
   }
 
-  const { error } = await supabase
+  const { error, count } = await supabase
     .from('purchase_orders')
     .update({
       status: 'draft',
       rejection_reason: reason.trim(),
       updated_at: new Date().toISOString(),
-    })
-    .eq('id', poId);
+    }, { count: 'exact' })
+    .eq('id', poId)
+    .in('status', ['pending_approval', 'pending_finance']);
 
   if (error) return { error: error.message };
+  if (count === 0) return { error: 'This PO is not pending approval.' };
 
   await recordAuditLog({
     entity_type: 'purchase_order',
@@ -836,11 +911,12 @@ export async function updatePOStatus(poId: string, status: string) {
   const { user, error: authError } = await requireCapability('po.status', supabase);
   if (authError || !user) return { error: authError || 'Unauthorized' };
 
-  // Issuance is only allowed through the 4-eyes approval flow
-  // (submitPOForApproval -> approvePO, which enforces the self-approval and
-  // waiver gates). This generic status updater must NOT be able to move a PO to
-  // 'issued' directly, otherwise a po.status holder could bypass approval.
-  if (status === 'issued') {
+  // Issuance and the finance budget check are only allowed through the two-stage
+  // approval flow (submitPOForApproval -> approvePO -> approvePOFinance). This
+  // generic status updater must NOT be able to move a PO to 'issued' or
+  // 'pending_finance' directly, otherwise a po.status holder could bypass
+  // approval.
+  if (status === 'issued' || status === 'pending_finance') {
     const { data: po } = await supabase
       .from('purchase_orders')
       .select('status')
@@ -851,7 +927,7 @@ export async function updatePOStatus(poId: string, status: string) {
     if (po?.status === 'issued') return { success: true };
 
     return {
-      error: 'POs can only be issued through the approval flow. Submit the PO for approval, then have a different admin or superadmin approve it.',
+      error: 'POs can only be issued through the two-stage approval flow. Submit the PO for approval, then have an admin approve it and finance run the budget check.',
     };
   }
 
@@ -878,25 +954,8 @@ export async function updatePOStatus(poId: string, status: string) {
     created_by: user.id
   });
 
-  // Auto-email the vendor when the PO is issued. Decoupled: a failed send never
-  // blocks issuing — it's logged in email_log and surfaced for a manual resend.
-  let emailWarning: string | undefined;
-  if (status === 'issued') {
-    const result = await sendPoIssuedEmail(poId, { actorId: user.id });
-    if (result.status === 'failed') {
-      emailWarning = result.error || 'The PO was issued but the email could not be sent.';
-      await createNotification({
-        type: 'po',
-        title: '⚠️ PO email not sent',
-        message: `${emailWarning} Open the PO to resend it to the vendor.`,
-        link: `/dashboard/purchase-orders/${poId}`,
-        created_by: user.id
-      });
-    }
-  }
-
   revalidatePath(`/dashboard/purchase-orders/${poId}`);
-  return { success: true, emailWarning };
+  return { success: true };
 }
 
 export async function resendPurchaseOrderEmail(poId: string) {

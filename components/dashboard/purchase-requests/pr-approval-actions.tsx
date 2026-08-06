@@ -3,9 +3,9 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
-import { approvePR, rejectPR } from "@/app/dashboard/purchase-requests/actions";
+import { approvePR, approvePRFinance, rejectPR } from "@/app/dashboard/purchase-requests/actions";
 
-export function PrApprovalActions({ prId }: { prId: string }) {
+export function PrApprovalActions({ prId, stage = "admin" }: { prId: string; stage?: "admin" | "finance" }) {
   const [isRejecting, setIsRejecting] = useState(false);
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -15,7 +15,7 @@ export function PrApprovalActions({ prId }: { prId: string }) {
   function handleApprove() {
     setError(null);
     startTransition(async () => {
-      const result = await approvePR(prId);
+      const result = stage === "finance" ? await approvePRFinance(prId) : await approvePR(prId);
       if (result?.error) setError(result.error);
       else router.refresh();
     });
@@ -51,7 +51,7 @@ export function PrApprovalActions({ prId }: { prId: string }) {
           className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all active:scale-95 disabled:opacity-60"
         >
           {isPending && !isRejecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-          Approve
+          {stage === "finance" ? "Approve (Budget Check)" : "Approve"}
         </button>
         <button
           type="button"

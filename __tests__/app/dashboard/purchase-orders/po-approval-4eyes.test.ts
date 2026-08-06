@@ -1,6 +1,7 @@
 import {
   submitPOForApproval,
   approvePO,
+  approvePOFinance,
   rejectPO,
 } from '@/app/dashboard/purchase-orders/actions';
 
@@ -10,6 +11,8 @@ jest.mock('@/utils/supabase/server', () => ({
 
 jest.mock('@/lib/auth/permissions', () => ({
   requireCapability: jest.fn(),
+  getCurrentProfile: jest.fn(),
+  hasCapability: jest.fn(),
 }));
 
 jest.mock('@/utils/audit', () => ({
@@ -28,24 +31,32 @@ jest.mock('@/lib/email/po-pending-approval', () => ({
   sendPoPendingApprovalEmail: jest.fn(),
 }));
 
+jest.mock('@/lib/email/po-pending-finance', () => ({
+  sendPoPendingFinanceEmail: jest.fn(),
+}));
+
 jest.mock('next/cache', () => ({
   revalidatePath: jest.fn(),
 }));
 
 import { createClient } from '@/utils/supabase/server';
-import { requireCapability } from '@/lib/auth/permissions';
+import { requireCapability, getCurrentProfile, hasCapability } from '@/lib/auth/permissions';
 import { recordAuditLog } from '@/utils/audit';
 import { createNotification } from '@/utils/notifications';
 import { sendPoIssuedEmail } from '@/lib/email/po';
 import { sendPoPendingApprovalEmail } from '@/lib/email/po-pending-approval';
+import { sendPoPendingFinanceEmail } from '@/lib/email/po-pending-finance';
 import { revalidatePath } from 'next/cache';
 
 const mockCreateClient = createClient as jest.MockedFunction<typeof createClient>;
 const mockRequireCapability = requireCapability as jest.MockedFunction<typeof requireCapability>;
+const mockGetCurrentProfile = getCurrentProfile as jest.MockedFunction<typeof getCurrentProfile>;
+const mockHasCapability = hasCapability as jest.MockedFunction<typeof hasCapability>;
 const mockRecordAuditLog = recordAuditLog as jest.MockedFunction<typeof recordAuditLog>;
 const mockCreateNotification = createNotification as jest.MockedFunction<typeof createNotification>;
 const mockSendPoIssuedEmail = sendPoIssuedEmail as jest.MockedFunction<typeof sendPoIssuedEmail>;
 const mockSendPoPendingApprovalEmail = sendPoPendingApprovalEmail as jest.MockedFunction<typeof sendPoPendingApprovalEmail>;
+const mockSendPoPendingFinanceEmail = sendPoPendingFinanceEmail as jest.MockedFunction<typeof sendPoPendingFinanceEmail>;
 const mockRevalidatePath = revalidatePath as jest.MockedFunction<typeof revalidatePath>;
 
 function makeMockSupabase() {
@@ -56,7 +67,8 @@ function makeMockSupabase() {
   };
 
   const updateChain = {
-    eq: jest.fn().mockResolvedValue({ error: null }),
+    eq: jest.fn().mockReturnThis(),
+    in: jest.fn().mockResolvedValue({ error: null, count: 1 }),
   };
 
   return {
@@ -190,6 +202,7 @@ describe('approvePO — 4-eyes', () => {
     mockRecordAuditLog.mockResolvedValue(undefined);
     mockCreateNotification.mockResolvedValue(undefined);
     mockSendPoIssuedEmail.mockResolvedValue({ status: 'sent' });
+    mockSendPoPendingFinanceEmail.mockResolvedValue({ status: 'sent' });
     mockRevalidatePath.mockReturnValue(undefined);
 
     mockSupabase.selectChain.single.mockResolvedValue({
@@ -203,22 +216,26 @@ describe('approvePO — 4-eyes', () => {
     });
   });
 
-  it('allows a different admin to approve and issue the PO', async () => {
+  it('allows a different admin to approve and move the PO to finance', async () => {
+    mockSendPoPendingFinanceEmail.mockResolvedValue({ status: 'sent' });
+
     const result = await approvePO('po-123');
     expect(result).toEqual({ success: true });
 
     const updateCall = mockSupabase.from('purchase_orders').update;
     expect(updateCall).toHaveBeenCalledWith(
       expect.objectContaining({
-        status: 'issued',
+        status: 'pending_finance',
         approved_by_user_id: 'approver-user',
         approved_at: expect.any(String),
         updated_at: expect.any(String),
-      })
+      }),
+      { count: 'exact' }
     );
     expect(mockSupabase.updateChain.eq).toHaveBeenCalledWith('id', 'po-123');
     expect(mockRecordAuditLog).toHaveBeenCalled();
-    expect(mockSendPoIssuedEmail).toHaveBeenCalledWith('po-123', { actorId: 'approver-user' });
+    expect(mockSendPoPendingFinanceEmail).toHaveBeenCalledWith('po-123', { actorId: 'approver-user' });
+    expect(mockSendPoIssuedEmail).not.toHaveBeenCalled();
   });
 
   it('allows superadmin to approve an admin-submitted PO', async () => {
@@ -262,7 +279,7 @@ describe('approvePO — 4-eyes', () => {
     });
 
     const result = await approvePO('po-draft');
-    expect(result).toEqual({ error: 'This PO is not pending approval.' });
+    expect(result).toEqual({ error: 'This PO is not pending the admin approval.' });
     expect(mockSupabase.updateChain.eq).not.toHaveBeenCalled();
   });
 
@@ -279,7 +296,7 @@ describe('approvePO — 4-eyes', () => {
 
     const result = await approvePO('po-waiver');
     expect(result).toEqual({
-      error: 'Cannot issue: this PO has waived requirements pending executive approval.',
+      error: 'Cannot approve: this PO has waived requirements pending executive approval.',
     });
     expect(mockSupabase.updateChain.eq).not.toHaveBeenCalled();
   });
@@ -310,7 +327,7 @@ describe('approvePO — 4-eyes', () => {
   });
 });
 
-describe('rejectPO — 4-eyes', () => {
+describe('approvePOFinance', () => {
   let mockSupabase: ReturnType<typeof makeMockSupabase>;
 
   beforeEach(() => {
@@ -319,10 +336,110 @@ describe('rejectPO — 4-eyes', () => {
 
     mockCreateClient.mockResolvedValue(mockSupabase as any);
     mockRequireCapability.mockResolvedValue({
+      user: { id: 'finance-user' },
+      role: 'finance',
+      error: null,
+    });
+    mockRecordAuditLog.mockResolvedValue(undefined);
+    mockCreateNotification.mockResolvedValue(undefined);
+    mockSendPoIssuedEmail.mockResolvedValue({ status: 'sent' });
+    mockRevalidatePath.mockReturnValue(undefined);
+
+    mockSupabase.selectChain.single.mockResolvedValue({
+      data: {
+        status: 'pending_finance',
+        requirements_waived: false,
+        waiver_approved: false,
+        approved_by_user_id: 'admin-user',
+      },
+      error: null,
+    });
+  });
+
+  it('issues a pending_finance PO when the finance user did not approve at the admin stage', async () => {
+    const result = await approvePOFinance('po-123');
+    expect(result).toEqual({ success: true });
+
+    const updateFn = mockSupabase.from('purchase_orders').update;
+    expect(updateFn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'issued',
+        finance_approved_by_user_id: 'finance-user',
+        finance_approved_at: expect.any(String),
+      }),
+      { count: 'exact' }
+    );
+    expect(mockRecordAuditLog).toHaveBeenCalled();
+    expect(mockSendPoIssuedEmail).toHaveBeenCalledWith('po-123', { actorId: 'finance-user' });
+  });
+
+  it('blocks the admin-stage approver from doing the finance check (4-eyes across stages)', async () => {
+    mockSupabase.selectChain.single.mockResolvedValue({
+      data: {
+        status: 'pending_finance',
+        requirements_waived: false,
+        waiver_approved: false,
+        approved_by_user_id: 'finance-user',
+      },
+      error: null,
+    });
+
+    const result = await approvePOFinance('po-self');
+    expect(result).toEqual({
+      error: 'You cannot approve a PO you approved at the admin stage. Another finance or superadmin user must do the budget check.',
+    });
+    expect(mockSupabase.updateChain.eq).not.toHaveBeenCalled();
+  });
+
+  it('blocks issuance when waived requirements are not yet approved', async () => {
+    mockSupabase.selectChain.single.mockResolvedValue({
+      data: {
+        status: 'pending_finance',
+        requirements_waived: true,
+        waiver_approved: false,
+        approved_by_user_id: 'admin-user',
+      },
+      error: null,
+    });
+
+    const result = await approvePOFinance('po-waiver');
+    expect(result).toEqual({
+      error: 'Cannot issue: this PO has waived requirements pending executive approval.',
+    });
+    expect(mockSupabase.updateChain.eq).not.toHaveBeenCalled();
+  });
+
+  it('rejects when the PO is not pending_finance', async () => {
+    mockSupabase.selectChain.single.mockResolvedValue({
+      data: {
+        status: 'draft',
+        requirements_waived: false,
+        waiver_approved: false,
+        approved_by_user_id: 'admin-user',
+      },
+      error: null,
+    });
+
+    const result = await approvePOFinance('po-draft');
+    expect(result).toEqual({ error: 'This PO is not pending the finance approval.' });
+    expect(mockSupabase.updateChain.eq).not.toHaveBeenCalled();
+  });
+});
+
+describe('rejectPO — 4-eyes', () => {
+  let mockSupabase: ReturnType<typeof makeMockSupabase>;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockSupabase = makeMockSupabase();
+
+    mockCreateClient.mockResolvedValue(mockSupabase as any);
+    mockGetCurrentProfile.mockResolvedValue({
       user: { id: 'approver-user' },
       role: 'admin',
       error: null,
-    });
+    } as any);
+    mockHasCapability.mockReturnValue(true);
     mockRecordAuditLog.mockResolvedValue(undefined);
     mockCreateNotification.mockResolvedValue(undefined);
     mockRevalidatePath.mockReturnValue(undefined);
@@ -342,7 +459,8 @@ describe('rejectPO — 4-eyes', () => {
       expect.objectContaining({
         status: 'draft',
         rejection_reason: 'Missing supporting docs',
-      })
+      }),
+      { count: 'exact' }
     );
     expect(mockSupabase.updateChain.eq).toHaveBeenCalledWith('id', 'po-123');
     expect(mockRecordAuditLog).toHaveBeenCalled();
@@ -356,7 +474,8 @@ describe('rejectPO — 4-eyes', () => {
 
     const updateFn = mockSupabase.from('purchase_orders').update;
     expect(updateFn).toHaveBeenCalledWith(
-      expect.objectContaining({ rejection_reason: 'needs revision' })
+      expect.objectContaining({ rejection_reason: 'needs revision' }),
+      { count: 'exact' }
     );
   });
 
@@ -378,11 +497,11 @@ describe('rejectPO — 4-eyes', () => {
   });
 
   it('returns auth error when user lacks po.approve capability', async () => {
-    mockRequireCapability.mockResolvedValue({
+    mockGetCurrentProfile.mockResolvedValue({
       user: null,
       role: null,
       error: 'User does not have po.approve capability',
-    });
+    } as any);
 
     const result = await rejectPO('po-noauth', 'reason');
     expect(result).toEqual({ error: 'User does not have po.approve capability' });

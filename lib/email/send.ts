@@ -8,7 +8,9 @@ import { getResend } from "./resend";
 export type EmailKind =
   | "po_issued"
   | "po_pending_approval"
+  | "po_pending_finance"
   | "pr_pending_approval"
+  | "pr_pending_finance"
   | "pr_approved"
   | "doc_reminder"
   | "doc_request"

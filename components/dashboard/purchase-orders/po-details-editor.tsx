@@ -12,6 +12,7 @@ export function PODetailsEditor({
   dueDate,
   draftedBy,
   approvedBy,
+  financeApprovedBy,
   canEdit,
   embedded = false,
 }: {
@@ -21,6 +22,7 @@ export function PODetailsEditor({
   dueDate: string | null;
   draftedBy: string;
   approvedBy: string;
+  financeApprovedBy?: string;
   canEdit: boolean;
   embedded?: boolean;
 }) {
@@ -170,7 +172,7 @@ export function PODetailsEditor({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-8 pt-4 border-t border-slate-100 dark:border-slate-800/50">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 pt-4 border-t border-slate-100 dark:border-slate-800/50">
             <div>
               <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
                 <User className="h-3.5 w-3.5" /> Drafted by
@@ -182,6 +184,12 @@ export function PODetailsEditor({
                 <CheckCircle2 className="h-3.5 w-3.5" /> Approved by
               </label>
               <p className="mt-1 text-slate-900 dark:text-slate-300 font-medium">{approvedBy}</p>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                <CheckCircle2 className="h-3.5 w-3.5" /> Finance Approval
+              </label>
+              <p className="mt-1 text-slate-900 dark:text-slate-300 font-medium">{financeApprovedBy ?? "Not yet approved"}</p>
             </div>
           </div>
         </div>
