@@ -38,11 +38,27 @@ describe("twinbackend client", () => {
     expect((init as RequestInit).headers).toEqual({ "X-ERP-Key": "test-key" });
   });
 
-  it("retries a transient 5xx with backoff then succeeds", async () => {
+it("retries a transient 5xx with backoff then succeeds", async () => {
     jest.useFakeTimers();
     const fetchMock = jest
       .fn()
       .mockResolvedValueOnce({ status: 500, text: async () => "boom" })
+      .mockResolvedValueOnce({ status: 200, json: async () => ({ nodes: [] }) });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const pending = mod.fetchVendorNodes("X");
+    await jest.advanceTimersByTimeAsync(2000);
+    const result = await pending;
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.ok).toBe(true);
+  });
+
+  it("retries a transient 403 then succeeds", async () => {
+    jest.useFakeTimers();
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({ status: 403, text: async () => "forbidden" })
       .mockResolvedValueOnce({ status: 200, json: async () => ({ nodes: [] }) });
     global.fetch = fetchMock as unknown as typeof fetch;
 

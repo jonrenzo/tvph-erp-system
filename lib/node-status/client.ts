@@ -103,7 +103,9 @@ async function request<T>(
       if (res.status === 422) {
         return { ok: false, error: { kind: "invalid_request" } };
       }
-      if (res.status >= 500) {
+      // 403 (transient throttling) and 5xx retry with backoff; the guide's
+      // explicit no-retry list is 401/404/422 only.
+      if (res.status === 403 || res.status >= 500) {
         lastErr = { kind: "http", status: res.status, message: (await safeText(res)).slice(0, 300) };
         if (attempt < retries) await sleep(backoffMs(attempt));
         continue;
