@@ -125,27 +125,27 @@ export function VendorProfileDetails({ vendor, documents }: { vendor: any, docum
                 <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   Phone
                 </label>
-                <p className="mt-1 text-slate-900 dark:text-slate-300 flex items-center gap-2">
-                  <Phone className="h-3.5 w-3.5 text-slate-400" />
-                  {vendor.contact_phone || "-"}
+                <p className="mt-1 text-slate-900 dark:text-slate-300 flex items-center gap-2 min-w-0">
+                  <Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                  <span className="min-w-0 truncate">{vendor.contact_phone || "-"}</span>
                 </p>
               </div>
               <div className="col-span-2 md:col-span-1">
                 <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   Fax
                 </label>
-                <p className="mt-1 text-slate-900 dark:text-slate-300 flex items-center gap-2">
-                  <Phone className="h-3.5 w-3.5 text-slate-400" />
-                  {vendor.contact_fax || "-"}
+                <p className="mt-1 text-slate-900 dark:text-slate-300 flex items-center gap-2 min-w-0">
+                  <Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                  <span className="min-w-0 truncate">{vendor.contact_fax || "-"}</span>
                 </p>
               </div>
               <div className="col-span-2 md:col-span-1">
                 <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   Email Address
                 </label>
-                <p className="mt-1 text-slate-900 dark:text-slate-300 flex items-center gap-2">
-                  <Mail className="h-3.5 w-3.5 text-slate-400" />
-                  {vendor.contact_email || "-"}
+                <p className="mt-1 text-slate-900 dark:text-slate-300 flex items-center gap-2 min-w-0">
+                  <Mail className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                  <span className="min-w-0 truncate">{vendor.contact_email || "-"}</span>
                 </p>
               </div>
             </div>
@@ -170,18 +170,18 @@ export function VendorProfileDetails({ vendor, documents }: { vendor: any, docum
                   <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                     Phone
                   </label>
-                  <p className="mt-1 text-slate-900 dark:text-slate-300 flex items-center gap-2">
-                    <Phone className="h-3.5 w-3.5 text-slate-400" />
-                    {contact.phone || "-"}
+                  <p className="mt-1 text-slate-900 dark:text-slate-300 flex items-center gap-2 min-w-0">
+                    <Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                    <span className="min-w-0 truncate">{contact.phone || "-"}</span>
                   </p>
                 </div>
                 <div className="col-span-2">
                   <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                     Email Address
                   </label>
-                  <p className="mt-1 text-slate-900 dark:text-slate-300 flex items-center gap-2">
-                    <Mail className="h-3.5 w-3.5 text-slate-400" />
-                    {contact.email || "-"}
+                  <p className="mt-1 text-slate-900 dark:text-slate-300 flex items-center gap-2 min-w-0">
+                    <Mail className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                    <span className="min-w-0 truncate">{contact.email || "-"}</span>
                   </p>
                 </div>
               </div>
