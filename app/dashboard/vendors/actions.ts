@@ -12,6 +12,7 @@ import { createPortalLink } from "@/lib/portal/links";
 import { docTypeLabel } from "@/lib/vendors/document-types";
 import { sendEmail, internalCc } from "@/lib/email/send";
 import { DocRequestEmail } from "@/lib/email/templates/doc-request";
+import { getStorageProvider } from "@/lib/storage";
 
 export async function approveVendorDocument(
   vendorId: string,
@@ -133,20 +134,19 @@ export async function uploadDocument(
   let lastName = "";
   let uploadedCount = 0;
 
+  const storage = getStorageProvider(supabase as any, "vendor-documents");
   for (const file of files) {
     const fileExt = file.name.split(".").pop();
     const fileName = `${docType}_${Date.now()}_${uploadedCount}.${fileExt}`;
     const filePath = `vendors/${vendorId}/${docType}/${fileName}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from("vendor-documents")
-      .upload(filePath, file, { contentType: file.type, upsert: false });
+    const { error: uploadError } = await storage.upload(filePath, file, { contentType: file.type, upsert: false });
 
     if (uploadError) return { error: uploadError.message };
 
     const {
       data: { publicUrl },
-    } = supabase.storage.from("vendor-documents").getPublicUrl(filePath);
+    } = storage.getPublicUrl(filePath);
 
     const { data: fileRow, error: fileInsertError } = await supabase
       .from("vendor_document_files")
@@ -245,17 +245,16 @@ export async function uploadDocumentFiles(
   let lastName = "";
   let uploadedCount = 0;
 
+  const storageAdd = getStorageProvider(supabase as any, "vendor-documents");
   for (const file of files) {
     const fileExt = file.name.split(".").pop();
     const fileName = `${doc.doc_type}_${Date.now()}_${uploadedCount}.${fileExt}`;
     const filePath = `vendors/${doc.vendor_id}/${doc.doc_type === "custom" ? "custom" : doc.doc_type}/${fileName}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from("vendor-documents")
-      .upload(filePath, file, { contentType: file.type, upsert: false });
+    const { error: uploadError } = await storageAdd.upload(filePath, file, { contentType: file.type, upsert: false });
     if (uploadError) return { error: uploadError.message };
 
-    const { data: { publicUrl } } = supabase.storage.from("vendor-documents").getPublicUrl(filePath);
+    const { data: { publicUrl } } = storageAdd.getPublicUrl(filePath);
 
     const { data: fileRow, error: fileInsertError } = await supabase
       .from("vendor_document_files")
@@ -340,12 +339,11 @@ export async function updateVendorDocumentFile(
   const fileName = `${labelSlug}_${Date.now()}.${fileExt}`;
   const filePath = `vendors/${doc.vendor_id}/${doc.doc_type === "custom" ? "custom" : doc.doc_type}/${fileName}`;
 
-  const { error: uploadError } = await supabase.storage
-    .from("vendor-documents")
-    .upload(filePath, file, { contentType: file.type, upsert: false });
+  const storageUpd = getStorageProvider(supabase as any, "vendor-documents");
+  const { error: uploadError } = await storageUpd.upload(filePath, file, { contentType: file.type, upsert: false });
   if (uploadError) return { error: uploadError.message };
 
-  const { data: { publicUrl } } = supabase.storage.from("vendor-documents").getPublicUrl(filePath);
+  const { data: { publicUrl } } = storageUpd.getPublicUrl(filePath);
 
   const { data: maxVer } = await supabase
     .from("vendor_document_file_versions")
@@ -433,7 +431,8 @@ export async function deleteVendorDocumentFile(fileId: string) {
     .filter((p): p is string => Boolean(p));
 
   if (storagePaths.length > 0) {
-    await supabase.storage.from("vendor-documents").remove(storagePaths);
+    const storageDel = getStorageProvider(supabase as any, "vendor-documents");
+    await storageDel.remove(storagePaths);
   }
 
   const { error } = await supabase
@@ -580,9 +579,8 @@ export async function getVendorFileVersionSignedUrl(versionId: string) {
   const path = version.file_url.split("/public/vendor-documents/")[1];
   if (!path) return { url: version.file_url };
 
-  const { data } = await supabase.storage
-    .from("vendor-documents")
-    .createSignedUrl(path, 3600);
+  const storageSign = getStorageProvider(supabase as any, "vendor-documents");
+  const { data } = await storageSign.createSignedUrl(path, 3600);
 
   return { url: data?.signedUrl || version.file_url };
 }
@@ -1029,9 +1027,10 @@ export async function uploadCustomVendorDocument(
     const fileExt = file.name.split(".").pop();
     const fileName = `${labelSlug}_${Date.now()}_${i}.${fileExt}`;
     const filePath = `vendors/${vendorId}/custom/${fileName}`;
-    const { error: uploadError } = await supabase.storage.from("vendor-documents").upload(filePath, file, { contentType: file.type, upsert: false });
+    const customStorage = getStorageProvider(supabase as any, "vendor-documents");
+    const { error: uploadError } = await customStorage.upload(filePath, file, { contentType: file.type, upsert: false });
     if (uploadError) return { error: uploadError.message };
-    const { data: { publicUrl } } = supabase.storage.from("vendor-documents").getPublicUrl(filePath);
+    const { data: { publicUrl } } = customStorage.getPublicUrl(filePath);
     const { data: fileRow, error: fileInsertError } = await supabase.from("vendor_document_files").insert({ document_id: newDoc.id, file_url: publicUrl, file_name: file.name, uploaded_by: user.id }).select("id").single();
     if (fileInsertError || !fileRow) return { error: fileInsertError?.message || "Failed to save file" };
     const { error: versionError } = await supabase.from("vendor_document_file_versions").insert({ file_id: fileRow.id, version_number: 1, file_url: publicUrl, file_name: file.name, uploaded_by: user.id });

@@ -15,6 +15,7 @@ import { docTypeLabel } from '@/lib/vendors/document-types';
 import { createHash } from 'crypto';
 import { parsePoSequenceNumber } from '@/lib/dashboard/po-sequence';
 import { extractLegacyPoFromPdf } from '@/lib/pdf/extractLegacyPoFromPdf';
+import { getStorageProvider } from '@/lib/storage';
 
 const PAYMENT_REQUIRED_DOC_TYPES = [
   "signed_nda",
@@ -2009,14 +2010,13 @@ export async function importLegacyPurchaseOrder(prevState: any, formData: FormDa
 
   const filePath = `legacy/${newPO.id}/${po_number}.pdf`;
   const checksum_sha256 = createHash('sha256').update(Buffer.from(await file.arrayBuffer())).digest('hex');
-  const { error: uploadError } = await supabase.storage
-    .from('po-artifacts')
-    .upload(filePath, file, { contentType: 'application/pdf', upsert: false });
+  const poStoreLegacy = getStorageProvider(supabase as any, 'po-artifacts');
+  const { error: uploadError } = await poStoreLegacy.upload(filePath, file, { contentType: 'application/pdf', upsert: false });
   if (uploadError) {
     await supabase.from('purchase_orders').delete().eq('id', newPO.id);
     return { error: uploadError.message };
   }
-  const { data: { publicUrl } } = supabase.storage.from('po-artifacts').getPublicUrl(filePath);
+  const { data: { publicUrl } } = poStoreLegacy.getPublicUrl(filePath);
 
   const { error: artifactError } = await supabase.from('purchase_order_artifacts').insert({
     po_id: newPO.id,
@@ -2030,7 +2030,7 @@ export async function importLegacyPurchaseOrder(prevState: any, formData: FormDa
     generated_by: user.id,
   });
   if (artifactError) {
-    await supabase.storage.from('po-artifacts').remove([filePath]);
+    await poStoreLegacy.remove([filePath]);
     await supabase.from('purchase_orders').delete().eq('id', newPO.id);
     return { error: artifactError.message };
   }

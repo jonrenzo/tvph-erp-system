@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SharePoint Folder Structure — Vendor Docs and POs</title>
+<style>
+  :root{--line:#e2e8f0;--text:#0f172a;--muted:#64748b;--blue:#0ea5e9;--green:#10b981;--amber:#f59e0b;--bg:#f8fafc;--card:#fff}
+  *{box-sizing:border-box} body{margin:0;font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial;color:var(--text);background:var(--bg);line-height:1.55}
+  header{padding:28px 24px;background:var(--card);border-bottom:1px solid var(--line)}
+  header h1{margin:0;font-size:20px} header p{margin:6px 0 0;color:var(--muted);max-width:900px;font-size:14px}
+  .pill{display:inline-block;margin-top:10px;padding:4px 10px;border-radius:999px;font-size:12px;background:#eff6ff;color:#0369a1;border:1px solid #bae6fd}
+  .wrap{max-width:1180px;margin:0 auto;padding:22px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-top:16px}
+  .card h2{margin:0 0 8px;font-size:15px}
+  .card h3{margin:14px 0 6px;font-size:13px;color:var(--text)}
+  .muted{color:var(--muted);font-size:13px}
+  .tree{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;line-height:1.7;background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:14px;overflow:auto}
+  .tree b{color:#0f172a} .tree span{color:var(--muted)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px} @media(max-width:900px){.grid{grid-template-columns:1fr}}
+  .badge{font-size:11px;padding:3px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+  .badge.a{background:#f0f9ff;color:#0369a1;border-color:#bae6fd}
+  .badge.b{background:#f0fdf4;color:#065f46;border-color:#bbf7d5}
+  .badge.c{background:#fff7ed;color:#7c2d12;border-color:#fed7aa}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+  th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left}
+  th{font-size:12px;color:var(--muted)}
+  .callout{padding:10px 12px;border-radius:10px;font-size:13px;margin-top:10px}
+  .callout.info{background:#f0f9ff;border:1px solid #bae6fd;color:#0c4a6e}
+  .callout.warn{background:#fff7ed;border:1px solid #fed7aa;color:#7c2d12}
+  .flow{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+  .step{border:1px solid var(--line);border-radius:10px;padding:10px 12px 10px 42px;position:relative;background:#fff}
+  .step::before{content:attr(data-n);position:absolute;left:10px;top:10px;width:22px;height:22px;border-radius:999px;display:grid;place-items:center;font-size:11px;font-weight:700;color:#fff;background:var(--blue)}
+  .step.sp::before{background:var(--green)} .step.po::before{background:var(--amber)}
+  .step h4{margin:0;font-size:13px} .step p{margin:4px 0 0;font-size:13px;color:var(--muted)}
+  code{font-size:12px;background:#f1f5f9;padding:2px 6px;border-radius:6px}
+</style>
+</head>
+<body>
+<header>
+  <h1>SharePoint folder structure — vendor docs plus POs</h1>
+  <p>Plan only. Covers where to put vendor accreditation files, generated POs, and signed POs in one SharePoint site so staff can browse without the app. Under 100MB per file, chunked upload at 4MB.</p>
+  <span class="pill">Site: sites/TVPH-ERP — Library: Shared Documents — Provider: lib/storage/sharepoint.ts</span>
+</header>
+<div class="wrap">
+  <div class="card">
+    <h2>Current S3 paths today</h2>
+    <p class="muted">Vendor docs go to <code>vendor-documents/vendors/{vendorId}/{docType}/{file}</code> <code>app/dashboard/vendors/actions.ts:139</code>. Signed POs go to <code>po-artifacts/po/{poId}/signed-{ts}.pdf</code> <code>app/portal/actions.ts:194</code>. Legacy POs go to <code>po-artifacts/legacy/{id}/{poNumber}.pdf</code> <code>app/dashboard/purchase-orders/actions.ts:2010</code>. Artifacts table tracks issued PDFs <code>purchase_order_artifacts</code>. Generated POs are rendered on fly at <code>app/api/purchase-orders/[id]/pdf/route.ts:84</code> and not stored unless signed or legacy.</p>
+  </div>
+  <div class="card">
+    <h2>Proposed SharePoint structure — one site, two top folders</h2>
+    <p class="muted">Keep ids in the path for uniqueness, but prefix with human labels so the library is searchable and sortable. Use SharePoint columns for filter, not deep naming tricks.</p>
+    <div class="tree">Shared Documents/
+├── <b>01_Vendor-Documents/</b>                          <span>— maps to vendor-documents bucket</span>
+│   ├── <b>VEND-0012_Acme-Builders_a1b2/</b>             <span>— {vendorCode}_{slugName}_{shortId}</span>
+│   │   ├── <b>01_Business-Permit/</b>
+│   │   │   ├── <b>Business-Permit_20250824_0_original.pdf</b>   <span>— {docType}_{timestamp}_{index}_{orig}</span>
+│   │   └── <span>— older uploads stay as versions, SharePoint also keeps version history</span>
+│   ├── <b>02_BIR-2303/</b>
+│   ├── <b>03_SEC-Certificate/</b>
+│   ├── <b>...</b> <span>— 14 accreditation types from lib/vendors/document-types.ts</span>
+│   └── <b>99_Custom_Pest-Control-Clearance/</b>     <span>— labelSlug from custom docs</span>
+│   ├── <b>VEND-0034_Jewelino-Tech_c3d4/</b>
+│   └── ...
+├── <b>02_Purchase-Orders/</b>                           <span>— maps to po-artifacts bucket</span>
+│   ├── <b>2026/</b>                                     <span>— issued year from purchase_orders.issued_date</span>
+│   │   ├── <b>PO-2026-000041_VEND-0012/</b>              <span>— {poNumber}_{vendorCode}, link id {poId}</span>
+│   │   │   ├── <b>01_Generated/</b>
+│   │   │   │   └── <b>PO-2026-000041_generated.pdf</b>  <span>— stored on first view or on issue</span>
+│   │   │   ├── <b>02_Signed/</b>
+│   │   │   │   └── <b>signed-20260824T101500Z.pdf</b>   <span>— from po_signatures.signed_file_name</span>
+│   │   │   └── <b>03_Artifacts/</b>
+│   │   │       ├── <b>legacy_PO-2026-000041.pdf</b>      <span>— legacy/{id}/{poNumber}.pdf</span>
+│   │   │       └── <b>completion-cert_20260820.pdf</b>
+│   │   └── <b>PO-2026-000042_VEND-0034/</b>
+│   └── <b>2025/</b>
+└── <b>03_Archive/</b> <span>— optional, for retention moves</span>
+</div>
+    <h3>Why this layout</h3>
+    <table>
+      <tr><th>Goal</th><th>How folder gives it</th></tr>
+      <tr><td>Find vendor files without app</td><td>Browse 01_Vendor-Documents by vendor code folder. Search works because name contains code and slug.</td></tr>
+      <tr><td>Find PO without app</td><td>Browse 02_Purchase-Orders by year then PO number and vendor code.</td></tr>
+      <tr><td>Separate generated vs signed</td><td>01_Generated is app snapshot. 02_Signed is vendor returned file. Auditors see both without mixing.</td></tr>
+      <tr><td>Keep ids for safety</td><td>Suffix short id avoids collisions when two vendors share a name. Full id lives in DB.</td></tr>
+      <tr><td>Under 100MB handling</td><td>Chunked 4MB upload works for both trees.</td></tr>
+    </table>
+  </div>
+  <div class="grid">
+    <div class="card">
+      <h2><span class="badge a">Vendor documents</span> Flow after SharePoint</h2>
+      <div class="flow">
+        <div class="step" data-n="1"><h4>Upload from dashboard or portal</h4><p>Provider path is <code>01_Vendor-Documents/VEND-0012.../01_Business-Permit/file</code>.</p></div>
+        <div class="step sp" data-n="2"><h4>Graph upload session for over 4MB</h4><p>Under 4MB single PUT, else create session and send 4MB chunks. Portal anon upload uses app token.</p></div>
+        <div class="step" data-n="3"><h4>Write DB rows same as today</h4><p>Insert into vendor_document_files and vendor_document_file_versions with SharePoint webUrl plus item id.</p></div>
+        <div class="step sp" data-n="4"><h4>Read via sharing link</h4><p>POST /items/{id}/createLink per file, cache one hour like S3 signed URL today.</p></div>
+      </div>
+      <div class="callout info">Add columns on this library: VendorCode, VendorId, DocType, ExpiryDate.</div>
+    </div>
+    <div class="card">
+      <h2><span class="badge c">PO documents</span> Flow after SharePoint</h2>
+      <div class="flow">
+        <div class="step po" data-n="1"><h4>Generated PO snapshot</h4><p>Render once via lib/pdf/renderPoDocument.ts and store to 01_Generated. Record in purchase_order_artifacts.</p></div>
+        <div class="step po" data-n="2"><h4>Signed PO from portal vendor</h4><p>Upload to 02_Signed via Graph session. Insert po_signatures.signed_file_url as SharePoint webUrl.</p></div>
+        <div class="step po" data-n="3"><h4>Legacy import</h4><p>Path legacy/{id}/ becomes 02_Purchase-Orders/{YYYY}/{PO}_{vendor}/03_Artifacts/legacy_...</p></div>
+        <div class="step po" data-n="4"><h4>Approval serves signed file</h4><p>PDF route checks signed_doc_status and downloads from SharePoint item id.</p></div>
+      </div>
+      <div class="callout info">PO columns: PONumber, POId, VendorCode, IssuedDate, Status, Project.</div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Performance for under 100MB</h2>
+    <p class="muted">Folder depth does not affect speed. Graph finds items by id, not folder scan. An 80MB scan sends 20 chunks, shows 20 step progress, resume from last chunk if dropped. Direct to SharePoint from browser avoids Vercel limit.</p>
+  </div>
+</div>
+<footer>TVPH ERP — SharePoint folder plan — vendor documents and POs — plan only</footer>
+</body>
+</html>

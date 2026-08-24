@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { renderPoDocument } from '@/lib/pdf/renderPoDocument'
 import { getCurrentProfile } from '@/lib/auth/permissions'
+import { getStorageProvider } from '@/lib/storage'
 
 export async function GET(
   _request: NextRequest,
@@ -33,11 +34,14 @@ export async function GET(
         .maybeSingle()
 
       if (signature?.signed_file_url) {
-        const path = signature.signed_file_url.split('/object/public/po-artifacts/')[1]
+        const marker = '/object/public/po-artifacts/'
+        let path: string | null = null
+        if (signature.signed_file_url.includes(marker)) path = signature.signed_file_url.split(marker)[1] || null
+        else if (signature.signed_file_url.includes('sharepoint.com') || signature.signed_file_url.includes('graph.microsoft.com')) path = null
+        else path = signature.signed_file_url
         if (path) {
-          const { data: file, error: downloadError } = await supabase.storage
-            .from('po-artifacts')
-            .download(path)
+          const poStorage = getStorageProvider(supabase as any, 'po-artifacts')
+          const { data: file, error: downloadError } = await poStorage.download(path)
           if (!downloadError && file) {
             const buffer = Buffer.from(await file.arrayBuffer())
             return new Response(buffer as unknown as BodyInit, {
@@ -64,9 +68,8 @@ export async function GET(
       .maybeSingle()
 
     if (artifact?.storage_path) {
-      const { data: file, error: downloadError } = await supabase.storage
-        .from('po-artifacts')
-        .download(artifact.storage_path)
+      const poStorage2 = getStorageProvider(supabase as any, 'po-artifacts')
+      const { data: file, error: downloadError } = await poStorage2.download(artifact.storage_path)
       if (!downloadError && file) {
         const buffer = Buffer.from(await file.arrayBuffer())
         return new Response(buffer as unknown as BodyInit, {

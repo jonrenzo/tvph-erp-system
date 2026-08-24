@@ -7,6 +7,7 @@ import { createNotification } from "@/utils/notifications";
 import { revalidatePath } from "next/cache";
 import { combineImagesToPdf } from "@/lib/pdf/combineImagesToPdf";
 import { sendPoSignedReceivedEmail } from "@/lib/email/po-signed-received";
+import { getStorageProvider } from "@/lib/storage";
 
 // ponytail: defer via next/server after() without breaking jest (which lacks Request)
 function defer(fn: () => Promise<void>) {
@@ -66,11 +67,15 @@ export async function validatePoPortalToken(token: string) {
     .maybeSingle();
 
   if (signature?.signed_file_url) {
-    const path = signature.signed_file_url.split("/object/public/po-artifacts/")[1];
-    if (path) {
-      const { data: signed } = await supabase.storage
-        .from("po-artifacts")
-        .createSignedUrls([path], 3600);
+    const marker = "/public/po-artifacts/";
+    const rawPath = signature.signed_file_url.includes(marker)
+      ? signature.signed_file_url.split(marker)[1]
+      : signature.signed_file_url.includes("sharepoint.com") || signature.signed_file_url.includes("graph.microsoft.com")
+        ? null
+        : signature.signed_file_url;
+    if (rawPath) {
+      const provider = getStorageProvider(supabase as any, "po-artifacts");
+      const { data: signed } = await provider.createSignedUrls([rawPath], 3600);
       if (signed?.[0]?.signedUrl) {
         (signature as any).signed_file_url = signed[0].signedUrl;
       }
@@ -192,15 +197,14 @@ export async function signPortalPO(
   }
 
   const filePath = `po/${po.id}/signed-${Date.now()}.pdf`;
-  const { error: uploadError } = await supabase.storage
-    .from("po-artifacts")
-    .upload(filePath, fileBuffer, { contentType: "application/pdf", upsert: false });
+  const poStorage = getStorageProvider(supabase as any, "po-artifacts");
+  const { error: uploadError } = await poStorage.upload(filePath, fileBuffer, { contentType: "application/pdf", upsert: false });
 
   if (uploadError) return { error: uploadError.message };
 
   const {
     data: { publicUrl },
-  } = supabase.storage.from("po-artifacts").getPublicUrl(filePath);
+  } = poStorage.getPublicUrl(filePath);
 
   const now = new Date().toISOString();
   const { error: sigError } = await supabase.from("po_signatures").insert({
@@ -294,7 +298,8 @@ export async function validatePortalToken(token: string) {
       }
       if (entries.length > 0) {
         const paths = entries.map((e) => e.path);
-        const { data: signed } = await supabase.storage.from("vendor-documents").createSignedUrls(paths, 3600);
+        const vProvider = getStorageProvider(supabase as any, "vendor-documents");
+        const { data: signed } = await vProvider.createSignedUrls(paths, 3600);
         if (signed) {
           signed.forEach((s: any, idx: number) => {
             if (s?.signedUrl) entries[idx].file.file_url = s.signedUrl;
@@ -409,15 +414,14 @@ export async function uploadPortalDocument(
   const storageName = `${docType}_${Date.now()}.${fileExt}`;
   const filePath = `${magicLink.entity_type === "vendor" ? "vendors" : "customers"}/${magicLink.entity_id}/${docType}/${storageName}`;
 
-  const { error: uploadError } = await supabase.storage
-    .from(bucketName)
-    .upload(filePath, fileBuffer, { contentType: finalMimeType, upsert: false });
+  const storageForPortal = getStorageProvider(supabase as any, bucketName);
+  const { error: uploadError } = await storageForPortal.upload(filePath, fileBuffer, { contentType: finalMimeType, upsert: false });
 
   if (uploadError) return { error: uploadError.message };
 
   const {
     data: { publicUrl },
-  } = supabase.storage.from(bucketName).getPublicUrl(filePath);
+  } = storageForPortal.getPublicUrl(filePath);
 
   // 6. DB Updates & File Tracking
   let uploadedFile: { id: string; file_name: string; file_url?: string } | null = null;
@@ -466,7 +470,8 @@ export async function uploadPortalDocument(
     // Sign immediately so the portal can show a live view link without refresh
     let signedForReturn = publicUrl;
     try {
-      const { data: s } = await supabase.storage.from(bucketName).createSignedUrl(filePath, 3600);
+      const sigProvider = getStorageProvider(supabase as any, bucketName);
+      const { data: s } = await sigProvider.createSignedUrl(filePath, 3600);
       if (s?.signedUrl) signedForReturn = s.signedUrl;
     } catch {}
     uploadedFile = { id: fileRow.id, file_name: fileName, file_url: signedForReturn };

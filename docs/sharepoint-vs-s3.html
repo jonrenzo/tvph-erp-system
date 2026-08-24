@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>S3 vs SharePoint — TVPH ERP Storage Workflow</title>
+<style>
+  :root{--line:#e2e8f0;--text:#0f172a;--muted:#64748b;--blue:#0ea5e9;--green:#10b981;--bg:#f8fafc;--card:#ffffff}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial;color:var(--text);background:var(--bg);line-height:1.5}
+  header{padding:32px 24px;border-bottom:1px solid var(--line);background:var(--card)}
+  header h1{margin:0;font-size:22px;font-weight:700}
+  header p{margin:6px 0 0;color:var(--muted);max-width:800px}
+  .pill{display:inline-block;margin-top:10px;padding:4px 10px;border-radius:999px;font-size:12px;background:#eff6ff;color:#0369a1;border:1px solid #bae6fd}
+  .wrap{max-width:1200px;margin:0 auto;padding:24px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:900px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
+  .card h2{margin:0 0 6px;font-size:16px}
+  .card h2 span{font-weight:600}
+  .badge{font-size:11px;padding:3px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+  .badge.s3{border-color:#bae6fd;background:#f0f9ff;color:#0369a1}
+  .badge.sp{border-color:#bbf7d5;background:#f0fdf4;color:#065f46}
+  .flow{margin-top:14px;display:flex;flex-direction:column;gap:0}
+  .step{position:relative;padding:12px 12px 12px 44px;border:1px solid var(--line);border-radius:10px;background:#fff}
+  .step + .step{margin-top:10px}
+  .step::before{content:attr(data-n);position:absolute;left:10px;top:12px;width:24px;height:24px;border-radius:999px;display:grid;place-items:center;font-size:12px;font-weight:700;color:#fff;background:var(--blue)}
+  .step.sp::before{background:var(--green)}
+  .step h3{margin:0;font-size:13px}
+  .step p{margin:4px 0 0;font-size:13px;color:var(--muted)}
+  .step code{font-size:12px;background:#f1f5f9;padding:2px 6px;border-radius:6px}
+  .arrow{text-align:center;color:var(--muted);font-size:18px;line-height:1;margin:2px 0}
+  .callout{margin-top:12px;padding:12px;border-radius:10px;font-size:13px}
+  .callout.info{background:#f0f9ff;border:1px solid #bae6fd;color:#0c4a6e}
+  .callout.warn{background:#fff7ed;border:1px solid #fed7aa;color:#7c2d12}
+  .table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}
+  .table th,.table td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+  .table th{font-size:12px;color:var(--muted);font-weight:600}
+  .kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+  .kpi div{padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--card);text-align:center}
+  .kpi b{font-size:18px;display:block}
+  .kpi span{font-size:12px;color:var(--muted)}
+  footer{padding:18px 24px;color:var(--muted);font-size:12px;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <h1>S3 (Supabase Storage) vs SharePoint — vendor-documents workflow</h1>
+  <p>Current: Supabase Storage is S3 compatible. Files go to <code>vendor-documents</code> bucket, path <code>vendors/{vendorId}/{docType}/{file}</code>. Proposed: same path in a SharePoint document library, accessed through Microsoft Graph.</p>
+  <span class="pill">Plan only — no performance loss expected if scoped to vendor-documents</span>
+</header>
+
+<div class="wrap">
+  <div class="kpi">
+    <div><b>300 MB</b><span>current used — vendor-documents dominates</span></div>
+    <div><b>1 GB</b><span>Supabase Free limit — you hit it soon</span></div>
+    <div><b>1 TB +</b><span>SharePoint included with M365 — headroom for versions</span></div>
+  </div>
+
+  <div class="grid" style="margin-top:16px">
+    <!-- S3 Column -->
+    <div class="card">
+      <h2><span>Right now — S3 via Supabase</span> <span class="badge s3">utils/storage.ts:40</span></h2>
+      <p style="color:var(--muted);font-size:13px;margin:0">App calls Supabase SDK directly. One token, one API style, built in signed URLs.</p>
+      <div class="flow">
+        <div class="step" data-n="1"><h3>User selects files</h3><p>FormData with 1 to N files. Guard at 50MB <code>app/dashboard/vendors/actions.ts:100</code></p></div>
+        <div class="arrow">↓</div>
+        <div class="step" data-n="2"><h3>Server uploads to S3</h3><p><code>supabase.storage.from("vendor-documents").upload(path, file, {upsert:false})</code> — single PUT. No chunking.</p></div>
+        <div class="arrow">↓</div>
+        <div class="step" data-n="3"><h3>Store public URL in database</h3><p><code>getPublicUrl(path)</code> then insert into <code>vendor_document_files</code> and <code>vendor_document_file_versions</code> version 1. File stays private, URL is a pointer.</p></div>
+        <div class="arrow">↓</div>
+        <div class="step" data-n="4"><h3>Read — batch signed URLs</h3><p><code>createSignedUrls(paths, 3600)</code> in <code>utils/storage.ts:40</code> — one call per bucket per page. Portal does the same <code>app/portal/actions.ts:297</code>.</p></div>
+        <div class="arrow">↓</div>
+        <div class="step" data-n="5"><h3>Delete and rollback</h3><p>Remove paths with <code>supabase.storage.from(...).remove(paths)</code> <code>app/dashboard/vendors/actions.ts:436</code>. Rollback just points <code>file_url</code> to an older version row.</p></div>
+      </div>
+      <div class="callout info">Why it is simple: S3 is one auth header from Supabase. No extra app registration. SDK handles batch, expiry, and delete.</div>
+      <table class="table">
+        <tr><th>Auth</th><td>Supabase service role key, already in env</td></tr>
+        <tr><th>Expiry control</th><td>You set 3600s per call</td></tr>
+        <tr><th>Versioning</th><td>Your tables only — <code>vendor_document_file_versions</code></td></tr>
+        <tr><th>Quota</th><td>Free 1GB, Pro 100GB, then pay per GB</td></tr>
+      </table>
+    </div>
+
+    <!-- SharePoint Column -->
+    <div class="card">
+      <h2><span>Proposed — SharePoint via Graph</span> <span class="badge sp">lib/storage/sharepoint.ts (new)</span></h2>
+      <p style="color:var(--muted);font-size:13px;margin:0">App calls a provider interface. Behind it, Graph talks to a SharePoint drive. Auth is Azure app only.</p>
+      <div class="flow">
+        <div class="step sp" data-n="1"><h3>User selects files — same UI</h3><p>No change for users or vendors. Same FormData, same 50MB guard.</p></div>
+        <div class="arrow">↓</div>
+        <div class="step sp" data-n="2"><h3>Server gets app token then uploads to SharePoint</h3><p>Acquire token <code>login.microsoftonline.com/{tenant}/oauth2/v2.0/token</code> with <code>Sites.ReadWrite.All</code>. If file under 4MB: <code>PUT /drives/{drive}/root:/vendors/{id}/{type}/{file}:/content</code>. If over 4MB: create upload session and send chunks.</p></div>
+        <div class="arrow">↓</div>
+        <div class="step sp" data-n="3"><h3>Store SharePoint item id and webUrl in database</h3><p>Insert same rows in <code>vendor_document_files</code> but <code>file_url</code> is now <code>https://tenant.sharepoint.com/sites/TVPH-ERP/.../file</code> plus <code>driveItem id</code>. Version row still created, so rollback stays in your app.</p></div>
+        <div class="arrow">↓</div>
+        <div class="step sp" data-n="4"><h3>Read — create sharing link per file</h3><p>Instead of <code>createSignedUrls</code>, call <code>POST /drives/{drive}/items/{id}/createLink {type:"view", scope:"organization"}</code> for each file needed on the page. Cache link until expiry. Batch is N calls, not one.</p></div>
+        <div class="arrow">↓</div>
+        <div class="step sp" data-n="5"><h3>Delete and rollback</h3><p>Delete with <code>DELETE /drives/{drive}/items/{id}</code>. Rollback still flips <code>file_url</code> to older row — no need to restore SharePoint version history.</p></div>
+      </div>
+      <div class="callout warn">Extra work you accept: Azure app registration plus admin consent, token cache, chunked upload for over 4MB, and N sharing link calls instead of one batch.</div>
+      <table class="table">
+        <tr><th>Auth</th><td>Azure app — client id, secret, tenant. Consent once by admin</td></tr>
+        <tr><th>Expiry control</th><td>Sharing link expiry set in createLink, default 1 hour</td></tr>
+        <tr><th>Versioning</th><td>Both — your table keeps truth, SharePoint also versions the file</td></tr>
+        <tr><th>Quota</th><td>1TB plus 10GB per user, already paid with M365</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="grid" style="margin-top:16px">
+    <div class="card">
+      <h2>What stays the same</h2>
+      <p style="color:var(--muted);font-size:13px">Supabase Postgres, RLS, RBAC <code>requireCapability</code>, Realtime, pg_cron, and magic link portal keep running. <code>lib/system/storage.ts:16</code> storage_usage RPC still reports Supabase bytes until you retire the bucket. Vendor flow in <code>app/dashboard/vendors/actions.ts:85</code> and portal <code>app/portal/actions.ts:334</code> keep the same UI and audit logs.</p>
+      <table class="table">
+        <tr><th>Area</th><th>Impact</th></tr>
+        <tr><td>UI components</td><td>None — provider hides behind service</td></tr>
+        <tr><td>Database schema</td><td>None — only file_url values change</td></tr>
+        <tr><td>Anonymous portal</td><td>Works — server uses app token, not vendor token</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <h2>Trade offs at a glance</h2>
+      <table class="table">
+        <tr><th></th><th>S3 now</th><th>SharePoint</th></tr>
+        <tr><td>Cost for your 300MB and growth</td><td>Free until 1GB, then $25 for 100GB</td><td>Included with M365, no new bill</td></tr>
+        <tr><td>Ops load</td><td>Zero — Supabase runs it</td><td>Low — token and site to watch, no disks or power</td></tr>
+        <tr><td>Code to ship</td><td>Zero</td><td>Provider abstraction plus migration script, about 14 call sites</td></tr>
+        <tr><td>Read speed</td><td>One batch call per page</td><td>N link calls per page, cached. A bit slower on first open</td></tr>
+        <tr><td>Write path</td><td>Single PUT</td><td>Chunked over 4MB, a bit slower for large PDFs</td></tr>
+        <tr><td>Home server alternative</td><td colspan="2">Same code as SharePoint abstraction but you also own hardware, UPS, internet, backups, and night pages. More risk for same code.</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h2>Recommendation — plan only</h2>
+    <p style="font-size:13px">SharePoint is viable and will not hurt performance if you scope it to <code>vendor-documents</code> first. Keep other buckets on Supabase until you see real Graph timing. I would pick this over a home server for your must keep versions rule. If IT denies admin consent, fall back to Supabase Pro — one click, same app. R2 sits in the middle if you want S3 like behavior without SharePoint ceremony.</p>
+    <p style="font-size:13px;color:var(--muted)">Next step: confirm SharePoint quota and consent. Then I can write the plan file with exact env vars, provider interface, and migration steps.</p>
+  </div>
+</div>
+<footer>TVPH ERP — storage workflow comparison — generated for plan review only</footer>
+</body>
+</html>

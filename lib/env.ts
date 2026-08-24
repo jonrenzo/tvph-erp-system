@@ -35,6 +35,16 @@ const envSchema = z.object({
   SUPABASE_PROJECT_REF: z.string().min(1).optional(),
   // Vercel API token for the System panel Vercel runtime-logs proxy. Optional.
   VERCEL_TOKEN: z.string().min(1).optional(),
+  // Storage provider — sharepoint moves vendor-documents + po-artifacts to
+  // SharePoint via Graph. Defaults to supabase (current S3 behavior).
+  STORAGE_PROVIDER: z.enum(["supabase", "sharepoint"]).optional(),
+  AZURE_TENANT_ID: z.string().min(1).optional(),
+  // alias kept for older docs
+  SHAREPOINT_TENANT_ID: z.string().min(1).optional(),
+  AZURE_CLIENT_ID: z.string().min(1).optional(),
+  AZURE_CLIENT_SECRET: z.string().min(1).optional(),
+  SHAREPOINT_SITE_ID: z.string().min(1).optional(),
+  SHAREPOINT_DRIVE_ID: z.string().min(1).optional(),
 });
 
 const rawEnv = {
@@ -56,6 +66,13 @@ const rawEnv = {
   SUPABASE_ACCESS_TOKEN: process.env.SUPABASE_ACCESS_TOKEN,
   SUPABASE_PROJECT_REF: process.env.SUPABASE_PROJECT_REF,
   VERCEL_TOKEN: process.env.VERCEL_TOKEN,
+  STORAGE_PROVIDER: process.env.STORAGE_PROVIDER,
+  AZURE_TENANT_ID: process.env.AZURE_TENANT_ID,
+  SHAREPOINT_TENANT_ID: process.env.SHAREPOINT_TENANT_ID,
+  AZURE_CLIENT_ID: process.env.AZURE_CLIENT_ID,
+  AZURE_CLIENT_SECRET: process.env.AZURE_CLIENT_SECRET,
+  SHAREPOINT_SITE_ID: process.env.SHAREPOINT_SITE_ID,
+  SHAREPOINT_DRIVE_ID: process.env.SHAREPOINT_DRIVE_ID,
 };
 
 // A `.env` file left as `KEY=` yields an empty string, which would fail
