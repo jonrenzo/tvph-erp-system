@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import { redirect } from "next/navigation";
-import { createNotification } from "@/utils/notifications";
+import { createNotification, createNotificationForRoles } from "@/utils/notifications";
 import { recordAuditLog } from "@/utils/audit";
 import { parseFile, buildColumnMap } from "@/utils/import-export";
 import { requireCapability } from "@/lib/auth/permissions";
@@ -208,12 +208,13 @@ export async function uploadDocument(
     performed_by: user.id,
   });
 
-  await createNotification({
+  await createNotificationForRoles({
     type: "vendor",
     title: "📁 Vendor Document Added",
     message: `${uploadedCount} file(s) added for document ${docType}.`,
     link: `/dashboard/vendors/${vendorId}`,
     created_by: user.id,
+    roles: ['operations'],
   });
 
   revalidatePath(`/dashboard/vendors/${vendorId}`);
@@ -1157,12 +1158,13 @@ export async function requestVendorDocuments(
   });
 
   if (result.status === "sent") {
-    await createNotification({
+    await createNotificationForRoles({
       type: "vendor",
       title: "✉️ Documents requested",
       message: `Requested ${labels.length} document(s) from ${vendor.name}.`,
       link: `/dashboard/vendors/${vendorId}`,
       created_by: user.id,
+      roles: ["operations"],
     });
   }
 

@@ -16,12 +16,11 @@ jest.mock('@/utils/audit', () => ({
   recordAuditLog: jest.fn(),
 }));
 
-jest.mock('@/utils/notifications', () => ({
-  createNotification: jest.fn(),
+jest.mock('@/utils/notifications', () => ({ createNotification: jest.fn(), createNotificationForRoles: jest.fn(),
 }));
 
 jest.mock('next/cache', () => ({
-  revalidatePath: jest.fn(),
+  revalidatePath: jest.fn(), refresh: jest.fn(),
 }));
 
 jest.mock('next/navigation', () => ({

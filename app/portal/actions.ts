@@ -3,7 +3,7 @@
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import { stampPdfWithSignature } from "@/utils/pdf-stamper";
 import { extractDocumentMetadata } from "@/app/actions/ocr";
-import { createNotification } from "@/utils/notifications";
+import { createNotification, createNotificationForRoles } from "@/utils/notifications";
 import { revalidatePath } from "next/cache";
 import { combineImagesToPdf } from "@/lib/pdf/combineImagesToPdf";
 import { sendPoSignedReceivedEmail } from "@/lib/email/po-signed-received";
@@ -165,7 +165,7 @@ export async function signPortalPO(
 
   const { data: po } = await supabase
     .from("purchase_orders")
-    .select("id, po_number, status, vendors ( name )")
+    .select("id, po_number, status, approval_requested_from, vendors ( name )")
     .eq("id", magicLink.entity_id)
     .single();
 
@@ -238,13 +238,28 @@ export async function signPortalPO(
   const graceExpiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
   await supabase.from("magic_links").update({ expires_at: graceExpiresAt }).eq("id", magicLink.id);
 
-  await createNotification({
-    type: "po",
-    title: "✍️ PO Signed — Pending Review",
-    message: `${vendor.name || "Vendor"} submitted a signed copy of purchase order ${po.po_number || ""} (${name}). Awaiting requisitioner approval.`,
-    link: `/dashboard/purchase-orders/${po.id}`,
-    created_by: po.id,
-  });
+  {
+    const approvers = (po as any).approval_requested_from as string[] | null;
+    if (approvers && approvers.length > 0) {
+      await createNotification({
+        type: "po",
+        title: "✍️ PO Signed — Pending Review",
+        message: `${vendor.name || "Vendor"} submitted a signed copy of purchase order ${po.po_number || ""} (${name}). Awaiting requisitioner approval.`,
+        link: `/dashboard/purchase-orders/${po.id}`,
+        created_by: null,
+        recipientIds: approvers,
+      });
+    } else {
+      await createNotificationForRoles({
+        type: "po",
+        title: "✍️ PO Signed — Pending Review",
+        message: `${vendor.name || "Vendor"} submitted a signed copy of purchase order ${po.po_number || ""} (${name}). Awaiting requisitioner approval.`,
+        link: `/dashboard/purchase-orders/${po.id}`,
+        created_by: null,
+        roles: ["operations"],
+      });
+    }
+  }
 
   revalidatePath(`/dashboard/purchase-orders/${po.id}`);
   revalidatePath("/dashboard/purchase-orders");
@@ -506,12 +521,13 @@ export async function uploadPortalDocument(
     if (dbError) return { error: dbError.message };
 
     // Trigger Notification for Procurement
-    await createNotification({
+    await createNotificationForRoles({
       type: "vendor",
       title: "📁 Portal Upload: Vendor Compliance",
       message: `${entityName} uploaded a file for ${docType.toUpperCase().replace(/_/g, " ")}.`,
       link: `/dashboard/vendors/${magicLink.entity_id}`,
-      created_by: magicLink.entity_id, // Route identifier
+      created_by: null,
+      roles: ["operations"],
     });
 
   } else {
@@ -578,12 +594,13 @@ export async function uploadPortalDocument(
     }
 
     // Trigger Notification for CRM
-    await createNotification({
+    await createNotificationForRoles({
       type: "crm",
       title: "📁 Portal Upload: Customer File",
       message: `${entityName} uploaded a new ${docType.toUpperCase().replace(/_/g, " ")} (v${versionNumber}).`,
       link: `/dashboard/crm/${magicLink.entity_id}`,
-      created_by: magicLink.entity_id,
+      created_by: null,
+      roles: ["operations"],
     });
   }
 

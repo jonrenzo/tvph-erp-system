@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/utils/supabase/server';
 import { redirect } from 'next/navigation';
-import { createNotification } from '@/utils/notifications';
+import { createNotification, createNotificationForRoles } from '@/utils/notifications';
 import { recordAuditLog } from '@/utils/audit';
 import { requireCapability } from '@/lib/auth/permissions';
 import { extractDocumentMetadata } from '@/app/actions/ocr';
@@ -389,12 +389,13 @@ export async function createInvoice(prevState: any, formData: FormData) {
     performed_by: user.id
   });
 
-  await createNotification({
+  await createNotificationForRoles({
     type: 'invoice',
     title: '🧾 Invoice Received',
     message: po_id && createdPrId ? `Invoice #${invoice_number} logged — Payment Request pending approval (₱${parsedAmount.toLocaleString()}).` : `Invoice #${invoice_number} was logged.`,
     link: `/dashboard/invoices/${newInvoice.id}`,
-    created_by: user.id
+    created_by: user.id,
+    roles: ['finance']
   });
 
   // Notify for payment request (deferred)
@@ -635,12 +636,13 @@ export async function recordPayment(prevState: any, formData: FormData) {
     await supabase.from('purchase_orders').update({ status: poStatus }).eq('id', po_id);
   }
 
-  await createNotification({
+  await createNotificationForRoles({
     type: 'payment',
     title: `💳 Payment Recorded`,
     message: `Payment of ${amount_paid} recorded for an invoice.`,
     link: `/dashboard/invoices/${invoice_id}`,
-    created_by: user.id
+    created_by: user.id,
+    roles: ['finance']
   });
 
   revalidatePath(`/dashboard/invoices/${invoice_id}`);
@@ -717,12 +719,13 @@ export async function attachPaymentDocument(prevState: any, formData: FormData) 
     performed_by: user.id
   });
 
-  await createNotification({
+  await createNotificationForRoles({
     type: 'payment',
     title: doc_type === 'official_receipt' ? '🧾 Official Receipt Attached' : '📎 Payment Document Attached',
     message: `A ${doc_type.replace(/_/g, ' ')} was attached to a payment.`,
     link: `/dashboard/invoices/${invoiceId}`,
-    created_by: user.id
+    created_by: user.id,
+    roles: ['finance']
   });
 
   revalidatePath(`/dashboard/invoices/${invoiceId}`);

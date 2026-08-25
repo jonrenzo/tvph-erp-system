@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
-import { createNotification } from "@/utils/notifications";
+import { createNotificationForRoles } from "@/utils/notifications";
 import { createPortalLink } from "@/lib/portal/links";
 import { docTypeLabel } from "@/lib/vendors/document-types";
 import { sendEmail } from "@/lib/email/send";
@@ -131,8 +131,8 @@ export async function POST(request: NextRequest) {
     if (result.status === "sent") sent++;
     else failed++;
 
-    // Internal alert so procurement owns the follow-up (global staff feed).
-    await createNotification({
+    // Internal alert so procurement owns the follow-up.
+    await createNotificationForRoles({
       type: "document",
       title: milestone <= 0 ? "📄 Vendor document expired" : "📄 Vendor document expiring",
       message:
@@ -140,7 +140,8 @@ export async function POST(request: NextRequest) {
           ? `${vendor.name}'s ${label} has expired.`
           : `${vendor.name}'s ${label} expires in ${milestone} day${milestone === 1 ? "" : "s"}.`,
       link: `/dashboard/vendors/${doc.vendor_id}`,
-      created_by: (doc.uploaded_by as string | null) ?? (undefined as unknown as string),
+      created_by: null,
+      roles: ["operations"],
     });
   }
 

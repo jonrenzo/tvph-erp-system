@@ -14,7 +14,7 @@ function defer(fn: () => Promise<void>) {
     void fn();
   }
 }
-import { createNotification } from '@/utils/notifications';
+import { createNotification, createNotificationForRoles } from '@/utils/notifications';
 import { recordAuditLog } from '@/utils/audit';
 import { requireCapability, getCurrentProfile, hasCapability } from '@/lib/auth/permissions';
 import { sendPrPendingApprovalEmail } from '@/lib/email/pr-pending-approval';
@@ -378,6 +378,7 @@ export async function submitPRForApproval(prId: string, approverIds: string[] = 
     message: 'A purchase request has been submitted and requires approval before it can be converted to a PO.',
     link: `/dashboard/purchase-requests/${prId}`,
     created_by: user.id,
+    recipientIds: uniqueApproverIds,
   });
 
   revalidatePath(`/dashboard/purchase-requests/${prId}`);
@@ -393,6 +394,7 @@ export async function submitPRForApproval(prId: string, approverIds: string[] = 
         message: `A PR was submitted for approval but the notification email to the selected approvers could not be sent. ${emailResult.error ?? ''}`.trim(),
         link: `/dashboard/purchase-requests/${prId}`,
         created_by: user.id,
+        recipientIds: [user.id],
       });
     }
   });
@@ -437,12 +439,13 @@ export async function approvePR(prId: string) {
     performed_by: user.id,
   });
 
-  await createNotification({
+  await createNotificationForRoles({
     type: 'pr',
     title: '👤 PR Admin Approved',
     message: 'A purchase request was approved by the admin and is pending the finance budget check.',
     link: `/dashboard/purchase-requests/${prId}`,
     created_by: user.id,
+    roles: ['finance'],
   });
 
   revalidatePath(`/dashboard/purchase-requests/${prId}`);
@@ -459,6 +462,7 @@ export async function approvePR(prId: string) {
         message: `A PR passed the admin stage but the finance notification email could not be sent. ${emailResult.error ?? ''}`.trim(),
         link: `/dashboard/purchase-requests/${prId}`,
         created_by: user.id,
+        recipientIds: [user.id],
       });
     }
   });
@@ -548,12 +552,13 @@ export async function approvePRFinance(prId: string) {
     performed_by: user.id,
   });
 
-  await createNotification({
+  await createNotificationForRoles({
     type: 'pr',
     title: '✅ PR Approved',
     message: 'A purchase request passed the finance budget check and is ready to be converted into a purchase order.',
     link: `/dashboard/purchase-requests/${prId}`,
     created_by: user.id,
+    roles: ['operations'],
   });
 
   revalidatePath(`/dashboard/purchase-requests/${prId}`);
@@ -570,6 +575,7 @@ export async function approvePRFinance(prId: string) {
         message: `${emailResult.error || 'The PR was approved but the procurement email could not be sent.'} Open the PR to convert it manually.`,
         link: `/dashboard/purchase-requests/${prId}`,
         created_by: user.id,
+        recipientIds: [user.id],
       });
     }
   });
@@ -586,7 +592,7 @@ export async function rejectPR(prId: string, reason: string) {
 
   const { data: pr } = await supabase
     .from('purchase_requests')
-    .select('status')
+    .select('status, submitted_for_approval_by')
     .eq('id', prId)
     .single();
 
@@ -619,13 +625,25 @@ export async function rejectPR(prId: string, reason: string) {
     performed_by: user.id,
   });
 
-  await createNotification({
-    type: 'pr',
-    title: '❌ PR Approval Rejected',
-    message: `The purchase request was sent back to draft. Reason: ${reason.trim()}`,
-    link: `/dashboard/purchase-requests/${prId}`,
-    created_by: user.id,
-  });
+  if ((pr as any)?.submitted_for_approval_by) {
+    await createNotification({
+      type: 'pr',
+      title: '❌ PR Approval Rejected',
+      message: `The purchase request was sent back to draft. Reason: ${reason.trim()}`,
+      link: `/dashboard/purchase-requests/${prId}`,
+      created_by: user.id,
+      recipientIds: [(pr as any).submitted_for_approval_by],
+    });
+  } else {
+    await createNotificationForRoles({
+      type: 'pr',
+      title: '❌ PR Approval Rejected',
+      message: `The purchase request was sent back to draft. Reason: ${reason.trim()}`,
+      link: `/dashboard/purchase-requests/${prId}`,
+      created_by: user.id,
+      roles: ['operations'],
+    });
+  }
 
   revalidatePath(`/dashboard/purchase-requests/${prId}`);
   revalidatePath('/dashboard/purchase-requests');

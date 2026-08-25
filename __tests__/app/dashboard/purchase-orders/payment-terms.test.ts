@@ -10,7 +10,7 @@ jest.mock("@/lib/auth/permissions", () => ({
   hasCapability: jest.fn(),
 }));
 jest.mock("@/utils/audit", () => ({ recordAuditLog: jest.fn() }));
-jest.mock("next/cache", () => ({ revalidatePath: jest.fn() }));
+jest.mock("next/cache", () => ({ revalidatePath: jest.fn(), refresh: jest.fn() }));
 
 import { createClient } from "@/utils/supabase/server";
 import { getCurrentProfile, requireCapability } from "@/lib/auth/permissions";

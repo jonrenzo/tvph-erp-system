@@ -104,6 +104,7 @@ export async function assignRole(
     message: `${target.full_name || target.email} is now ${ROLE_LABELS[role as Role]}.`,
     link: "/dashboard/settings?tab=team",
     created_by: userId,
+    recipientIds: [userId],
   });
 
   return { ok: true, name: target.full_name || target.email, label: ROLE_LABELS[role as Role] };

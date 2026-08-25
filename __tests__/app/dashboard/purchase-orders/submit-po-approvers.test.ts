@@ -12,8 +12,7 @@ jest.mock('@/utils/audit', () => ({
   recordAuditLog: jest.fn(),
 }));
 
-jest.mock('@/utils/notifications', () => ({
-  createNotification: jest.fn(),
+jest.mock('@/utils/notifications', () => ({ createNotification: jest.fn(), createNotificationForRoles: jest.fn(),
 }));
 
 jest.mock('@/lib/email/po-pending-approval', () => ({
@@ -21,7 +20,7 @@ jest.mock('@/lib/email/po-pending-approval', () => ({
 }));
 
 jest.mock('next/cache', () => ({
-  revalidatePath: jest.fn(),
+  revalidatePath: jest.fn(), refresh: jest.fn(),
 }));
 
 import { createClient } from '@/utils/supabase/server';
@@ -128,7 +127,19 @@ describe('submitPOForApproval — approver selection', () => {
   });
 
   it('deduplicates ids and stores the chosen approvers on success', async () => {
-    const result = await submitPOForApproval('po-1', ['admin-a', 'admin-a', 'admin-b']);
+    mockSupabase.selectChain.in
+      .mockResolvedValueOnce({
+        data: [
+          { id: 'admin-a', role: 'admin' },
+          { id: 'admin-b', role: 'superadmin' },
+        ],
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: [{ id: 'finance-a', role: 'finance' }],
+        error: null,
+      });
+    const result = await submitPOForApproval('po-1', ['admin-a', 'admin-a', 'admin-b'], ['finance-a']);
     expect(result).toEqual({ success: true });
 
     const updateFn = mockSupabase.from('purchase_orders').update;
@@ -145,16 +156,21 @@ describe('submitPOForApproval — approver selection', () => {
   });
 
   it('still succeeds but warns when the approval email fails to send', async () => {
-    mockSupabase.selectChain.in.mockResolvedValue({
-      data: [{ id: 'admin-a', role: 'admin' }],
-      error: null,
-    });
+    mockSupabase.selectChain.in
+      .mockResolvedValueOnce({
+        data: [{ id: 'admin-a', role: 'admin' }],
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: [{ id: 'finance-a', role: 'finance' }],
+        error: null,
+      });
     mockSendPoPendingApprovalEmail.mockResolvedValue({
       status: 'failed',
       error: 'RESEND_API_KEY is not configured.',
     });
 
-    const result = await submitPOForApproval('po-1', ['admin-a']);
+    const result = await submitPOForApproval('po-1', ['admin-a'], ['finance-a']);
     expect(result).toEqual({ success: true });
 
     expect(mockCreateNotification).toHaveBeenCalledWith(

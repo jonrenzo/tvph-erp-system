@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/utils/supabase/server';
-import { createNotification } from '@/utils/notifications';
+import { createNotification, createNotificationForRoles } from '@/utils/notifications';
 import { recordAuditLog } from '@/utils/audit';
 import { requireCapability } from '@/lib/auth/permissions';
 
@@ -90,12 +90,13 @@ export async function uploadCompanyDocument(prevState: any, formData: FormData) 
     performed_by: user.id,
   });
 
-  await createNotification({
+  await createNotificationForRoles({
     type: 'document',
     title: '📄 New Document Uploaded',
     message: `${file.name} was added to the Company Library.`,
     link: `/dashboard/documents`,
-    created_by: user.id
+    created_by: user.id,
+    roles: ['operations'],
   });
 
   // 8. Revalidate the documents page cache

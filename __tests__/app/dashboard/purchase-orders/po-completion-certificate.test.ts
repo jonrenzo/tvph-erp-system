@@ -26,19 +26,18 @@ jest.mock('@/utils/audit', () => ({
 }));
 
 // Mock notifications
-jest.mock('@/utils/notifications', () => ({
-  createNotification: jest.fn(),
+jest.mock('@/utils/notifications', () => ({ createNotification: jest.fn(), createNotificationForRoles: jest.fn(),
 }));
 
 // Mock Next.js cache utilities
 jest.mock('next/cache', () => ({
-  revalidatePath: jest.fn(),
+  revalidatePath: jest.fn(), refresh: jest.fn(),
 }));
 
 import { createClient } from '@/utils/supabase/server';
 import { requireCapability } from '@/lib/auth/permissions';
 import { recordAuditLog } from '@/utils/audit';
-import { createNotification } from '@/utils/notifications';
+import { createNotification, createNotificationForRoles } from '@/utils/notifications';
 import { revalidatePath } from 'next/cache';
 
 const mockCreateClient = createClient as jest.MockedFunction<typeof createClient>;
@@ -50,6 +49,9 @@ const mockRecordAuditLog = recordAuditLog as jest.MockedFunction<
 >;
 const mockCreateNotification = createNotification as jest.MockedFunction<
   typeof createNotification
+>;
+const mockCreateNotificationForRoles = createNotificationForRoles as jest.MockedFunction<
+  typeof createNotificationForRoles
 >;
 const mockRevalidatePath = revalidatePath as jest.MockedFunction<
   typeof revalidatePath
@@ -109,6 +111,7 @@ describe('submitCompletionCertificate', () => {
     });
     mockRecordAuditLog.mockResolvedValue(undefined);
     mockCreateNotification.mockResolvedValue(undefined);
+    mockCreateNotificationForRoles.mockResolvedValue(undefined);
     mockRevalidatePath.mockReturnValue(undefined);
   });
 
@@ -133,7 +136,7 @@ describe('submitCompletionCertificate', () => {
         expect.any(Object)
       );
       expect(mockRecordAuditLog).toHaveBeenCalled();
-      expect(mockCreateNotification).toHaveBeenCalledWith(
+      expect(mockCreateNotificationForRoles).toHaveBeenCalledWith(
         expect.objectContaining({
           message: expect.stringContaining('50%'),
         })
@@ -323,7 +326,7 @@ describe('submitCompletionCertificate', () => {
 
       await submitCompletionCertificate(mockFormData);
 
-      expect(mockCreateNotification).toHaveBeenCalledWith(
+      expect(mockCreateNotificationForRoles).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'po',
           title: '📋 Completion Certificate Submitted',

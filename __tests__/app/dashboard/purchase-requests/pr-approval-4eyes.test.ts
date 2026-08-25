@@ -20,8 +20,7 @@ jest.mock('@/utils/audit', () => ({
   recordAuditLog: jest.fn(),
 }));
 
-jest.mock('@/utils/notifications', () => ({
-  createNotification: jest.fn(),
+jest.mock('@/utils/notifications', () => ({ createNotification: jest.fn(), createNotificationForRoles: jest.fn(),
 }));
 
 jest.mock('@/lib/email/pr-pending-approval', () => ({
@@ -37,7 +36,7 @@ jest.mock('@/lib/email/pr-pending-finance', () => ({
 }));
 
 jest.mock('next/cache', () => ({
-  revalidatePath: jest.fn(),
+  revalidatePath: jest.fn(), refresh: jest.fn(),
 }));
 
 import { createClient } from '@/utils/supabase/server';

@@ -22,13 +22,12 @@ jest.mock('@/utils/audit', () => ({
 }));
 
 // Mock notifications
-jest.mock('@/utils/notifications', () => ({
-  createNotification: jest.fn(),
+jest.mock('@/utils/notifications', () => ({ createNotification: jest.fn(), createNotificationForRoles: jest.fn(),
 }));
 
 // Mock Next.js cache utilities
 jest.mock('next/cache', () => ({
-  revalidatePath: jest.fn(),
+  revalidatePath: jest.fn(), refresh: jest.fn(),
 }));
 
 // Mock Next.js navigation (should NOT be called by core)
@@ -39,7 +38,7 @@ jest.mock('next/navigation', () => ({
 import { createClient } from '@/utils/supabase/server';
 import { requireCapability, hasCapability } from '@/lib/auth/permissions';
 import { recordAuditLog } from '@/utils/audit';
-import { createNotification } from '@/utils/notifications';
+import { createNotification, createNotificationForRoles } from '@/utils/notifications';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
@@ -53,9 +52,8 @@ const mockHasCapability = hasCapability as jest.MockedFunction<
 const mockRecordAuditLog = recordAuditLog as jest.MockedFunction<
   typeof recordAuditLog
 >;
-const mockCreateNotification = createNotification as jest.MockedFunction<
-  typeof createNotification
->;
+const mockCreateNotification = createNotification as jest.MockedFunction<typeof createNotification>;
+const mockCreateNotificationForRoles = createNotificationForRoles as jest.MockedFunction<typeof createNotificationForRoles>;
 const mockRevalidatePath = revalidatePath as jest.MockedFunction<
   typeof revalidatePath
 >;
@@ -159,6 +157,7 @@ describe('createPurchaseOrderCore', () => {
     mockHasCapability.mockReturnValue(true);
     mockRecordAuditLog.mockResolvedValue(undefined);
     mockCreateNotification.mockResolvedValue(undefined);
+    mockCreateNotificationForRoles.mockResolvedValue(undefined);
     mockRevalidatePath.mockReturnValue(undefined);
   });
 
@@ -467,13 +466,14 @@ describe('createPurchaseOrderCore', () => {
         line_items: [{ description: 'Item 1', qty: 1, unit_price: 100 }],
       });
 
-      expect(mockCreateNotification).toHaveBeenCalled();
-      const notifCall = mockCreateNotification.mock.calls[0][0];
+      expect(mockCreateNotificationForRoles).toHaveBeenCalled();
+      const notifCall = mockCreateNotificationForRoles.mock.calls[0][0];
 
       expect(notifCall).toMatchObject({
         type: 'po',
         link: '/dashboard/purchase-orders/po-1',
         created_by: 'user-1',
+        roles: ['operations'],
       });
     });
 

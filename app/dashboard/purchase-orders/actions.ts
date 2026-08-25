@@ -2,7 +2,7 @@
 
 import { refresh, revalidatePath } from 'next/cache';
 import { createClient } from '@/utils/supabase/server';
-import { createNotification } from '@/utils/notifications';
+import { createNotification, createNotificationForRoles } from '@/utils/notifications';
 import { recordAuditLog } from '@/utils/audit';
 import { getCurrentProfile, requireCapability, hasCapability } from '@/lib/auth/permissions';
 import { sendPoIssuedEmail } from '@/lib/email/po';
@@ -284,18 +284,20 @@ export async function createPurchaseOrderCore(input: CreatePOInput) {
         message: `PO ${newPO.po_number} was created, but the purchase request could not be marked converted. Open the PR and verify its status.`,
         link: `/dashboard/purchase-requests/${prToConvert.id}`,
         created_by: user.id,
+        recipientIds: [user.id],
       });
     }
     revalidatePath(`/dashboard/purchase-requests/${prToConvert.id}`);
     revalidatePath('/dashboard/purchase-requests');
   }
 
-  await createNotification({
+  await createNotificationForRoles({
     type: 'po',
     title: '📋 Purchase Order Created',
     message: `A new purchase order was drafted.`,
     link: `/dashboard/purchase-orders/${newPO.id}`,
     created_by: user.id,
+    roles: ['operations'],
   });
 
   revalidatePath('/dashboard/purchase-orders');
@@ -757,6 +759,7 @@ export async function submitPOForApproval(poId: string, approverIds: string[] = 
     message: 'A purchase order has been submitted and requires executive approval before issuing.',
     link: `/dashboard/purchase-orders/${poId}`,
     created_by: user.id,
+    recipientIds: uniqueApproverIds,
   });
 
   revalidatePath(`/dashboard/purchase-orders/${poId}`);
@@ -772,6 +775,7 @@ export async function submitPOForApproval(poId: string, approverIds: string[] = 
         message: `A PO was submitted for approval but the notification email to the selected approvers could not be sent. ${emailResult.error ?? ''}`.trim(),
         link: `/dashboard/purchase-orders/${poId}`,
         created_by: user.id,
+        recipientIds: [user.id],
       });
     }
   });
@@ -820,12 +824,13 @@ export async function approvePO(poId: string) {
     performed_by: user.id,
   });
 
-  await createNotification({
+  await createNotificationForRoles({
     type: 'po',
     title: '👤 PO Admin Approved',
     message: 'A purchase order was approved by the admin and is pending the finance budget check before issuing.',
     link: `/dashboard/purchase-orders/${poId}`,
     created_by: user.id,
+    roles: ['finance'],
   });
 
   revalidatePath(`/dashboard/purchase-orders/${poId}`);
@@ -842,6 +847,7 @@ export async function approvePO(poId: string) {
         message: `A PO passed the admin stage but the finance notification email could not be sent. ${financeEmailResult.error ?? ''}`.trim(),
         link: `/dashboard/purchase-orders/${poId}`,
         created_by: user.id,
+        recipientIds: [user.id],
       });
     }
   });
@@ -911,6 +917,7 @@ export async function approvePOFinance(poId: string) {
       message: `${linkResult.error} Open the PO to resend the signature request.`,
       link: `/dashboard/purchase-orders/${poId}`,
       created_by: user.id,
+      recipientIds: [user.id],
     });
     return { success: true, emailWarning: linkResult.error };
   }
@@ -928,6 +935,7 @@ export async function approvePOFinance(poId: string) {
         message: `${emailResult.error || 'The PO was issued but the email could not be sent.'} Open the PO to resend it to the vendor.`,
         link: `/dashboard/purchase-orders/${poId}`,
         created_by: user.id,
+        recipientIds: [user.id],
       });
     }
   });
@@ -944,7 +952,7 @@ export async function rejectPO(poId: string, reason: string) {
 
   const { data: po } = await supabase
     .from('purchase_orders')
-    .select('status')
+    .select('status, submitted_for_approval_by')
     .eq('id', poId)
     .single();
 
@@ -977,13 +985,25 @@ export async function rejectPO(poId: string, reason: string) {
     performed_by: user.id,
   });
 
-  await createNotification({
-    type: 'po',
-    title: '❌ PO Approval Rejected',
-    message: `The purchase order was sent back to draft. Reason: ${reason.trim()}`,
-    link: `/dashboard/purchase-orders/${poId}`,
-    created_by: user.id,
-  });
+  if (po?.submitted_for_approval_by) {
+    await createNotification({
+      type: 'po',
+      title: '❌ PO Approval Rejected',
+      message: `The purchase order was sent back to draft. Reason: ${reason.trim()}`,
+      link: `/dashboard/purchase-orders/${poId}`,
+      created_by: user.id,
+      recipientIds: [po.submitted_for_approval_by],
+    });
+  } else {
+    await createNotificationForRoles({
+      type: 'po',
+      title: '❌ PO Approval Rejected',
+      message: `The purchase order was sent back to draft. Reason: ${reason.trim()}`,
+      link: `/dashboard/purchase-orders/${poId}`,
+      created_by: user.id,
+      roles: ['operations'],
+    });
+  }
 
   revalidatePath(`/dashboard/purchase-orders/${poId}`);
   revalidatePath('/dashboard/purchase-orders');
@@ -1032,12 +1052,13 @@ export async function updatePOStatus(poId: string, status: string) {
     performed_by: user.id
   });
 
-  await createNotification({
+  await createNotificationForRoles({
     type: 'po',
     title: `📋 PO Status Updated`,
     message: `Purchase order status changed to ${status}.`,
     link: `/dashboard/purchase-orders/${poId}`,
-    created_by: user.id
+    created_by: user.id,
+    roles: ['operations'],
   });
 
   revalidatePath(`/dashboard/purchase-orders/${poId}`);
@@ -1158,12 +1179,13 @@ export async function reviewSignedPo(
   }
 
   const vendor = (po.vendors ?? {}) as { name?: string };
-  await createNotification({
+  await createNotificationForRoles({
     type: 'po',
     title: decision === 'approve' ? '✅ Signed PO Approved' : '⚠️ Signed PO Rejected',
     message: `${vendor.name || 'Vendor'}${decision === 'approve' ? "'s signed copy was approved" : "'s signed copy was rejected"} for ${po.po_number || 'the PO'}${decision === 'reject' && reason ? ` — ${reason}` : ''}.`,
     link: `/dashboard/purchase-orders/${poId}`,
     created_by: user.id,
+    roles: ['operations'],
   });
 
   revalidatePath(`/dashboard/purchase-orders/${poId}`);
@@ -1181,6 +1203,7 @@ export async function reviewSignedPo(
           message: `The signed-PO acknowledgment email for ${po.po_number || 'the PO'} could not be sent.${emailResult.error ? ` ${emailResult.error}` : ''}`,
           link: `/dashboard/purchase-orders/${poId}`,
           created_by: user.id,
+          recipientIds: [user.id],
         });
       }
     });
@@ -1426,12 +1449,13 @@ export async function submitCompletionCertificate(formData: FormData) {
     performed_by: user.id,
   });
 
-  await createNotification({
+  await createNotificationForRoles({
     type: 'po',
     title: '📋 Completion Certificate Submitted',
     message: `A certificate of completion at ${percent}% was submitted and awaits approval.`,
     link: `/dashboard/purchase-orders/${poId}`,
     created_by: user.id,
+    roles: ['admin'],
   });
 
   revalidatePath(`/dashboard/purchase-orders/${poId}`);
@@ -1639,12 +1663,13 @@ export async function notifyFinanceForPayment(poId: string) {
   if (insertError) return { error: insertError.message };
 
   const vendorName = (po.vendors as any)?.name || 'Vendor';
-  await createNotification({
+  await createNotificationForRoles({
     type: 'payment',
     title: 'Payment Reservation Created',
     message: `${vendorName} may request payment for PO ${po.po_number}. ₱${reservedAmount.toLocaleString()} reserved.`,
     link: `/dashboard/purchase-orders/${poId}`,
     created_by: user.id,
+    roles: ['finance'],
   });
 
   revalidatePath(`/dashboard/purchase-orders/${poId}`);
@@ -1673,12 +1698,13 @@ export async function acknowledgePaymentReservation(reservationId: string) {
 
   const po = res.purchase_orders as any;
   const vendorName = po?.vendors?.name || 'Vendor';
-  await createNotification({
+  await createNotificationForRoles({
     type: 'payment',
     title: 'Payment Reservation Acknowledged',
     message: `Finance acknowledged payment reservation for ${vendorName} (PO ${po?.po_number}). ₱${Number(res.reserved_amount).toLocaleString()} is being prepared.`,
     link: `/dashboard/purchase-orders/${res.po_id}`,
     created_by: user.id,
+    roles: ['operations'],
   });
 
   revalidatePath(`/dashboard/purchase-orders/${res.po_id}`);
@@ -1707,12 +1733,13 @@ export async function cancelPaymentReservation(reservationId: string, reason: st
 
   const po = res.purchase_orders as any;
   const vendorName = po?.vendors?.name || 'Vendor';
-  await createNotification({
+  await createNotificationForRoles({
     type: 'payment',
     title: 'Payment Reservation Cancelled',
     message: `Payment reservation for ${vendorName} (PO ${po?.po_number}) was cancelled. Reason: ${reason}`,
     link: `/dashboard/purchase-orders/${res.po_id}`,
     created_by: user.id,
+    roles: ['finance', 'operations'],
   });
 
   revalidatePath(`/dashboard/purchase-orders/${res.po_id}`);
@@ -1780,12 +1807,13 @@ export async function approvePaymentRequest(requestId: string) {
 
   const po = pr.purchase_orders as any;
   const vendorName = po?.vendors?.name || 'Vendor';
-  await createNotification({
+  await createNotificationForRoles({
     type: 'payment_request',
     title: 'Payment Request Approved',
     message: `Payment request for ${vendorName} (PO ${po?.po_number}) — ₱${Number(pr.amount).toLocaleString()} approved. The subcontractor may now submit a progress-billing invoice.`,
     link: `/dashboard/purchase-orders/${pr.po_id}`,
     created_by: user.id,
+    roles: ['operations'],
   });
 
   revalidatePath(`/dashboard/purchase-orders/${pr.po_id}`);
@@ -1819,12 +1847,13 @@ export async function rejectPaymentRequest(requestId: string, reason: string) {
 
   const po = pr.purchase_orders as any;
   const vendorName = po?.vendors?.name || 'Vendor';
-  await createNotification({
+  await createNotificationForRoles({
     type: 'payment_request',
     title: 'Payment Request Rejected',
     message: `Payment request for ${vendorName} (PO ${po?.po_number}) — ₱${Number(pr.amount).toLocaleString()} rejected. Reason: ${reason}`,
     link: `/dashboard/purchase-orders/${pr.po_id}`,
     created_by: user.id,
+    roles: ['operations'],
   });
 
   revalidatePath(`/dashboard/purchase-orders/${pr.po_id}`);

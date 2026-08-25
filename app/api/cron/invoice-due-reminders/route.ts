@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
-import { createNotification } from "@/utils/notifications";
+import { createNotificationForRoles } from "@/utils/notifications";
 import { sendEmail } from "@/lib/email/send";
 import { InvoiceDueEmail } from "@/lib/email/templates/invoice-due";
 
@@ -102,13 +102,14 @@ export async function POST(request: NextRequest) {
     if (result.status === "sent") sent++;
     else failed++;
 
-    // Internal alert so finance owns the follow-up (global staff feed).
-    await createNotification({
+    // Internal alert so finance owns the follow-up.
+    await createNotificationForRoles({
       type: "invoice",
       title: "🧾 Invoice due in 14 days",
       message: `Invoice #${inv.invoice_number} from ${vendor.name} (₱${amount}) is due on ${dueDate}.`,
       link: `/dashboard/invoices/${inv.id}`,
-      created_by: (undefined as unknown as string),
+      created_by: null,
+      roles: ["finance"],
     });
   }
 

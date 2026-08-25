@@ -3,9 +3,9 @@ import { createInvoice } from "@/app/dashboard/invoices/actions";
 jest.mock("@/utils/supabase/server", () => ({ createClient: jest.fn() }));
 jest.mock("@/lib/auth/permissions", () => ({ requireCapability: jest.fn() }));
 jest.mock("@/utils/audit", () => ({ recordAuditLog: jest.fn() }));
-jest.mock("@/utils/notifications", () => ({ createNotification: jest.fn() }));
+jest.mock('@/utils/notifications', () => ({ createNotification: jest.fn(), createNotificationForRoles: jest.fn() }));
 jest.mock("@/app/actions/ocr", () => ({ extractDocumentMetadata: jest.fn() }));
-jest.mock("next/cache", () => ({ revalidatePath: jest.fn() }));
+jest.mock("next/cache", () => ({ revalidatePath: jest.fn(), refresh: jest.fn() }));
 jest.mock("next/navigation", () => ({ redirect: jest.fn() }));
 
 import { createClient } from "@/utils/supabase/server";

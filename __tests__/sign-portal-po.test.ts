@@ -11,7 +11,7 @@ jest.mock("@/utils/notifications", () => ({
   createNotification: jest.fn(async () => {}),
 }));
 jest.mock("next/cache", () => ({
-  revalidatePath: jest.fn(),
+  revalidatePath: jest.fn(), refresh: jest.fn(),
 }));
 jest.mock("@/lib/pdf/combineImagesToPdf", () => ({
   combineImagesToPdf: jest.fn(async () => new Uint8Array([1, 2, 3, 4])),

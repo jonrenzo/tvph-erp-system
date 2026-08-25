@@ -27,8 +27,7 @@ jest.mock('@/utils/audit', () => ({
 }));
 
 // Mock notifications
-jest.mock('@/utils/notifications', () => ({
-  createNotification: jest.fn(),
+jest.mock('@/utils/notifications', () => ({ createNotification: jest.fn(), createNotificationForRoles: jest.fn(),
 }));
 
 // Mock email sending
@@ -44,7 +43,7 @@ jest.mock('@/lib/portal/links', () => ({
 
 // Mock Next.js cache utilities
 jest.mock('next/cache', () => ({
-  revalidatePath: jest.fn(),
+  revalidatePath: jest.fn(), refresh: jest.fn(),
 }));
 
 import { createClient } from '@/utils/supabase/server';

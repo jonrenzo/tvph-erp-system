@@ -19,8 +19,7 @@ jest.mock('@/utils/audit', () => ({
   recordAuditLog: jest.fn(),
 }));
 
-jest.mock('@/utils/notifications', () => ({
-  createNotification: jest.fn(),
+jest.mock('@/utils/notifications', () => ({ createNotification: jest.fn(), createNotificationForRoles: jest.fn(),
 }));
 
 jest.mock('@/lib/email/po', () => ({
@@ -41,7 +40,7 @@ jest.mock('@/lib/portal/links', () => ({
 }));
 
 jest.mock('next/cache', () => ({
-  revalidatePath: jest.fn(),
+  revalidatePath: jest.fn(), refresh: jest.fn(),
 }));
 
 import { createClient } from '@/utils/supabase/server';
@@ -113,14 +112,19 @@ describe('submitPOForApproval — 4-eyes', () => {
       error: null,
     });
     // Approver-validation query (profiles.select('id, role').in('id', ids)).
-    mockSupabase.selectChain.in.mockResolvedValue({
-      data: [{ id: 'approver-1', role: 'admin' }],
-      error: null,
-    });
+    mockSupabase.selectChain.in
+      .mockResolvedValueOnce({
+        data: [{ id: 'approver-1', role: 'admin' }],
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: [{ id: 'finance-1', role: 'finance' }],
+        error: null,
+      });
   });
 
   it('allows admin to submit a draft PO for approval', async () => {
-    const result = await submitPOForApproval('po-123', ['approver-1']);
+    const result = await submitPOForApproval('po-123', ['approver-1'], ['finance-1']);
     expect(result).toEqual({ success: true });
 
     const updateCall = mockSupabase.from.mock.calls.find(
@@ -147,7 +151,7 @@ describe('submitPOForApproval — 4-eyes', () => {
       error: null,
     });
 
-    const result = await submitPOForApproval('po-ops', ['approver-1']);
+    const result = await submitPOForApproval('po-ops', ['approver-1'], ['finance-1']);
     expect(result).toEqual({ success: true });
   });
 
@@ -175,7 +179,7 @@ describe('submitPOForApproval — 4-eyes', () => {
   });
 
   it('logs audit and sends notification on successful submission', async () => {
-    await submitPOForApproval('po-audit', ['approver-1']);
+    await submitPOForApproval('po-audit', ['approver-1'], ['finance-1']);
 
     expect(mockRecordAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -472,6 +476,10 @@ describe('rejectPO — 4-eyes', () => {
   });
 
   it('sends a pending_approval PO back to draft with the rejection reason', async () => {
+    mockSupabase.selectChain.single.mockResolvedValueOnce({
+      data: { status: 'pending_approval', submitted_for_approval_by: 'requester-1' },
+      error: null,
+    });
     const result = await rejectPO('po-123', 'Missing supporting docs');
     expect(result).toEqual({ success: true });
 

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getCurrentProfile, requireCapability } from "@/lib/auth/permissions";
 import { createClient } from "@/utils/supabase/server";
 import { recordAuditLog } from "@/utils/audit";
-import { createNotification } from "@/utils/notifications";
+import { createNotification, createNotificationForRoles } from "@/utils/notifications";
 import { importVendorsFromFile, importCustomersFromFile } from "@/utils/ai-import-processor";
 import { createPurchaseOrderCore } from "@/app/dashboard/purchase-orders/actions";
 
@@ -273,12 +273,13 @@ export const erpTools = {
         performed_by: user.id,
       });
 
-      await createNotification({
+      await createNotificationForRoles({
         type: "vendor",
         title: "Vendor Created",
         message: `${input.name} was added as a vendor.`,
         link: `/dashboard/vendors/${vendor.id}`,
         created_by: user.id,
+        roles: ['operations'],
       });
 
       return {
@@ -389,12 +390,13 @@ export const erpTools = {
         performed_by: user.id,
       });
 
-      await createNotification({
+      await createNotificationForRoles({
         type: "crm",
         title: "Customer Added",
         message: `${input.company_name} was added to customers.`,
         link: `/dashboard/crm/${account.id}`,
         created_by: user.id,
+        roles: ['operations'],
       });
 
       return {
@@ -569,12 +571,13 @@ export const erpTools = {
         performed_by: user.id,
       });
 
-      await createNotification({
+      await createNotificationForRoles({
         type: "vendor",
         title: "Vendor Document Added",
         message: `A document was uploaded for a vendor.`,
         link: `/dashboard/vendors/${input.vendor_id}`,
         created_by: user.id,
+        roles: ['operations'],
       });
 
       return { message: `Document "${input.file_name}" uploaded to vendor successfully.` };
@@ -711,12 +714,13 @@ export const erpTools = {
         performed_by: user.id,
       });
 
-      await createNotification({
+      await createNotificationForRoles({
         type: "crm",
         title: "Customer Document Added",
         message: `A document was uploaded for a customer.`,
         link: `/dashboard/crm/${input.customer_id}`,
         created_by: user.id,
+        roles: ['operations'],
       });
 
       return { message: `Document "${input.file_name}" uploaded to customer successfully.` };
@@ -789,12 +793,13 @@ export const erpTools = {
         performed_by: user.id,
       });
 
-      await createNotification({
+      await createNotificationForRoles({
         type: "document",
         title: "New Document Uploaded",
         message: `${input.file_name} was added to the Company Library.`,
         link: "/dashboard/documents",
         created_by: user.id,
+        roles: ['operations'],
       });
 
       return { message: `Document "${input.file_name}" uploaded to Company Library successfully.` };

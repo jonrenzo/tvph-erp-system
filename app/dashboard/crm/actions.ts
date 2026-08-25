@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/utils/supabase/server';
 import { createServiceRoleClient } from '@/utils/supabase/service';
 import { recordAuditLog } from '@/utils/audit';
-import { createNotification } from '@/utils/notifications';
+import { createNotification, createNotificationForRoles } from '@/utils/notifications';
 import { parseFile, buildColumnMap } from '@/utils/import-export';
 import { requireCapability, isAdminOrAbove } from '@/lib/auth/permissions';
 
@@ -173,12 +173,13 @@ export async function createCustomer(_: ActionState, formData: FormData): Promis
     performed_by: user.id,
   });
 
-  await createNotification({
+  await createNotificationForRoles({
     type: 'crm',
     title: 'Customer Added',
     message: `${company_name} was added to customers.`,
     link: `/dashboard/crm/${account.id}`,
     created_by: user.id,
+    roles: ['operations'],
   });
 
   revalidatePath('/dashboard/crm');
@@ -415,12 +416,13 @@ export async function createOpportunity(_: ActionState, formData: FormData): Pro
     performed_by: user.id,
   });
 
-  await createNotification({
+  await createNotificationForRoles({
     type: 'crm',
     title: 'New Customer Project',
     message: `${title} has been added to customer project tracking.`,
     link: `/dashboard/crm/projects/${opportunity.id}`,
     created_by: user.id,
+    roles: ['operations'],
   });
 
   revalidatePath('/dashboard/crm');
@@ -601,12 +603,13 @@ export async function convertOpportunityToProject(opportunityId: string) {
     performed_by: user.id,
   });
 
-  await createNotification({
+  await createNotificationForRoles({
     type: 'crm',
     title: 'Customer Project Started',
     message: `${opportunity.title} now has an active project record.`,
     link: `/dashboard/projects/${project.id}`,
     created_by: user.id,
+    roles: ['operations'],
   });
 
   revalidatePath('/dashboard/crm');
@@ -736,12 +739,13 @@ export async function uploadCustomerDocument(customerId: string, docType: string
     performed_by: user.id
   });
 
-  await createNotification({
+  await createNotificationForRoles({
     type: 'crm',
     title: 'Customer Document Added',
     message: `A document was uploaded for a customer.`,
     link: `/dashboard/crm/${customerId}`,
-    created_by: user.id
+    created_by: user.id,
+    roles: ['operations'],
   });
 
   revalidatePath(`/dashboard/crm/${customerId}`);
@@ -825,14 +829,15 @@ export async function uploadDocumentVersion(documentId: string, formData: FormDa
     performed_by: user.id
   });
 
-  await createNotification({
+  await createNotificationForRoles({
     type: 'crm',
     title: 'Document Updated',
     message: doc.label
       ? `A new version of "${doc.label}" was uploaded.`
       : `A new document version was uploaded.`,
     link: `/dashboard/crm/${doc.account_id}`,
-    created_by: user.id
+    created_by: user.id,
+    roles: ['operations'],
   });
 
   revalidatePath(`/dashboard/crm/${doc.account_id}`);
@@ -992,14 +997,15 @@ export async function approveCustomerDocumentById(documentId: string, expiryDate
     performed_by: user.id
   });
 
-  await createNotification({
+  await createNotificationForRoles({
     type: 'crm',
     title: 'Customer Document Approved',
     message: doc.label
       ? `Custom document "${doc.label}" was approved.`
       : `A customer document was approved.`,
     link: `/dashboard/crm/${doc.account_id}`,
-    created_by: user.id
+    created_by: user.id,
+    roles: ['operations'],
   });
 
   revalidatePath('/dashboard/crm', 'layout');
@@ -1081,12 +1087,13 @@ export async function uploadCustomCustomerDocument(customerId: string, label: st
     performed_by: user.id
   });
 
-  await createNotification({
+  await createNotificationForRoles({
     type: 'crm',
     title: 'Customer Document Added',
     message: `A custom document "${label.trim()}" was uploaded for a customer.`,
     link: `/dashboard/crm/${customerId}`,
-    created_by: user.id
+    created_by: user.id,
+    roles: ['operations'],
   });
 
   revalidatePath(`/dashboard/crm/${customerId}`);

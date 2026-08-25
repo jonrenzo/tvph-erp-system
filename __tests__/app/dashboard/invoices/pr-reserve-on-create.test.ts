@@ -9,9 +9,9 @@ import { createInvoice } from "@/app/dashboard/invoices/actions";
 jest.mock("@/utils/supabase/server", () => ({ createClient: jest.fn() }));
 jest.mock("@/lib/auth/permissions", () => ({ requireCapability: jest.fn() }));
 jest.mock("@/utils/audit", () => ({ recordAuditLog: jest.fn() }));
-jest.mock("@/utils/notifications", () => ({ createNotification: jest.fn() }));
+jest.mock('@/utils/notifications', () => ({ createNotification: jest.fn(), createNotificationForRoles: jest.fn() }));
 jest.mock("@/app/actions/ocr", () => ({ extractDocumentMetadata: jest.fn() }));
-jest.mock("next/cache", () => ({ revalidatePath: jest.fn() }));
+jest.mock("next/cache", () => ({ revalidatePath: jest.fn(), refresh: jest.fn() }));
 jest.mock("next/navigation", () => ({ redirect: jest.fn() }));
 
 import { createClient } from "@/utils/supabase/server";
@@ -59,6 +59,7 @@ describe("payment request reserve-on-create", () => {
     const prConsumingQuery = {
       eq: jest.fn().mockReturnThis(),
       in: jest.fn((_col: string, statuses: string[]) => {
+        console.log("prConsuming in called", statuses);
         prConsumingStatuses = statuses;
         return prConsumingQuery;
       }),
@@ -68,9 +69,11 @@ describe("payment request reserve-on-create", () => {
     let serviceInvoiceSelects = 0;
     mockCreateClient.mockResolvedValue({
       from: jest.fn((table: string) => {
+        console.log("from called", table, "count", serviceInvoiceSelects+1);
         if (table === "service_invoices") {
           serviceInvoiceSelects += 1;
           const which = serviceInvoiceSelects;
+          console.log("service_invoices which", which);
           return {
             select: jest.fn(() => (which === 1 ? duplicateQuery : which === 2 ? existingForPoQuery : prConsumingQuery)),
             insert: invoiceInsert,
@@ -82,8 +85,11 @@ describe("payment request reserve-on-create", () => {
         if (table === "payment_requests") {
           return { select: jest.fn().mockReturnValue({ eq: jest.fn().mockReturnValue({ single: jest.fn().mockResolvedValue({ data: { id: "pr-1", request_number: "PR-1", amount: 100, vendor_id: "vendor-1", status: "approved", po_id: "po-1" } }) }) }) };
         }
+        if (table === "vendor_documents") {
+          return { select: jest.fn().mockReturnValue({ eq: jest.fn().mockReturnThis(), in: jest.fn().mockReturnThis(), is: jest.fn().mockResolvedValue({ data: [], error: null }) }) };
+        }
         // po_completion_certificates: no approved cert
-        return { select: jest.fn().mockReturnValue({ eq: jest.fn().mockReturnThis(), order: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), maybeSingle: jest.fn().mockResolvedValue({ data: null }) }) };
+        return { select: jest.fn().mockReturnValue({ eq: jest.fn().mockReturnThis(), in: jest.fn().mockReturnThis(), is: jest.fn().mockReturnThis(), order: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), maybeSingle: jest.fn().mockResolvedValue({ data: null }) }) };
       }),
     } as any);
 
