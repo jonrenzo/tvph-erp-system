@@ -2,16 +2,16 @@
 
 import { useState } from "react";
 import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
-import { approvePO, approvePOFinance, rejectPO } from "@/app/dashboard/purchase-orders/actions";
+import { approvePO, approvePOExec, approvePOFinance, rejectPO } from "@/app/dashboard/purchase-orders/actions";
 import { useOptimisticAction } from "@/components/dashboard/shared/use-optimistic-action";
 
-export function PoApprovalActions({ poId, stage = "admin" }: { poId: string; stage?: "admin" | "finance" }) {
+export function PoApprovalActions({ poId, stage = "admin" }: { poId: string; stage?: "admin" | "exec" | "finance" }) {
   const [isRejecting, setIsRejecting] = useState(false);
   const [reason, setReason] = useState("");
   const { error, setError, isPending, optimisticSuccess, run } = useOptimisticAction();
 
   function handleApprove() {
-    run(() => (stage === "finance" ? approvePOFinance(poId) : approvePO(poId)));
+    run(() => (stage === "finance" ? approvePOFinance(poId) : stage === "exec" ? approvePOExec(poId) : approvePO(poId)));
   }
 
   function handleReject() {
@@ -39,7 +39,7 @@ export function PoApprovalActions({ poId, stage = "admin" }: { poId: string; sta
           className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all active:scale-95 disabled:opacity-60"
         >
           {optimisticSuccess ? <CheckCircle2 className="h-4 w-4" /> : isPending && !isRejecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-          {optimisticSuccess ? "Approved" : stage === "finance" ? "Approve & Issue" : "Approve & Send to Finance"}
+          {optimisticSuccess ? "Approved" : stage === "finance" ? "Approve & Issue" : stage === "exec" ? "Approve as Executive" : "Approve & Send to Finance"}
         </button>
         <button
           type="button"

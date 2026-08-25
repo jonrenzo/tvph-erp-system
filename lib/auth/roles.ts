@@ -7,6 +7,8 @@ export const ROLES = [
   "finance", // invoices, payments, accounting, client billing
   "operations", // vendors, POs, projects, CRM, contracts, assets
   "viewer", // read-only
+  "cto", // CTO — Meinardo Opiana
+  "ceo", // CEO — Edardnal Giovanni Canicula
 ] as const;
 
 export type Role = (typeof ROLES)[number];
@@ -17,6 +19,8 @@ export const ROLE_LABELS: Record<Role, string> = {
   finance: "Finance",
   operations: "Operations",
   viewer: "Viewer",
+  cto: "CTO",
+  ceo: "CEO",
 };
 
 export type Capability =
@@ -59,6 +63,7 @@ export type Capability =
   | "po.waive_requirements"
   | "po.approve_waiver"
   | "po.approve_completion"
+  | "po.approve_exec"
   | "client_po.write"
   | "client_invoice.write"
   | "client_invoice.pay"
@@ -110,6 +115,7 @@ export const CAPABILITY_ROLES = {
   "po.waive_requirements": ["superadmin", "admin", "operations"],
   "po.approve_waiver": ["superadmin", "admin"],
   "po.approve_completion": ["superadmin", "admin"],
+  "po.approve_exec": ["superadmin", "cto", "ceo"],
   "client_po.write": ["superadmin", "admin", "operations"],
   "client_invoice.write": ["superadmin", "admin", "finance"],
   "client_invoice.pay": ["superadmin", "admin", "finance"],

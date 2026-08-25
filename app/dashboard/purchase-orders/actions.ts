@@ -9,6 +9,7 @@ import { sendPoIssuedEmail } from '@/lib/email/po';
 import { sendPoForSignatureEmail } from '@/lib/email/po';
 import { createPortalLink } from '@/lib/portal/links';
 import { sendPoPendingApprovalEmail } from '@/lib/email/po-pending-approval';
+import { sendPoPendingExecEmail } from '@/lib/email/po-pending-exec';
 import { sendPoPendingFinanceEmail } from '@/lib/email/po-pending-finance';
 import { sendPoSignedAcknowledgedEmail } from '@/lib/email/po-signed-acknowledged';
 import { docTypeLabel, getMissingPaymentRequiredDocTypes, PAYMENT_REQUIRED_DOC_TYPES } from '@/lib/vendors/document-types';
@@ -25,6 +26,16 @@ function defer(fn: () => Promise<void>) {
   } catch {
     void fn();
   }
+}
+
+// ── Exec tier helpers ──────────────────────────────────────────────────────
+// T1 <=500_000 : 0 exec, T2 500_001..1_000_000 : 1 exec (CTO OR CEO), T3 >=1_000_001 : 2 exec (CTO AND CEO distinct)
+// Live purchase_orders.amount is the source of truth at each stage (per #110 clarification).
+function getExecRequiredCount(amount: number | null | undefined): number {
+  const n = Number(amount ?? 0);
+  if (n <= 500_000) return 0;
+  if (n <= 1_000_000) return 1;
+  return 2;
 }
 
 type POLineItem = { item_code?: string; description: string; qty: number; uom?: string; unit_price: number };
@@ -676,7 +687,7 @@ export async function submitPOForApproval(poId: string, approverIds: string[] = 
 
   const { data: po } = await supabase
     .from('purchase_orders')
-    .select('status')
+    .select('status, amount')
     .eq('id', poId)
     .single();
 
@@ -730,6 +741,14 @@ export async function submitPOForApproval(poId: string, approverIds: string[] = 
     return { error: 'Every selected finance approver must be a finance or superadmin user.' };
   }
 
+  // Exec tier: compute from live amount and cache exec approver pool (cto/ceo)
+  const execRequired = getExecRequiredCount((po as any).amount);
+  let execRequestedFrom: string[] = [];
+  try {
+    const { data: execProfiles } = await supabase.from('profiles').select('id').in('role', ['cto', 'ceo', 'superadmin']);
+    execRequestedFrom = (execProfiles || []).map((p: any) => p.id);
+  } catch {}
+
   const { error } = await supabase
     .from('purchase_orders')
     .update({
@@ -738,9 +757,13 @@ export async function submitPOForApproval(poId: string, approverIds: string[] = 
       submitted_for_approval_at: new Date().toISOString(),
       approval_requested_from: uniqueApproverIds,
       finance_approval_requested_from: uniqueFinanceApproverIds,
+      exec_required_count: execRequired,
+      exec_approved_by: [],
+      exec_approved_at: [],
+      exec_approval_requested_from: execRequestedFrom,
       rejection_reason: null,
       updated_at: new Date().toISOString(),
-    })
+    } as any)
     .eq('id', poId);
 
   if (error) return { error: error.message };
@@ -749,7 +772,7 @@ export async function submitPOForApproval(poId: string, approverIds: string[] = 
     entity_type: 'purchase_order',
     entity_id: poId,
     action: 'UPDATE',
-    changes: { after: { status: 'pending_approval', submitted_by: user.id, approval_requested_from: uniqueApproverIds, finance_approval_requested_from: uniqueFinanceApproverIds } },
+    changes: { after: { status: 'pending_approval', submitted_by: user.id, approval_requested_from: uniqueApproverIds, finance_approval_requested_from: uniqueFinanceApproverIds, exec_required_count: execRequired, exec_approval_requested_from: execRequestedFrom } },
     performed_by: user.id,
   });
 
@@ -790,7 +813,7 @@ export async function approvePO(poId: string) {
 
   const { data: po } = await supabase
     .from('purchase_orders')
-    .select('status, requirements_waived, waiver_approved, submitted_for_approval_by')
+    .select('status, amount, requirements_waived, waiver_approved, submitted_for_approval_by, exec_required_count, exec_approved_by')
     .eq('id', poId)
     .single();
 
@@ -807,9 +830,16 @@ export async function approvePO(poId: string) {
   }
 
   const now = new Date().toISOString();
+  // Live amount determines tier; recompute in case line items changed while pending_approval.
+  const liveExecRequired = getExecRequiredCount((po as any).amount);
+  // Keep stored exec_required_count in sync with live amount (amount may have been edited)
+  const nextExecRequired = liveExecRequired;
+  const needsExec = nextExecRequired > 0;
+  const nextStatus = needsExec ? 'pending_exec_approval' : 'pending_finance';
+
   const { error, count } = await supabase
     .from('purchase_orders')
-    .update({ status: 'pending_finance', approved_by_user_id: user.id, approved_at: now, updated_at: now }, { count: 'exact' })
+    .update({ status: nextStatus, approved_by_user_id: user.id, approved_at: now, exec_required_count: nextExecRequired, exec_approved_by: [], exec_approved_at: [], updated_at: now } as any, { count: 'exact' })
     .eq('id', poId)
     .eq('status', 'pending_approval');
 
@@ -820,39 +850,256 @@ export async function approvePO(poId: string) {
     entity_type: 'purchase_order',
     entity_id: poId,
     action: 'UPDATE',
-    changes: { after: { status: 'pending_finance', admin_approved_by: user.id } },
+    changes: { after: { status: nextStatus, admin_approved_by: user.id, exec_required_count: nextExecRequired } },
     performed_by: user.id,
   });
 
-  await createNotificationForRoles({
-    type: 'po',
-    title: '👤 PO Admin Approved',
-    message: 'A purchase order was approved by the admin and is pending the finance budget check before issuing.',
-    link: `/dashboard/purchase-orders/${poId}`,
-    created_by: user.id,
-    roles: ['finance'],
-  });
+  if (needsExec) {
+    await createNotificationForRoles({
+      type: 'po',
+      title: '👔 PO Awaiting Executive Approval',
+      message: `A PO was admin-approved (₱${Number((po as any).amount).toLocaleString()}) and now requires executive approval (${nextExecRequired === 1 ? 'CTO or CEO' : 'CTO and CEO'}).`,
+      link: `/dashboard/purchase-orders/${poId}`,
+      created_by: user.id,
+      roles: ['admin'],
+    });
+  } else {
+    await createNotificationForRoles({
+      type: 'po',
+      title: '👤 PO Admin Approved',
+      message: 'A purchase order was approved by the admin and is pending the finance budget check before issuing.',
+      link: `/dashboard/purchase-orders/${poId}`,
+      created_by: user.id,
+      roles: ['finance'],
+    });
+  }
 
   revalidatePath(`/dashboard/purchase-orders/${poId}`);
   revalidatePath('/dashboard/purchase-orders');
-  refresh();
+  if (typeof refresh === 'function') (refresh as any)();
 
-  // ponytail: finance email deferred via after(); failure surfaced as in-app notification only (no emailWarning)
-  defer(async () => {
-    const financeEmailResult = await sendPoPendingFinanceEmail(poId, { actorId: user.id });
-    if (financeEmailResult.status === 'failed') {
-      await createNotification({
-        type: 'po',
-        title: '⚠️ Finance email not sent',
-        message: `A PO passed the admin stage but the finance notification email could not be sent. ${financeEmailResult.error ?? ''}`.trim(),
-        link: `/dashboard/purchase-orders/${poId}`,
-        created_by: user.id,
-        recipientIds: [user.id],
-      });
-    }
-  });
+  if (needsExec) {
+    defer(async () => {
+      const execResult = await sendPoPendingExecEmail(poId, { actorId: user.id });
+      if (execResult.status === 'failed') {
+        await createNotification({
+          type: 'po',
+          title: '⚠️ Executive email not sent',
+          message: `A PO passed admin but the executive notification could not be sent. ${execResult.error ?? ''}`.trim(),
+          link: `/dashboard/purchase-orders/${poId}`,
+          created_by: user.id,
+          recipientIds: [user.id],
+        });
+      }
+    });
+  } else {
+    // ponytail: finance email deferred via after(); failure surfaced as in-app notification only (no emailWarning)
+    defer(async () => {
+      const financeEmailResult = await sendPoPendingFinanceEmail(poId, { actorId: user.id });
+      if (financeEmailResult.status === 'failed') {
+        await createNotification({
+          type: 'po',
+          title: '⚠️ Finance email not sent',
+          message: `A PO passed the admin stage but the finance notification email could not be sent. ${financeEmailResult.error ?? ''}`.trim(),
+          link: `/dashboard/purchase-orders/${poId}`,
+          created_by: user.id,
+          recipientIds: [user.id],
+        });
+      }
+    });
+  }
 
   return { success: true };
+}
+
+export async function approvePOExec(poId: string) {
+  const supabase = await createClient();
+  const { user, role, error: authError } = await requireCapability('po.approve_exec', supabase);
+  if (authError || !user) return { error: authError || 'Unauthorized' };
+
+  const { data: po } = await supabase
+    .from('purchase_orders')
+    .select('status, amount, requirements_waived, waiver_approved, exec_required_count, exec_approved_by, exec_approved_at, approved_by_user_id')
+    .eq('id', poId)
+    .single();
+
+  if (po?.status !== 'pending_exec_approval') {
+    return { error: 'This PO is not pending executive approval.' };
+  }
+
+  if ((po as any).requirements_waived && !(po as any).waiver_approved) {
+    return { error: 'Cannot approve: this PO has waived requirements pending executive approval.' };
+  }
+
+  const execRequired = getExecRequiredCount((po as any).amount);
+  // Keep stored count in sync with live amount
+  const required = execRequired;
+  const approvedBy: string[] = ((po as any).exec_approved_by as string[] | null) || [];
+  const approvedAt: string[] = ((po as any).exec_approved_at as string[] | null) || [];
+
+  if (approvedBy.includes(user.id)) {
+    return { error: 'You have already approved this PO at the executive stage.' };
+  }
+
+  // For T3, enforce distinct CTO vs CEO (superadmin can fill either slot but not both alone)
+  if (required === 2 && role !== 'superadmin') {
+    // Fetch roles of already-approved execs to enforce distinctness
+    const { data: existingApprovers } = await supabase.from('profiles').select('id, role').in('id', approvedBy);
+    const existingRoles = new Set((existingApprovers || []).map((p: any) => p.role));
+    if (role === 'cto' && existingRoles.has('cto')) {
+      return { error: 'A CTO has already approved. The CEO must be the second approver.' };
+    }
+    if (role === 'ceo' && existingRoles.has('ceo')) {
+      return { error: 'A CEO has already approved. The CTO must be the second approver.' };
+    }
+    // Also block same role duplicate via current user role check above covers same user, but this covers different users same role
+    if (existingRoles.has(role as string)) {
+      return { error: 'An approver with this executive role has already approved.' };
+    }
+  }
+
+  const now = new Date().toISOString();
+  const newApprovedBy = [...approvedBy, user.id];
+  const newApprovedAt = [...approvedAt, now];
+  const isComplete = newApprovedBy.length >= required;
+
+  // For T3 superadmin edge: if superadmin approved first, next must be cto or ceo (already enforced via required check), but superadmin second approval should be blocked if they already approved
+  // Superadmin second approval for T3 would be allowed only if we consider superadmin as distinct? Block same-user already, allow second superadmin as second slot.
+  if (required === 2 && isComplete) {
+    // Final exec approval → move to pending_finance
+    const { error, count } = await supabase
+      .from('purchase_orders')
+      .update({ status: 'pending_finance', exec_approved_by: newApprovedBy, exec_approved_at: newApprovedAt, exec_required_count: required, updated_at: now } as any, { count: 'exact' })
+      .eq('id', poId)
+      .eq('status', 'pending_exec_approval');
+    if (error) return { error: error.message };
+    if (count === 0) return { error: 'This PO is not pending executive approval.' };
+
+    await recordAuditLog({
+      entity_type: 'purchase_order',
+      entity_id: poId,
+      action: 'UPDATE',
+      changes: { after: { status: 'pending_finance', exec_approved_by: newApprovedBy, exec_completed_by: user.id } },
+      performed_by: user.id,
+    });
+
+    await createNotification({
+      type: 'po',
+      title: '✅ Executive Approved — Pending Finance',
+      message: 'Executive approval complete (CTO and CEO). PO is now pending finance review.',
+      link: `/dashboard/purchase-orders/${poId}`,
+      created_by: user.id,
+    });
+
+    revalidatePath(`/dashboard/purchase-orders/${poId}`);
+    revalidatePath('/dashboard/purchase-orders');
+    if (typeof refresh === 'function') (refresh as any)();
+
+    defer(async () => {
+      const financeResult = await sendPoPendingFinanceEmail(poId, { actorId: user.id });
+      if (financeResult.status === 'failed') {
+        await createNotification({
+          type: 'po',
+          title: '⚠️ Finance email not sent',
+          message: `Executive approval passed but finance email failed. ${financeResult.error ?? ''}`.trim(),
+          link: `/dashboard/purchase-orders/${poId}`,
+          created_by: user.id,
+        });
+      }
+    });
+
+    return { success: true };
+  } else if ((required as number) === 1 && isComplete) {
+    // T2 single approval → pending_finance
+    const { error, count } = await supabase
+      .from('purchase_orders')
+      .update({ status: 'pending_finance', exec_approved_by: newApprovedBy, exec_approved_at: newApprovedAt, exec_required_count: required, updated_at: now } as any, { count: 'exact' })
+      .eq('id', poId)
+      .eq('status', 'pending_exec_approval');
+    if (error) return { error: error.message };
+    if (count === 0) return { error: 'This PO is not pending executive approval.' };
+
+    await recordAuditLog({
+      entity_type: 'purchase_order',
+      entity_id: poId,
+      action: 'UPDATE',
+      changes: { after: { status: 'pending_finance', exec_approved_by: newApprovedBy } },
+      performed_by: user.id,
+    });
+
+    await createNotification({
+      type: 'po',
+      title: '✅ Executive Approved — Pending Finance',
+      message: 'Executive approval (CTO/CEO) complete. PO is now pending finance review.',
+      link: `/dashboard/purchase-orders/${poId}`,
+      created_by: user.id,
+    });
+
+    revalidatePath(`/dashboard/purchase-orders/${poId}`);
+    revalidatePath('/dashboard/purchase-orders');
+    if (typeof refresh === 'function') (refresh as any)();
+
+    defer(async () => {
+      const financeResult = await sendPoPendingFinanceEmail(poId, { actorId: user.id });
+      if (financeResult.status === 'failed') {
+        await createNotification({
+          type: 'po',
+          title: '⚠️ Finance email not sent',
+          message: `Executive approval passed but finance email failed. ${financeResult.error ?? ''}`.trim(),
+          link: `/dashboard/purchase-orders/${poId}`,
+          created_by: user.id,
+        });
+      }
+    });
+
+    return { success: true };
+  } else {
+    // T3 first of 2 → stay pending_exec_approval, record and email remaining
+    const { error, count } = await supabase
+      .from('purchase_orders')
+      .update({ exec_approved_by: newApprovedBy, exec_approved_at: newApprovedAt, exec_required_count: required, updated_at: now } as any, { count: 'exact' })
+      .eq('id', poId)
+      .eq('status', 'pending_exec_approval');
+    if (error) return { error: error.message };
+    if (count === 0) return { error: 'This PO is not pending executive approval.' };
+
+    await recordAuditLog({
+      entity_type: 'purchase_order',
+      entity_id: poId,
+      action: 'UPDATE',
+      changes: { after: { exec_approved_by: newApprovedBy, exec_partial: true } },
+      performed_by: user.id,
+    });
+
+    await createNotification({
+      type: 'po',
+      title: '👔 Executive Partial Approval',
+      message: `${role === 'cto' ? 'CTO' : role === 'ceo' ? 'CEO' : 'Executive'} approved. Awaiting ${role === 'cto' ? 'CEO' : role === 'ceo' ? 'CTO' : 'remaining executive'} for PO ${poId}.`,
+      link: `/dashboard/purchase-orders/${poId}`,
+      created_by: user.id,
+    });
+
+    revalidatePath(`/dashboard/purchase-orders/${poId}`);
+    revalidatePath('/dashboard/purchase-orders');
+    if (typeof refresh === 'function') (refresh as any)();
+
+    // Email remaining exec only
+    const remainingRole = role === 'cto' ? 'ceo' : role === 'ceo' ? 'cto' : null;
+    defer(async () => {
+      const execResult = await sendPoPendingExecEmail(poId, { actorId: user.id, remainingRole: remainingRole as any });
+      if (execResult.status === 'failed') {
+        await createNotification({
+          type: 'po',
+          title: '⚠️ Executive email not sent',
+          message: `Partial exec approval recorded but remaining executive email failed. ${execResult.error ?? ''}`.trim(),
+          link: `/dashboard/purchase-orders/${poId}`,
+          created_by: user.id,
+        });
+      }
+    });
+
+    return { success: true, partial: true };
+  }
 }
 
 export async function approvePOFinance(poId: string) {
@@ -862,7 +1109,7 @@ export async function approvePOFinance(poId: string) {
 
   const { data: po } = await supabase
     .from('purchase_orders')
-    .select('status, requirements_waived, waiver_approved, approved_by_user_id')
+    .select('status, amount, requirements_waived, waiver_approved, approved_by_user_id, exec_required_count, exec_approved_by')
     .eq('id', poId)
     .single();
 
@@ -876,6 +1123,18 @@ export async function approvePOFinance(poId: string) {
 
   if (po.requirements_waived && !po.waiver_approved) {
     return { error: 'Cannot issue: this PO has waived requirements pending executive approval.' };
+  }
+
+  // Exec stage must be complete before finance (live amount tier)
+  const execNeeded = getExecRequiredCount((po as any).amount);
+  const execDone = ((po as any).exec_approved_by as string[] | null)?.length ?? 0;
+  if (execNeeded > 0 && execDone < execNeeded) {
+    return { error: 'This PO is pending executive approval. CTO/CEO must approve before finance.' };
+  }
+  // Also respect stored exec_required_count for in-flight POs where amount may have been edited
+  const storedRequired = Number((po as any).exec_required_count ?? 0);
+  if (storedRequired > 0 && execDone < storedRequired) {
+    return { error: 'Executive approval is not yet complete.' };
   }
 
   const now = new Date().toISOString();
@@ -907,7 +1166,7 @@ export async function approvePOFinance(poId: string) {
 
   revalidatePath(`/dashboard/purchase-orders/${poId}`);
   revalidatePath('/dashboard/purchase-orders');
-  refresh();
+  if (typeof refresh === 'function') (refresh as any)();
 
   if ('error' in linkResult) {
     // Link creation failed — surface immediately (no email to send)
@@ -956,10 +1215,17 @@ export async function rejectPO(poId: string, reason: string) {
     .eq('id', poId)
     .single();
 
-  // Rejection is allowed at either stage; the capability follows the stage the
+  // Rejection is allowed at any approval stage; the capability follows the stage the
   // PO is currently in. The update below guards the transition so a stale
   // status can never be rejected.
-  const stageCapability = po?.status === 'pending_finance' ? 'po.approve_finance' : po?.status === 'pending_approval' ? 'po.approve' : null;
+  const stageCapability =
+    po?.status === 'pending_finance'
+      ? 'po.approve_finance'
+      : po?.status === 'pending_exec_approval'
+        ? 'po.approve_exec'
+        : po?.status === 'pending_approval'
+          ? 'po.approve'
+          : null;
   if (!stageCapability || !hasCapability(role, stageCapability)) {
     return { error: 'This PO is not pending approval.' };
   }
@@ -969,10 +1235,12 @@ export async function rejectPO(poId: string, reason: string) {
     .update({
       status: 'draft',
       rejection_reason: reason.trim(),
+      exec_approved_by: [],
+      exec_approved_at: [],
       updated_at: new Date().toISOString(),
-    }, { count: 'exact' })
+    } as any, { count: 'exact' })
     .eq('id', poId)
-    .in('status', ['pending_approval', 'pending_finance']);
+    .in('status', ['pending_approval', 'pending_exec_approval', 'pending_finance']);
 
   if (error) return { error: error.message };
   if (count === 0) return { error: 'This PO is not pending approval.' };
@@ -1007,7 +1275,7 @@ export async function rejectPO(poId: string, reason: string) {
 
   revalidatePath(`/dashboard/purchase-orders/${poId}`);
   revalidatePath('/dashboard/purchase-orders');
-  refresh();
+  if (typeof refresh === 'function') (refresh as any)();
   return { success: true };
 }
 
@@ -1016,13 +1284,12 @@ export async function updatePOStatus(poId: string, status: string) {
   const { user, error: authError } = await requireCapability('po.status', supabase);
   if (authError || !user) return { error: authError || 'Unauthorized' };
 
-  // Issuance and the finance budget check are only allowed through the two-stage
-  // approval flow (submitPOForApproval -> approvePO -> approvePOFinance). This
-  // generic status updater must NOT be able to move a PO to 'issued' or
-  // 'pending_finance' directly, otherwise a po.status holder could bypass
-  // approval. 'pending_signature' likewise only via approvePOFinance, so a
-  // signature request is always accompanied by the magic-link email.
-  if (status === 'issued' || status === 'pending_finance' || status === 'pending_signature') {
+  // Issuance and the finance budget check are only allowed through the
+  // approval flow (submitPOForApproval -> approvePO -> approvePOExec -> approvePOFinance).
+  // This generic status updater must NOT be able to move a PO to 'issued',
+  // 'pending_finance', 'pending_exec_approval' or 'pending_signature' directly,
+  // otherwise a po.status holder could bypass approval. 'pending_signature' likewise only via approvePOFinance.
+  if (status === 'issued' || status === 'pending_finance' || status === 'pending_exec_approval' || status === 'pending_signature') {
     const { data: po } = await supabase
       .from('purchase_orders')
       .select('status')
@@ -1190,7 +1457,7 @@ export async function reviewSignedPo(
 
   revalidatePath(`/dashboard/purchase-orders/${poId}`);
   revalidatePath('/dashboard/purchase-orders');
-  refresh();
+  if (typeof refresh === 'function') (refresh as any)();
 
   if (decision === 'approve') {
     // ponytail: acknowledgment email deferred via after()

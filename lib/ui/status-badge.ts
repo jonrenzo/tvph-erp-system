@@ -17,5 +17,6 @@ export function statusBadgeClasses(status?: string | null): string {
   if (s === 'signed_received') return STATUS_BADGE.cyan;
   if (s === 'pending' || s === 'pending_approval' || s === 'pending_payment' || s === 'in_progress' || s === 'on_hold' || s === 'partially_paid' || s === 'partially_billed' || s === 'submitted' || s === 'pending_signature') return STATUS_BADGE.amber;
   if (s === 'pending_finance') return STATUS_BADGE.violet;
+  if (s === 'pending_exec_approval') return STATUS_BADGE.violet;
   return STATUS_BADGE.slate;
 }

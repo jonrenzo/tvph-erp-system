@@ -9,6 +9,7 @@ export type EmailKind =
   | "po_issued"
   | "po_for_signature"
   | "po_pending_approval"
+  | "po_pending_exec"
   | "po_pending_finance"
   | "po_signed_acknowledged"
   | "po_signed_received"

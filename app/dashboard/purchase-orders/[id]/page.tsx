@@ -51,7 +51,7 @@ import { LiveListRefresh } from "@/components/dashboard/shared/live-list-refresh
 import TabbedNav from "@/components/dashboard/tabbed-nav";
 
 const menuItemClass = "flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors";
-const DRAFT_OR_PENDING = ["draft", "pending_approval", "pending_finance"];
+const DRAFT_OR_PENDING = ["draft", "pending_approval", "pending_exec_approval", "pending_finance"];
 const ISSUED_OR_LATER = ["issued", "pending_signature", "signed_received", "signed", "paid", "overpaid"];
 
 export default function PurchaseOrderDetailPage(props: {
@@ -149,6 +149,7 @@ async function PODetailContent({ paramsPromise, searchParamsPromise }: { paramsP
 
   const canSendEmail = hasCapability(currentRole, "email.send");
   const canApprovePO = hasCapability(currentRole, "po.approve");
+  const canApproveExec = hasCapability(currentRole, "po.approve_exec");
   const canApprovePOFinance = hasCapability(currentRole, "po.approve_finance");
   const canEditTerms = hasCapability(currentRole, "po.write");
   const canOverridePenalty = ["finance", "admin", "superadmin"].includes(currentRole || "");
@@ -200,6 +201,8 @@ async function PODetailContent({ paramsPromise, searchParamsPromise }: { paramsP
     po.finance_approved_by_user_id,
     ...((po.approval_requested_from as string[] | null) || []),
     ...((po.finance_approval_requested_from as string[] | null) || []),
+    ...(((po as any).exec_approved_by as string[] | null) || []),
+    ...(((po as any).exec_approval_requested_from as string[] | null) || []),
   ].filter(Boolean) as string[];
   const poProfiles: Record<string, { full_name: string; role: string }> = {};
   if (poProfileIds.length > 0) {
@@ -238,6 +241,13 @@ async function PODetailContent({ paramsPromise, searchParamsPromise }: { paramsP
     .map((id) => poProfiles[id]?.full_name)
     .filter(Boolean)
     .join(", ");
+  const execApprovedIds = ((po as any).exec_approved_by as string[] | null) || [];
+  const execRequiredCount = Number((po as any).exec_required_count ?? 0);
+  const execApprovedLabel = execApprovedIds.map((id) => poProfiles[id]?.full_name).filter(Boolean).join(", ");
+  const execRemainingIds = (((po as any).exec_approval_requested_from as string[] | null) || []).filter((id) => !execApprovedIds.includes(id));
+  // Prefer cto/ceo profiles for remaining label; fallback to any exec
+  const execRemainingLabel = execRemainingIds.map((id) => poProfiles[id]?.full_name).filter(Boolean).join(", ") || (execRequiredCount === 2 && execApprovedIds.length === 1 ? "remaining executive (CTO or CEO)" : "");
+  const execTierLabel = execRequiredCount === 1 ? "CTO or CEO (1 of 2)" : execRequiredCount >= 2 ? "CTO and CEO (2 of 2)" : "";
 
   // Eligible approvers for the submit-for-approval picker: admins/superadmins
   // and finance/superadmin users other than the current user (the 4-eyes rule
@@ -389,7 +399,7 @@ async function PODetailContent({ paramsPromise, searchParamsPromise }: { paramsP
                 {po.po_number}
               </h1>
 <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${statusBadgeClasses(po.status)}`}>
-                {po.status === "pending_signature" ? "AWAITING SIGNED PO" : po.status === "signed_received" ? "SIGNED PO RECEIVED" : po.status.replace(/_/g, " ").toUpperCase()}
+                {po.status === "pending_signature" ? "AWAITING SIGNED PO" : po.status === "pending_exec_approval" ? "AWAITING EXEC APPROVAL" : po.status === "signed_received" ? "SIGNED PO RECEIVED" : po.status.replace(/_/g, " ").toUpperCase()}
               </span>
               {isLegacy && (
                 <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
@@ -569,6 +579,44 @@ async function PODetailContent({ paramsPromise, searchParamsPromise }: { paramsP
         </div>
       )}
 
+      {po.status === "pending_exec_approval" && (
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-2xl bg-violet-50 dark:bg-violet-900/10 border border-violet-200 dark:border-violet-800/50">
+          <div className="flex items-start gap-3 flex-1">
+            <ShieldCheck className="h-5 w-5 text-violet-600 dark:text-violet-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-violet-700 dark:text-violet-400">
+                Awaiting Executive Approval — {execTierLabel || "CTO/CEO"} · ₱{Number(po.amount).toLocaleString()}
+              </p>
+              <p className="text-xs text-violet-600/80 dark:text-violet-400/60 mt-1">
+                {execRequiredCount === 1
+                  ? "Either the CTO or CEO can approve (1 of 2)."
+                  : execRequiredCount >= 2
+                    ? "Both CTO and CEO must approve (2 of 2, distinct)."
+                    : "Executive review required."}{" "}
+                <span className="font-semibold">Cannot proceed to finance until complete.</span>
+              </p>
+              {execApprovedLabel && (
+                <p className="text-xs text-violet-600/80 dark:text-violet-400/60 mt-1">
+                  Approved by: <span className="font-semibold">{execApprovedLabel}</span> ({execApprovedIds.length}/{execRequiredCount}).
+                </p>
+              )}
+              {execRemainingLabel && execApprovedIds.length < execRequiredCount && (
+                <p className="text-xs text-violet-600/80 dark:text-violet-400/60 mt-1">
+                  Awaiting: <span className="font-semibold">{execRemainingLabel}</span>.
+                </p>
+              )}
+            </div>
+          </div>
+          {canApproveExec && !execApprovedIds.includes(currentUser?.id ?? "") ? (
+            <PoApprovalActions poId={po.id} stage="exec" />
+          ) : canApproveExec ? (
+            <p className="text-xs text-violet-600/80 dark:text-violet-400/60">
+              You already approved at the executive stage. Awaiting {execRequiredCount >= 2 && execApprovedIds.length === 1 ? (currentRole === "cto" ? "CEO" : currentRole === "ceo" ? "CTO" : "remaining executive") : "remaining approval"}.
+            </p>
+          ) : null}
+        </div>
+      )}
+
       {po.status === "pending_finance" && (
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-2xl bg-violet-50 dark:bg-violet-900/10 border border-violet-200 dark:border-violet-800/50">
           <div className="flex items-start gap-3 flex-1">
@@ -578,7 +626,7 @@ async function PODetailContent({ paramsPromise, searchParamsPromise }: { paramsP
                 Awaiting Finance Approval
               </p>
               <p className="text-xs text-violet-600/80 dark:text-violet-400/60 mt-1">
-                This PO has been approved by admin and <span className="font-semibold">cannot be sent to the vendor</span> until finance completes the budget check.
+                This PO has been approved by admin{execRequiredCount > 0 ? " and executive" : ""} and <span className="font-semibold">cannot be sent to the vendor</span> until finance completes the budget check.
               </p>
               {financeApproversLabel && (
                 <p className="text-xs text-violet-600/80 dark:text-violet-400/60 mt-1">
