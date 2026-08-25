@@ -3,17 +3,8 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { FileText, CheckCircle2, XCircle, Loader2, AlertCircle, ThumbsUp, ThumbsDown, Send } from "lucide-react";
-import {
-  approvePaymentRequest,
-  rejectPaymentRequest,
-} from "@/app/dashboard/purchase-orders/actions";
-
-interface CompletionCert {
-  id: string;
-  percent_complete: number;
-  status: string;
-}
+import { FileText, CheckCircle2, XCircle, Loader2, AlertCircle, ThumbsUp, ThumbsDown } from "lucide-react";
+import { approvePaymentRequest, rejectPaymentRequest } from "@/app/dashboard/purchase-orders/actions";
 
 interface PaymentRequest {
   id: string;
@@ -27,36 +18,30 @@ interface PaymentRequest {
   created_at: string;
   rejection_reason: string | null;
   is_downpayment: boolean;
+  invoice_id?: string | null;
 }
 
 interface Props {
   poId: string;
   poAmount: number;
-  paymentRequest: PaymentRequest | null;
-  approvedCerts: CompletionCert[];
+  paymentRequest?: PaymentRequest | null;
+  paymentRequests?: PaymentRequest[] | null;
+  approvedCerts?: any[];
   canCreate: boolean;
   canApprove: boolean;
   consumed?: number;
   remaining?: number;
 }
 
-export function PaymentRequestButton({
-  poId,
-  poAmount,
-  paymentRequest,
-  approvedCerts,
-  canCreate,
-  canApprove,
-  consumed = 0,
-  remaining = 0,
-}: Props) {
+export function PaymentRequestButton({ poId, paymentRequest, paymentRequests, canCreate, canApprove }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
-  const [showRejectForm, setShowRejectForm] = useState(false);
+  const [rejectId, setRejectId] = useState<string | null>(null);
 
-  const hasActive = paymentRequest?.status === "pending" || paymentRequest?.status === "approved";
+  // Normalize to array: prefer paymentRequests, fallback to single paymentRequest
+  const list: PaymentRequest[] = paymentRequests ?? (paymentRequest ? [paymentRequest] : []);
 
   function act(fn: () => Promise<{ error?: string; success?: boolean }>) {
     setError(null);
@@ -73,191 +58,77 @@ export function PaymentRequestButton({
     <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
       <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-[#0a0a0a]/50 flex items-center gap-2">
         <FileText className="h-5 w-5 text-primary" />
-        <h2 className="font-semibold text-slate-900 dark:text-white">Payment Request</h2>
-        {paymentRequest?.is_downpayment && (
-          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700">
-            Down Payment
-          </span>
-        )}
-        {paymentRequest?.status && (
-          <span className={`ml-auto inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${
-            paymentRequest.status === "approved"
-              ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400"
-              : paymentRequest.status === "rejected"
-              ? "bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400"
-              : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400"
-          }`}>
-            {paymentRequest.status === "pending" ? "AWAITING APPROVAL" : paymentRequest.status.toUpperCase()}
-          </span>
-        )}
+        <h2 className="font-semibold text-slate-900 dark:text-white">Payment Requests</h2>
+        <span className="ml-auto text-xs text-slate-500">{list.length} total</span>
       </div>
 
       <div className="p-6 space-y-4">
-        {/* No PR yet — redirect to Send Payment Request page */}
-        {!hasActive && canCreate && paymentRequest?.status !== "rejected" && (
+        {list.length === 0 ? (
           <div className="flex flex-col items-center gap-4 py-6 text-center">
-            <Send className="h-10 w-10 text-primary/40" />
+            <FileText className="h-10 w-10 text-primary/40" />
             <div>
-              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                No active payment request
-              </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Use the comprehensive flow with accreditation compliance check to create one.
-              </p>
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">No payment requests yet</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Upload an invoice linked to this PO to auto-create a pending Payment Request.</p>
             </div>
-            <Link
-              href={`/dashboard/purchase-orders/${poId}/payment-request`}
-              className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all active:scale-95 shadow-sm"
-            >
-              <Send className="h-4 w-4" />
-              Send Payment Request
-            </Link>
-          </div>
-        )}
-
-        {/* Rejected — show reason and redirect to re-create */}
-        {paymentRequest?.status === "rejected" && canCreate && (
-          <>
-            <div className="flex items-start gap-3 p-4 rounded-xl bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800/50">
-              <XCircle className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-semibold text-red-700 dark:text-red-400">Payment Request Rejected</p>
-                <p className="text-xs text-red-600/80 dark:text-red-400/60 mt-1">
-                  {paymentRequest.rejection_reason || "No reason provided."}
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-col items-center gap-4 py-4 text-center">
-              <p className="text-sm text-slate-600 dark:text-slate-400">
-                You may create a new Payment Request with adjusted details.
-              </p>
+            {canCreate && (
               <Link
-                href={`/dashboard/purchase-orders/${poId}/payment-request`}
+                href={`/dashboard/invoices/new?poId=${poId}`}
                 className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all active:scale-95 shadow-sm"
               >
-                <Send className="h-4 w-4" />
-                Send Payment Request
+                Record Vendor Invoice
               </Link>
-            </div>
-          </>
-        )}
-
-        {/* Pending — show awaiting approval */}
-        {paymentRequest?.status === "pending" && (
-          <>
-            <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/50">
-              <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Awaiting Approval</p>
-                <p className="text-xs text-amber-600/80 dark:text-amber-400/60 mt-1">
-                  Payment request for <span className="font-semibold">₱{Number(paymentRequest.amount).toLocaleString()}</span>
-                  {paymentRequest.percent_complete ? ` (${paymentRequest.percent_complete}% completion)` : ""} is pending admin/finance approval.
-                </p>
-                {paymentRequest.notes && (
-                  <p className="text-xs text-amber-600/80 dark:text-amber-400/60 mt-1 italic">{paymentRequest.notes}</p>
-                )}
-              </div>
-            </div>
-            {canApprove && (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => act(() => approvePaymentRequest(paymentRequest.id))}
-                  disabled={isPending}
-                  className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-all active:scale-95 disabled:opacity-60"
-                >
-                  {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ThumbsUp className="h-3.5 w-3.5" />}
-                  Approve
-                </button>
-                {!showRejectForm && (
-                  <button
-                    onClick={() => setShowRejectForm(true)}
-                    className="inline-flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-                  >
-                    <XCircle className="h-3.5 w-3.5" /> Reject
-                  </button>
-                )}
-              </div>
             )}
-          </>
-        )}
-
-        {/* Approved or Fully Invoiced */}
-        {(paymentRequest?.status === "approved" || paymentRequest?.status === "fully_invoiced") && (
-          <div className={`flex items-start gap-3 p-4 rounded-xl border ${
-            paymentRequest.status === "fully_invoiced"
-              ? 'bg-slate-50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-800 opacity-80'
-              : 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800/50'
-          }`}>
-            {paymentRequest.status === "fully_invoiced" ? (
-              <CheckCircle2 className="h-5 w-5 text-slate-400 shrink-0 mt-0.5" />
-            ) : (
-              <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-            )}
-            <div>
-              <p className={`text-sm font-semibold ${
-                paymentRequest.status === "fully_invoiced"
-                  ? 'text-slate-500 dark:text-slate-400'
-                  : 'text-emerald-700 dark:text-emerald-400'
-              }`}>
-                {paymentRequest.status === "fully_invoiced" ? 'Payment Request Fully Invoiced' : 'Payment Request Approved'}
-              </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                <span className="font-semibold">{paymentRequest.request_number}</span> — ₱{Number(paymentRequest.amount).toLocaleString()}
-                {paymentRequest.percent_complete ? ` (${paymentRequest.percent_complete}% completion)` : ""}.
-                {paymentRequest.status === "fully_invoiced"
-                  ? ' All available balance has been invoiced. A new payment request may be created.'
-                  : ` The subcontractor is authorized to bill up to this amount.`}
-              </p>
-              {remaining != null && (
-                <div className="mt-2 flex items-center gap-4 text-xs">
-                  <span className="text-slate-500">Consumed: <strong className="text-slate-700 dark:text-slate-300">₱{Number(consumed || 0).toLocaleString()}</strong></span>
-                  <span className={`font-semibold ${remaining > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>
-                    {remaining > 0 ? `₱${remaining.toLocaleString()} remaining` : 'Fully consumed'}
-                  </span>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {list.map((pr) => (
+              <div key={pr.id} className={`p-4 rounded-xl border ${pr.status === 'approved' ? 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800/50' : pr.status === 'pending' ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800/50' : pr.status === 'rejected' ? 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800/50 opacity-80' : 'bg-slate-50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-800'}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                      {pr.request_number} — ₱{Number(pr.amount).toLocaleString()}
+                      {pr.is_downpayment && <span className="inline-flex items-center px-1 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-300">DP</span>}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">{pr.status === 'pending' ? 'Awaiting Approval' : pr.status.toUpperCase()} {pr.percent_complete ? `(${pr.percent_complete}% )` : ''} {pr.notes ? `— ${pr.notes}` : ''}</p>
+                    {pr.status === 'rejected' && pr.rejection_reason && <p className="text-xs text-red-600/80 mt-1">Reason: {pr.rejection_reason}</p>}
+                  </div>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border shrink-0 ${pr.status === 'approved' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : pr.status === 'pending' ? 'bg-amber-100 text-amber-700 border-amber-200' : pr.status === 'rejected' ? 'bg-red-100 text-red-700 border-red-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>{pr.status.toUpperCase()}</span>
                 </div>
-              )}
-            </div>
+                {pr.status === 'pending' && canApprove && (
+                  <div className="flex items-center gap-2 mt-3">
+                    <button onClick={() => act(() => approvePaymentRequest(pr.id))} disabled={isPending} className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-60">
+                      {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ThumbsUp className="h-3.5 w-3.5" />} Approve
+                    </button>
+                    <button onClick={() => setRejectId(pr.id)} className="inline-flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 px-3 py-1.5 rounded-lg text-xs font-medium">
+                      <XCircle className="h-3.5 w-3.5" /> Reject
+                    </button>
+                  </div>
+                )}
+                {rejectId === pr.id && (
+                  <div className="mt-3 space-y-2">
+                    <textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="Reason..." className="w-full text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-3 resize-none" rows={2} />
+                    <div className="flex gap-2">
+                      <button onClick={() => { if (!rejectReason.trim()) return; act(() => rejectPaymentRequest(pr.id, rejectReason.trim())); setRejectId(null); setRejectReason(""); }} disabled={isPending || !rejectReason.trim()} className="inline-flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-60">
+                        <ThumbsDown className="h-3.5 w-3.5" /> Confirm Reject
+                      </button>
+                      <button onClick={() => { setRejectId(null); setRejectReason(""); }} className="text-xs text-slate-500">Dismiss</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+            {canCreate && (
+              <Link href={`/dashboard/invoices/new?poId=${poId}`} className="inline-flex items-center gap-2 text-sm text-primary hover:underline mt-2">
+                <AlertCircle className="h-4 w-4" /> Record another invoice for this PO
+              </Link>
+            )}
           </div>
         )}
 
-        {/* Reject form */}
-        {showRejectForm && paymentRequest && (
-          <div className="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Reason for Rejection</label>
-            <textarea
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-              placeholder="Explain why the payment request is being rejected..."
-              className="w-full text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-3 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
-              rows={3}
-            />
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => {
-                  if (!rejectReason.trim()) return;
-                  act(() => rejectPaymentRequest(paymentRequest.id, rejectReason.trim()));
-                  setShowRejectForm(false);
-                  setRejectReason("");
-                }}
-                disabled={isPending || !rejectReason.trim()}
-                className="inline-flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-all active:scale-95 disabled:opacity-60"
-              >
-                {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ThumbsDown className="h-3.5 w-3.5" />}
-                Confirm Reject
-              </button>
-              <button
-                onClick={() => { setShowRejectForm(false); setRejectReason(""); }}
-                className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
+        {list.some(pr => pr.status === 'pending') && (
+          <p className="text-xs text-amber-600/80 dark:text-amber-400/60 flex items-center gap-1"><AlertCircle className="h-3.5 w-3.5" /> Payments are blocked until pending requests are approved.</p>
         )}
-
-        {error && (
-          <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
-        )}
+        {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
       </div>
     </div>
   );

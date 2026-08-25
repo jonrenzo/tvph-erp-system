@@ -338,23 +338,19 @@ async function PODetailContent({ paramsPromise, searchParamsPromise }: { paramsP
   const canNotify = hasCapability(currentRole, 'payment_reservation.notify');
   const canAcknowledge = hasCapability(currentRole, 'payment_reservation.acknowledge');
 
-  // Fetch latest payment request for this PO
-  const { data: paymentRequest } = await supabase
+  // Fetch all payment requests for this PO (invoice-driven: 1 invoice = 1 PR)
+  const { data: paymentRequests } = await supabase
     .from('payment_requests')
-    .select('id, request_number, amount, due_in_days, notes, status, completion_cert_id, percent_complete, created_at, rejection_reason, is_downpayment')
+    .select('id, request_number, amount, due_in_days, notes, status, completion_cert_id, percent_complete, created_at, rejection_reason, is_downpayment, invoice_id')
     .eq('po_id', po.id)
     .in('status', ['pending', 'approved', 'rejected', 'fully_invoiced'])
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .order('created_at', { ascending: false });
 
-  // Compute PR consumption
-  const prInvoices = (invoices || []).filter(
-    (inv: any) => inv.payment_request_id === paymentRequest?.id
-  );
-  const prConsumed = prInvoices
-    .filter((inv: any) => ['approved', 'partially_paid', 'paid'].includes(inv.status))
-    .reduce((sum: number, inv: any) => sum + Number(inv.amount), 0);
+  // Keep single-object compat for sections that expect it (pick first pending/approved or latest)
+  const paymentRequest = paymentRequests?.[0] || null;
+  // Compute PR consumption for legacy display (now 1:1 so remaining is 0 when invoiced)
+  const prInvoices = (invoices || []).filter((inv: any) => inv.payment_request_id === paymentRequest?.id);
+  const prConsumed = prInvoices.filter((inv: any) => ['pending_payment', 'partially_paid', 'paid'].includes(inv.status)).reduce((sum: number, inv: any) => sum + Number(inv.amount), 0);
   const prRemaining = paymentRequest ? Math.max(0, Number(paymentRequest.amount) - prConsumed) : 0;
 
   // Approved completion certs available to reference in a PR
@@ -474,18 +470,15 @@ async function PODetailContent({ paramsPromise, searchParamsPromise }: { paramsP
               {!isLegacy && ISSUED_OR_LATER.includes(po.status) && canSendEmail && (
                 <PoResendButton poId={po.id} menu />
               )}
-              {canCreatePR &&
-                (!paymentRequest ||
-                  paymentRequest.status === "rejected" ||
-                  paymentRequest.status === "fully_invoiced") && (
-                  <Link
-                    href={`/dashboard/purchase-orders/${po.id}/payment-request`}
-                    className={menuItemClass}
-                  >
-                    <Send className="h-4 w-4" />
-                    Send Payment Request
-                  </Link>
-                )}
+              {canCreatePR && (
+                <Link
+                  href={`/dashboard/invoices/new?poId=${po.id}`}
+                  className={menuItemClass}
+                >
+                  <FileText className="h-4 w-4" />
+                  Record Invoice
+                </Link>
+              )}
             </PoMoreDropdown>
           )}
         </div>
@@ -846,55 +839,26 @@ async function PODetailContent({ paramsPromise, searchParamsPromise }: { paramsP
             <p className="text-xs text-slate-500">No downpayment set. Add one on the Edit PO page while this PO is a draft.</p>
           )}
 
-          {/* Payment Request Consumption */}
-          {paymentRequest && (
+          {/* Payment Requests summary — aggregated (invoice-driven) */}
+          {paymentRequests && paymentRequests.length > 0 && (
             <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
               <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-3">
-                Payment Request: {paymentRequest.request_number}
-                {paymentRequest.is_downpayment && (
-                  <span className="ml-1.5 inline-flex items-center px-1 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700">
-                    DP
-                  </span>
-                )}
+                Payment Requests — {paymentRequests.length} total
               </label>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-slate-500">Approved Amount</span>
-                  <span className="font-bold text-slate-900 dark:text-white">₱{Number(paymentRequest.amount).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-slate-500">Invoiced</span>
-                  <span className="font-bold text-slate-900 dark:text-white">₱{prConsumed.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-slate-500">Remaining / Carry-Forward</span>
-                  <span className={`font-bold ${prRemaining > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"}`}>
-                    {paymentRequest.status === "fully_invoiced" ? "Fully Invoiced" : `₱${prRemaining.toLocaleString()}`}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-slate-500">Status</span>
-                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold border ${
-                    paymentRequest.status === "fully_invoiced"
-                      ? "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400"
-                      : paymentRequest.status === "approved"
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400"
-                        : paymentRequest.status === "rejected"
-                          ? "bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400"
-                          : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400"
-                  }`}>
-                    {paymentRequest.status.replace(/_/g, " ").toUpperCase()}
-                  </span>
-                </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2 text-xs">
+                <div className="flex justify-between items-center"><span className="text-slate-500">Total Requested</span><span className="font-bold text-slate-900 dark:text-white">₱{paymentRequests.reduce((s: number, pr: any) => s + Number(pr.amount), 0).toLocaleString()}</span></div>
+                <div className="flex justify-between items-center"><span className="text-slate-500">Pending</span><span className="font-bold text-amber-600">{paymentRequests.filter((pr: any) => pr.status === 'pending').length}</span></div>
+                <div className="flex justify-between items-center"><span className="text-slate-500">Approved</span><span className="font-bold text-emerald-600">{paymentRequests.filter((pr: any) => pr.status === 'approved' || pr.status === 'fully_invoiced').length}</span></div>
               </div>
             </div>
           )}
             </div>
-      {/* Payment Request stays inside overview tab */}
+      {/* Payment Requests — invoice-driven: list all, CTA is Record Invoice */}
       <PaymentRequestButton
         poId={po.id}
         poAmount={poAmount}
         paymentRequest={paymentRequest as any}
+        paymentRequests={paymentRequests as any}
         approvedCerts={approvedCerts}
         canCreate={canCreatePR}
         canApprove={canApprovePR}

@@ -3,7 +3,8 @@ import { createClient } from '@/utils/supabase/server';
 import { ArrowLeft } from 'lucide-react';
 import { CreateInvoiceForm } from '@/components/dashboard/invoices/create-invoice-form';
 
-export default async function NewInvoicePage() {
+export default async function NewInvoicePage(props: { searchParams?: Promise<{ poId?: string }> }) {
+  const searchParams = props.searchParams ? await props.searchParams : {};
   const supabase = await createClient();
   
   // Fetch vendors for the dropdown
@@ -42,7 +43,7 @@ export default async function NewInvoicePage() {
         </div>
       </div>
 
-      <CreateInvoiceForm vendors={vendors || []} pos={pos || []} />
+      <CreateInvoiceForm vendors={vendors || []} pos={pos || []} defaultPoId={searchParams.poId || ""} />
     </div>
   );
 }

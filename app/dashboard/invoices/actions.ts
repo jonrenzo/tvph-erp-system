@@ -8,6 +8,18 @@ import { recordAuditLog } from '@/utils/audit';
 import { requireCapability } from '@/lib/auth/permissions';
 import { extractDocumentMetadata } from '@/app/actions/ocr';
 import { calculatePaymentDueDate } from '@/lib/payment-terms';
+import { docTypeLabel, getMissingPaymentRequiredDocTypes, PAYMENT_REQUIRED_DOC_TYPES } from '@/lib/vendors/document-types';
+
+// ponytail: defer via next/server after() without breaking jest
+function defer(fn: () => Promise<void>) {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { after } = require('next/server') as { after: (f: () => void) => void };
+    after(fn);
+  } catch {
+    void fn();
+  }
+}
 
 const ALLOWED_MIME = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -154,7 +166,7 @@ export async function discardStagedInvoiceFile(path: string) {
   return { success: true };
 }
 
-// --- Fetch eligible payment requests for a PO (client-side helper) ---
+// --- Fetch eligible payment requests for a PO (legacy, kept for backwards compat) ---
 
 export interface EligiblePR {
   id: string;
@@ -171,7 +183,6 @@ export async function getEligiblePaymentRequests(poId: string): Promise<{ data?:
   const { user, error: authError } = await requireCapability('invoice.write', supabase);
   if (authError || !user) return { error: authError || 'Unauthorized' };
 
-  // Fetch all PRs for this PO (not just approved ones)
   const { data: prs, error } = await supabase
     .from('payment_requests')
     .select('id, request_number, amount, status, is_downpayment')
@@ -181,7 +192,6 @@ export async function getEligiblePaymentRequests(poId: string): Promise<{ data?:
   if (error) return { error: error.message };
   if (!prs) return { data: [] };
 
-  // Compute consumed + remaining for each PR
   const result: EligiblePR[] = await Promise.all(
     prs.map(async (pr) => {
       const { data: consuming } = await supabase
@@ -190,7 +200,6 @@ export async function getEligiblePaymentRequests(poId: string): Promise<{ data?:
         .eq('payment_request_id', pr.id)
         .in('status', ['pending_payment', 'partially_paid', 'paid'])
         .is('deleted_at', null);
-
       const consumed = consuming?.reduce((sum, inv) => sum + Number(inv.amount), 0) ?? 0;
       return {
         id: pr.id,
@@ -207,7 +216,7 @@ export async function getEligiblePaymentRequests(poId: string): Promise<{ data?:
   return { data: result };
 }
 
-// --- Create invoice ---
+// --- Create invoice (invoice-driven PR: auto-creates payment_request when po_id is set) ---
 
 export async function createInvoice(prevState: any, formData: FormData) {
   const supabase = await createClient();
@@ -227,11 +236,13 @@ export async function createInvoice(prevState: any, formData: FormData) {
   const file = formData.get('file') as File;
   const staged_file_path = formData.get('staged_file_path') as string;
   const staged_file_name = formData.get('staged_file_name') as string;
-  const payment_request_id = formData.get('payment_request_id') as string;
-  const overage_confirmed = formData.get('overage_confirmed') === 'true';
 
   if (!vendor_id || !invoice_number || !amount || !invoice_date) {
     return { error: 'Missing required fields.' };
+  }
+
+  if (!Number.isFinite(parseFloat(amount)) || parseFloat(amount) <= 0) {
+    return { error: 'Amount must be greater than zero.' };
   }
 
   // Duplicate invoice number check
@@ -244,98 +255,40 @@ export async function createInvoice(prevState: any, formData: FormData) {
     .maybeSingle();
   if (existing) return { error: `An invoice with number ${invoice_number} already exists.` };
 
-  let linkedPo: { net_days?: number | null } | null = null;
+  let linkedPo: { id: string; amount: number; net_days?: number | null; project_id?: string | null; vendor_id: string } | null = null;
+  let topCert: { percent_complete: number; id: string } | null = null;
 
-  // PO Amount Guard (includes completion-certificate ceiling when one is approved)
-  let carryForwardAmount: number | null = null;
+  // PO guards (accreditation + ceiling) — moved from payment_request flow, now required for invoices linked to PO. Applies to all POs including legacy.
   if (po_id) {
-    const [{ data: po, error: poError }, { data: existingInvoices }, { data: topCert }] = await Promise.all([
-      supabase.from('purchase_orders').select('amount, expense_category, net_days').eq('id', po_id).single(),
-      supabase.from('service_invoices')
-        .select('amount')
-        .eq('po_id', po_id)
-        .is('deleted_at', null),
-      supabase.from('po_completion_certificates')
-        .select('percent_complete')
-        .eq('po_id', po_id)
-        .eq('status', 'approved')
-        .order('percent_complete', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
+    const [{ data: po, error: poError }, { data: existingInvoices }, { data: cert }, { data: vendorDocs }] = await Promise.all([
+      supabase.from('purchase_orders').select('id, amount, net_days, project_id, vendor_id').eq('id', po_id).single(),
+      supabase.from('service_invoices').select('amount').eq('po_id', po_id).is('deleted_at', null),
+      supabase.from('po_completion_certificates').select('id, percent_complete').eq('po_id', po_id).eq('status', 'approved').order('percent_complete', { ascending: false }).limit(1).maybeSingle(),
+      supabase.from('vendor_documents').select('doc_type, status').eq('vendor_id', vendor_id).in('doc_type', PAYMENT_REQUIRED_DOC_TYPES).is('archived_at', null),
     ]);
 
     if (poError || !po) return { error: 'Linked purchase order could not be loaded.' };
+    if (po.vendor_id !== vendor_id) return { error: 'Invoice vendor does not match the PO vendor.' };
 
-    if (po) {
-      linkedPo = po;
-      const poAmount = Number(po.amount);
-      // If there is an approved cert, cap at that percentage of the PO; otherwise no cap beyond po.amount
-      const ceiling = topCert ? (topCert.percent_complete / 100) * poAmount : poAmount;
-      const totalExisting = existingInvoices?.reduce((sum, inv) => sum + Number(inv.amount), 0) ?? 0;
-      const newTotal = totalExisting + parseFloat(amount);
+    linkedPo = { id: po.id, amount: Number(po.amount), net_days: po.net_days, project_id: po.project_id, vendor_id: po.vendor_id };
+    topCert = cert ? { percent_complete: Number(cert.percent_complete), id: cert.id } : null;
 
-      if (newTotal > ceiling) {
-        const remaining = Math.max(0, ceiling - totalExisting);
-        const ceilingLabel = topCert
-          ? `${topCert.percent_complete}% approved completion (₱${ceiling.toLocaleString()})`
-          : `PO limit (₱${poAmount.toLocaleString()})`;
-        return {
-          error: `Invoice amount exceeds ${ceilingLabel}. Available to bill: ₱${remaining.toLocaleString()}.`
-        };
-      }
+    // Accreditation gate (all POs, including legacy — per new workflow)
+    const missingRequiredDocs = getMissingPaymentRequiredDocTypes(vendorDocs || []);
+    if (missingRequiredDocs.length > 0) {
+      return {
+        error: `Blocked: required accreditation document${missingRequiredDocs.length > 1 ? 's' : ''} ${missingRequiredDocs.map((t) => docTypeLabel(t)).join(', ')} ${missingRequiredDocs.length > 1 ? 'are' : 'is'} missing or not submitted. Complete vendor accreditation before invoicing this PO.`,
+      };
+    }
 
-      // PR validation: if a payment_request_id is provided, validate it
-      if (payment_request_id) {
-        const { data: selectedPR } = await supabase
-          .from('payment_requests')
-          .select('id, request_number, amount, vendor_id, status, po_id')
-          .eq('id', payment_request_id)
-          .single();
-
-        if (!selectedPR) {
-          return { error: 'Selected Payment Request not found.' };
-        }
-
-        if (selectedPR.po_id !== po_id) {
-          return { error: 'The selected Payment Request does not belong to the linked PO.' };
-        }
-
-        if (selectedPR.status !== 'approved') {
-          return { error: 'The selected Payment Request must be approved before an invoice can reference it.' };
-        }
-
-        if (selectedPR.vendor_id !== vendor_id) {
-          return { error: 'The selected Payment Request vendor does not match the invoice vendor.' };
-        }
-
-        // Compute consumed balance from existing consuming invoices
-        const { data: consumingInvoices } = await supabase
-          .from('service_invoices')
-          .select('amount')
-          .eq('payment_request_id', payment_request_id)
-          .in('status', ['pending_payment', 'partially_paid', 'paid'])
-          .is('deleted_at', null);
-
-        const consumed = consumingInvoices?.reduce((sum, inv) => sum + Number(inv.amount), 0) ?? 0;
-        const remaining = Number(selectedPR.amount) - consumed;
-        const invoiceAmount = parseFloat(amount);
-        const overage = Math.max(0, invoiceAmount - remaining);
-
-        // Compute carry-forward (remaining after this invoice); negative means overage
-        carryForwardAmount = remaining - invoiceAmount;
-
-        // Validate amount vs remaining balance
-        if (invoiceAmount > remaining) {
-          if (!overage_confirmed) {
-            return {
-              error: `Invoice amount (₱${invoiceAmount.toLocaleString()}) exceeds available Payment Request balance (₱${remaining.toLocaleString()}). Overage: ₱${overage.toLocaleString()}. Please check the confirmation box to proceed, or lower the amount.`,
-              overage: true,
-              remaining,
-              overageAmount: overage,
-            };
-          }
-        }
-      }
+    const poAmount = Number(po.amount);
+    const ceiling = topCert ? (topCert.percent_complete / 100) * poAmount : poAmount;
+    const totalExisting = existingInvoices?.reduce((sum, inv) => sum + Number(inv.amount), 0) ?? 0;
+    const newTotal = totalExisting + parseFloat(amount);
+    if (newTotal > ceiling) {
+      const remaining = Math.max(0, ceiling - totalExisting);
+      const ceilingLabel = topCert ? `${topCert.percent_complete}% approved completion (₱${ceiling.toLocaleString()})` : `PO limit (₱${poAmount.toLocaleString()})`;
+      return { error: `Invoice amount exceeds ${ceilingLabel}. Available to bill: ₱${remaining.toLocaleString()}.` };
     }
   }
 
@@ -343,15 +296,10 @@ export async function createInvoice(prevState: any, formData: FormData) {
   let file_name = null;
 
   if (staged_file_path?.startsWith('staging/invoices/')) {
-    // Move staged file to its final location
     const ext = staged_file_name?.split('.').pop() ?? 'pdf';
     const finalFileName = `INV_${invoice_number}_${Date.now()}.${ext}`;
     const finalPath = `vendors/${vendor_id}/invoices/${finalFileName}`;
-
-    const { error: moveError } = await supabase.storage
-      .from('vendor-documents')
-      .move(staged_file_path, finalPath);
-
+    const { error: moveError } = await supabase.storage.from('vendor-documents').move(staged_file_path, finalPath);
     if (!moveError) {
       const { data: { publicUrl } } = supabase.storage.from('vendor-documents').getPublicUrl(finalPath);
       file_url = publicUrl;
@@ -361,11 +309,7 @@ export async function createInvoice(prevState: any, formData: FormData) {
     const fileExt = file.name.split('.').pop();
     const fileName = `INV_${invoice_number}_${Date.now()}.${fileExt}`;
     const filePath = `vendors/${vendor_id}/invoices/${fileName}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from('vendor-documents')
-      .upload(filePath, file, { contentType: file.type, upsert: false });
-
+    const { error: uploadError } = await supabase.storage.from('vendor-documents').upload(filePath, file, { contentType: file.type, upsert: false });
     if (!uploadError) {
       const { data: { publicUrl } } = supabase.storage.from('vendor-documents').getPublicUrl(filePath);
       file_url = publicUrl;
@@ -377,11 +321,12 @@ export async function createInvoice(prevState: any, formData: FormData) {
     ? calculatePaymentDueDate(submittedAt, Number(linkedPo?.net_days ?? 30))
     : due_date || calculatePaymentDueDate(submittedAt, 30);
 
+  const parsedAmount = parseFloat(amount);
   const { data: newInvoice, error } = await supabase.from('service_invoices').insert({
     vendor_id,
     po_id: po_id || null,
     invoice_number,
-    amount: parseFloat(amount),
+    amount: parsedAmount,
     invoice_date,
     due_date: finalDueDate,
     status: 'pending_payment',
@@ -390,8 +335,8 @@ export async function createInvoice(prevState: any, formData: FormData) {
     notes,
     payment_method: payment_method || null,
     expense_category: expense_category || null,
-    payment_request_id: payment_request_id || null,
-    carry_forward_amount: carryForwardAmount,
+    payment_request_id: null,
+    carry_forward_amount: null,
     submitted_at: submittedAt.toISOString(),
     created_by: user.id
   }).select('id').single();
@@ -402,27 +347,80 @@ export async function createInvoice(prevState: any, formData: FormData) {
     return { error: error.message };
   }
 
+  // Auto-create payment request when invoice is linked to a PO (1 invoice = 1 PR, status pending)
+  let createdPrId: string | null = null;
+  if (po_id && linkedPo) {
+    const isDownpayment = expense_category === 'downpayment';
+    const dueInDays = Number(linkedPo.net_days ?? 30);
+    const requestNumber = `PR-${invoice_number}`.slice(0, 50);
+    const { data: pr, error: prError } = await supabase.from('payment_requests').insert({
+      po_id,
+      vendor_id,
+      project_id: linkedPo.project_id || null,
+      amount: parsedAmount,
+      due_in_days: dueInDays,
+      notes: notes || null,
+      completion_cert_id: topCert?.id || null,
+      percent_complete: topCert?.percent_complete ?? null,
+      invoice_id: newInvoice.id,
+      is_downpayment: isDownpayment,
+      request_number: requestNumber,
+      status: 'pending',
+      created_by: user.id,
+    }).select('id').single();
+
+    if (prError) {
+      // Compensate: remove the invoice if PR creation fails (keep invariant 1:1)
+      await supabase.from('service_invoices').update({ deleted_at: new Date().toISOString() } as any).eq('id', newInvoice.id);
+      console.error('Failed to auto-create payment request:', prError);
+      return { error: `Invoice created but Payment Request failed: ${prError.message}` };
+    }
+    createdPrId = pr.id;
+    await supabase.from('service_invoices').update({ payment_request_id: pr.id } as any).eq('id', newInvoice.id);
+    // Also set reverse link if column exists (do not fail if missing)
+    await supabase.from('payment_requests').update({ invoice_id: newInvoice.id } as any).eq('id', pr.id);
+  }
+
   await recordAuditLog({
     entity_type: 'service_invoice',
     entity_id: newInvoice.id,
     action: 'CREATE',
-    changes: { after: { invoice_number, amount, po_id } },
+    changes: { after: { invoice_number, amount: parsedAmount, po_id, payment_request_id: createdPrId } },
     performed_by: user.id
   });
 
   await createNotification({
     type: 'invoice',
     title: '🧾 Invoice Received',
-    message: `Invoice #${invoice_number} was logged.`,
+    message: po_id && createdPrId ? `Invoice #${invoice_number} logged — Payment Request pending approval (₱${parsedAmount.toLocaleString()}).` : `Invoice #${invoice_number} was logged.`,
     link: `/dashboard/invoices/${newInvoice.id}`,
     created_by: user.id
   });
 
+  // Notify for payment request (deferred)
+  if (po_id && createdPrId && linkedPo) {
+    const prPoId = po_id;
+    const prVendorId = vendor_id;
+    const prAmount = parsedAmount;
+    const prDueInDays = Number(linkedPo.net_days ?? 30);
+    const prNotes = notes || null;
+    const prCreatorId = user.id;
+    // Need po_number + vendor name for email
+    const { data: poMeta } = await supabase.from('purchase_orders').select('po_number, vendors(name)').eq('id', prPoId).single();
+    const vendorName = (poMeta?.vendors as any)?.name || 'Vendor';
+    const poNumber = (poMeta as any)?.po_number || prPoId.slice(0, 8);
+    defer(async () => {
+      const { sendPaymentRequestNotification } = await import('@/lib/email/payment-request');
+      await sendPaymentRequestNotification(prPoId, prVendorId, prAmount, prDueInDays, prNotes, prCreatorId, poNumber, vendorName);
+    });
+  }
+
   revalidatePath('/dashboard/invoices');
+  if (po_id) revalidatePath(`/dashboard/purchase-orders/${po_id}`);
   redirect(`/dashboard/invoices/${newInvoice.id}`);
 }
 
-// --- Delete invoice (releases reserved payment-request balance via trigger) ---
+// --- Delete invoice (also rejects linked payment request in invoice-driven flow) ---
 
 export async function deleteInvoice(invoiceId: string) {
   const supabase = await createClient();
@@ -431,7 +429,7 @@ export async function deleteInvoice(invoiceId: string) {
 
   const { data: invoice } = await supabase
     .from('service_invoices')
-    .select('invoice_number, status')
+    .select('invoice_number, status, payment_request_id')
     .eq('id', invoiceId)
     .single();
 
@@ -439,14 +437,23 @@ export async function deleteInvoice(invoiceId: string) {
     return { error: 'Paid invoices cannot be deleted.' };
   }
 
-  // Soft-delete. The service_invoice_sync_pr trigger recomputes the linked payment
-  // request and reopens it (fully_invoiced -> approved) if this frees up balance.
+  const now = new Date().toISOString();
   const { error } = await supabase
     .from('service_invoices')
-    .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .update({ deleted_at: now, updated_at: now })
     .eq('id', invoiceId);
 
   if (error) return { error: error.message };
+
+  // If linked PR is still pending/approved, mark it rejected (invoice is the requirement)
+  if ((invoice as any)?.payment_request_id) {
+    await supabase.from('payment_requests').update({
+      status: 'rejected',
+      rejected_by: user.id,
+      rejected_at: now,
+      rejection_reason: 'Linked invoice deleted',
+    } as any).eq('id', (invoice as any).payment_request_id).in('status', ['pending', 'approved']);
+  }
 
   await recordAuditLog({
     entity_type: 'service_invoice',
@@ -507,6 +514,13 @@ export async function recordPayment(prevState: any, formData: FormData) {
     .single();
 
   if (!invoice) return { error: 'Invoice not found.' };
+
+  // Block payment if linked PR is not approved (invoice is the PR requirement, but PR must be approved before paying)
+  if ((invoice as any).payment_request_id) {
+    const { data: pr } = await supabase.from('payment_requests').select('status').eq('id', (invoice as any).payment_request_id).single();
+    if (pr && pr.status === 'pending') return { error: 'Payment blocked: linked Payment Request is pending approval.' };
+    if (pr && pr.status === 'rejected') return { error: 'Payment blocked: linked Payment Request was rejected. Delete or re-upload the invoice.' };
+  }
 
   // Insert payment
   const { data: payment, error } = await supabase.from('payments').insert({
