@@ -10,6 +10,7 @@ create index if not exists payment_requests_invoice_id_idx
 
 -- 2. Drop the single-active-PR-per-PO constraint (now many PRs per PO allowed).
 drop index if exists public.payment_requests_one_active_per_po;
+drop index if exists public.payment_requests_one_pending_per_po;
 
 -- 3. Extend status to include fully_invoiced if not already present
 --    (trigger sync_payment_request_invoiced_status already uses it).
