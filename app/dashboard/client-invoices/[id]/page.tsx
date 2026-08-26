@@ -3,13 +3,11 @@ import { createClient } from '@/utils/supabase/server';
 import { notFound } from 'next/navigation';
 import { ArrowLeft, Clock, ExternalLink } from 'lucide-react';
 import { Suspense } from 'react';
-import { RecordClientPaymentModal } from '@/components/dashboard/client-invoices/record-payment-modal';
-import { updateClientInvoiceStatus } from '../actions';
-import { statusBadgeClasses } from '@/lib/ui/status-badge';
+import { billingStatusLabel, billingStatusBadgeClasses, agingBand, agingBadgeClasses, agingLabel } from '@/lib/billing/status';
+import { TransitionPanel } from '@/components/dashboard/client-invoices/transition-panel';
 
-export default function ClientInvoiceDetailPage(props: {
+export default function BillingDetailPage(props: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<Record<string, string>>;
 }) {
   return (
     <Suspense fallback={<Skeleton />}>
@@ -22,166 +20,102 @@ async function Content({ paramsPromise }: { paramsPromise: Promise<{ id: string 
   const { id } = await paramsPromise;
   const supabase = await createClient();
 
-  const [{ data: invoice, error }, { data: payments }] = await Promise.all([
-    supabase
-      .from('client_invoices')
-      .select('*, crm_accounts(company_name), client_purchase_orders(id, po_number, amount)')
-      .eq('id', id)
-      .is('deleted_at', null)
-      .single(),
-    supabase
-      .from('client_payments')
-      .select('*')
-      .eq('invoice_id', id)
-      .is('deleted_at', null)
-      .order('payment_date', { ascending: false }),
+  const [{ data: row, error }, { data: timeline }] = await Promise.all([
+    supabase.from('client_billing').select('*, crm_accounts(company_name), projects(id, name)').eq('id', id).is('deleted_at', null).single(),
+    supabase.from('client_billing_timeline').select('id, from_status, to_status, changed_at, note, profiles!changed_by(full_name, email)').eq('billing_id', id).order('changed_at', { ascending: true }),
   ]);
 
-  if (error || !invoice) notFound();
-
-  const totalPaid = (payments || []).reduce((sum, p) => sum + Number(p.amount_paid), 0);
-  const remaining = Number(invoice.amount) - totalPaid;
+  if (error || !row) notFound();
+  const ag = agingBand(row);
 
   return (
     <div className="p-6 lg:p-8 max-w-4xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-4">
-          <Link href="/dashboard/client-invoices" className="p-2 -ml-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors mt-1">
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
+          <Link href="/dashboard/client-invoices" className="p-2 -ml-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 mt-1"><ArrowLeft className="h-5 w-5" /></Link>
           <div>
-            <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-plus-jakarta tracking-tight">{invoice.invoice_number}</h1>
-              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${statusBadgeClasses(invoice.status)}`}>
-                {invoice.status.replace(/_/g, ' ').toUpperCase()}
-              </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-plus-jakarta tracking-tight">{row.invoice_number}</h1>
+              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${billingStatusBadgeClasses(row.status)}`}>{billingStatusLabel(row.status).toUpperCase()}</span>
+              {ag.band && <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${agingBadgeClasses(ag.band)}`}>{agingLabel(ag.band, ag.daysDelayed).toUpperCase()}</span>}
             </div>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              {(invoice.crm_accounts as any)?.company_name} ·{' '}
-              <Link href={`/dashboard/client-pos/${(invoice.client_purchase_orders as any)?.id}`} className="hover:text-primary transition-colors">
-                PO: {(invoice.client_purchase_orders as any)?.po_number}
-              </Link>{' '}
-              · {new Date(invoice.invoice_date).toLocaleDateString()}
+              {(row.crm_accounts as any)?.company_name} · {(row.projects as any)?.name || 'No project'} · {row.invoice_batch ? `Batch ${row.invoice_batch}` : 'No batch'}
             </p>
           </div>
         </div>
-        {invoice.file_url && (
-          <a
-            href={invoice.file_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors shrink-0"
-          >
-            <ExternalLink className="h-4 w-4" />
-            View Invoice
+        {row.file_url && (
+          <a href={row.file_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50">
+            <ExternalLink className="h-4 w-4" /> View Doc
           </a>
         )}
       </div>
 
-      {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {[
-          { label: 'Invoice Amount', value: `${invoice.currency} ${Number(invoice.amount).toLocaleString()}` },
-          { label: 'Total Received', value: `${invoice.currency} ${totalPaid.toLocaleString()}` },
-          { label: 'Balance Due', value: `${invoice.currency} ${remaining.toLocaleString()}` },
-        ].map((card) => (
-          <div key={card.label} className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-widest text-slate-500 dark:text-slate-400">{card.label}</p>
-            <p className="text-xl font-bold text-slate-900 dark:text-white mt-1">{card.value}</p>
-          </div>
-        ))}
+        <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">VAT-ex</p>
+          <p className="text-xl font-bold text-slate-900 dark:text-white mt-1">₱ {Number(row.amount_vat_ex || 0).toLocaleString()}</p>
+        </div>
+        <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">VAT-inc</p>
+          <p className="text-xl font-bold text-slate-900 dark:text-white mt-1">₱ {Number(row.amount_vat_inc || 0).toLocaleString()}</p>
+        </div>
+        <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Aging</p>
+          <p className="text-sm font-bold text-slate-900 dark:text-white mt-1">{ag.band ? `${agingLabel(ag.band, ag.daysDelayed)}${ag.band==='overdue' ? ` (${ag.daysDelayed}d)` : ''}` : '—'}</p>
+        </div>
       </div>
 
-      {/* Status Actions */}
-      {invoice.status === 'draft' && (
-        <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm flex items-center justify-between gap-4">
-          <p className="text-sm text-slate-600 dark:text-slate-400">Mark this invoice as sent to the client</p>
-          <form action={async () => {
-            'use server';
-            await updateClientInvoiceStatus(id, 'sent');
-          }}>
-            <button type="submit" className="px-4 py-2 rounded-xl text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white transition-colors">
-              Mark as Sent
-            </button>
-          </form>
+      <TransitionPanel billingId={row.id} status={row.status} />
+
+      <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-3">
+        <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Details</p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+          <div><p className="text-xs text-slate-400">Region</p><p className="font-medium text-slate-900 dark:text-white mt-0.5">{row.region || '—'}</p></div>
+          <div><p className="text-xs text-slate-400"># Nodes</p><p className="font-medium text-slate-900 dark:text-white mt-0.5">{row.num_nodes ?? '—'}</p></div>
+          <div><p className="text-xs text-slate-400">Date Issued</p><p className="font-medium text-slate-900 dark:text-white mt-0.5">{row.date_issued ? new Date(row.date_issued).toLocaleDateString() : '—'}</p></div>
+          <div><p className="text-xs text-slate-400">Date Endorsed</p><p className="font-medium text-slate-900 dark:text-white mt-0.5">{row.date_endorsed ? new Date(row.date_endorsed).toLocaleDateString() : '—'}</p></div>
+          <div><p className="text-xs text-slate-400">Due Date</p><p className="font-medium text-slate-900 dark:text-white mt-0.5">{row.due_date ? new Date(row.due_date).toLocaleDateString() : '—'}</p></div>
+          <div><p className="text-xs text-slate-400">Est. Payment</p><p className="font-medium text-slate-900 dark:text-white mt-0.5">{row.est_payment_date ? new Date(row.est_payment_date).toLocaleDateString() : '—'}</p></div>
+          <div><p className="text-xs text-slate-400">Collected At</p><p className="font-medium text-slate-900 dark:text-white mt-0.5">{row.collected_at ? new Date(row.collected_at).toLocaleDateString() : '—'}</p></div>
         </div>
-      )}
+        {row.notes && <div className="pt-2 border-t border-slate-100 dark:border-slate-800"><p className="text-xs text-slate-400 mb-1">Notes</p><p className="text-sm text-slate-700 dark:text-slate-300">{row.notes}</p></div>}
+      </div>
 
-      {/* Record Payment */}
-      {invoice.status !== 'paid' && invoice.status !== 'cancelled' && (
-        <RecordClientPaymentModal invoiceId={id} currency={invoice.currency} />
-      )}
-
-      {/* Payment History */}
       <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-[#0a0a0a]/50">
-          <h2 className="font-semibold text-slate-900 dark:text-white">Payment History</h2>
+          <h2 className="font-semibold text-slate-900 dark:text-white">Timeline</h2>
+          <p className="text-xs text-slate-500 mt-0.5">All status changes + fixed dates. Fixed dates below are snapshots; the log above is the source of truth.</p>
         </div>
-        <table className="w-full text-sm text-left">
-          <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800/20 border-b border-slate-200 dark:border-slate-800">
-            <tr>
-              <th className="px-6 py-3 font-semibold">Date</th>
-              <th className="px-6 py-3 font-semibold">Amount</th>
-              <th className="px-6 py-3 font-semibold">Type</th>
-              <th className="px-6 py-3 font-semibold">Method</th>
-              <th className="px-6 py-3 font-semibold">Reference</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-            {payments?.length === 0 ? (
-              <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-500">No payments recorded yet.</td></tr>
-            ) : (
-              payments?.map((p: any) => (
-                <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/10 transition-colors">
-                  <td className="px-6 py-4 text-slate-600 dark:text-slate-400">
-                    <div className="flex items-center gap-1.5 text-xs"><Clock className="h-3.5 w-3.5" />{new Date(p.payment_date).toLocaleDateString()}</div>
-                  </td>
-                  <td className="px-6 py-4 font-semibold text-slate-900 dark:text-white">
-                    {invoice.currency} {Number(p.amount_paid).toLocaleString()}
-                  </td>
-                  <td className="px-6 py-4 text-slate-600 dark:text-slate-400 capitalize">{p.payment_type.replace(/_/g, ' ')}</td>
-                  <td className="px-6 py-4 text-slate-600 dark:text-slate-400 capitalize">{p.payment_method.replace(/_/g, ' ')}</td>
-                  <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{p.reference_number || '—'}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Invoice Details */}
-      <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-widest text-slate-500 dark:text-slate-400">Details</p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
-          <div>
-            <p className="text-xs text-slate-400">Invoice Date</p>
-            <p className="font-medium text-slate-900 dark:text-white mt-0.5">{new Date(invoice.invoice_date).toLocaleDateString()}</p>
-          </div>
-          <div>
-            <p className="text-xs text-slate-400">Due Date</p>
-            <p className="font-medium text-slate-900 dark:text-white mt-0.5">{invoice.due_date ? new Date(invoice.due_date).toLocaleDateString() : '—'}</p>
-          </div>
-          <div>
-            <p className="text-xs text-slate-400">Currency</p>
-            <p className="font-medium text-slate-900 dark:text-white mt-0.5">{invoice.currency}</p>
-          </div>
+        <div className="divide-y divide-slate-100 dark:divide-slate-800">
+          {(timeline as any[])?.length === 0 ? (
+            <p className="px-6 py-8 text-center text-sm text-slate-500">No transitions yet.</p>
+          ) : (
+            (timeline as any[])?.map((t: any) => (
+              <div key={t.id} className="px-6 py-4 flex items-start gap-3">
+                <div className="h-2 w-2 rounded-full bg-primary mt-2 shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-slate-900 dark:text-white">
+                    {t.from_status ? `${billingStatusLabel(t.from_status)} → ` : ''}{billingStatusLabel(t.to_status)}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1"><Clock className="h-3 w-3" /> {new Date(t.changed_at).toLocaleString()} · {(t.profiles as any)?.full_name || (t.profiles as any)?.email || 'System'}</p>
+                  {t.note && <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 italic">{t.note}</p>}
+                </div>
+              </div>
+            ))
+          )}
         </div>
-        {invoice.notes && (
-          <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-            <p className="text-xs text-slate-400 mb-1">Notes</p>
-            <p className="text-sm text-slate-700 dark:text-slate-300">{invoice.notes}</p>
-          </div>
-        )}
+        <div className="px-6 py-4 bg-slate-50/50 dark:bg-[#0a0a0a]/50 border-t border-slate-200 dark:border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+          <div><span className="text-slate-400">Issued</span><p className="font-medium text-slate-700 dark:text-slate-300">{row.date_issued ? new Date(row.date_issued).toLocaleDateString() : '—'}</p></div>
+          <div><span className="text-slate-400">Endorsed</span><p className="font-medium text-slate-700 dark:text-slate-300">{row.date_endorsed ? new Date(row.date_endorsed).toLocaleDateString() : '—'}</p></div>
+          <div><span className="text-slate-400">Due</span><p className="font-medium text-slate-700 dark:text-slate-300">{row.due_date ? new Date(row.due_date).toLocaleDateString() : '—'}</p></div>
+          <div><span className="text-slate-400">Est Pay</span><p className="font-medium text-slate-700 dark:text-slate-300">{row.est_payment_date ? new Date(row.est_payment_date).toLocaleDateString() : '—'}</p></div>
+        </div>
       </div>
     </div>
   );
 }
 
 function Skeleton() {
-  return (
-    <div className="p-6 lg:p-8 space-y-6 animate-pulse">
-      <div className="h-8 w-64 bg-slate-100 dark:bg-slate-800/50 rounded-lg" />
-      <div className="h-48 rounded-2xl bg-slate-100 dark:bg-slate-800/50" />
-    </div>
-  );
+  return <div className="p-6 lg:p-8 space-y-6 animate-pulse"><div className="h-8 w-64 bg-slate-100 dark:bg-slate-800/50 rounded-lg" /><div className="h-48 rounded-2xl bg-slate-100 dark:bg-slate-800/50" /></div>;
 }
