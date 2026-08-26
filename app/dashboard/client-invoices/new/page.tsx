@@ -1,12 +1,8 @@
-import { Suspense } from 'react';
 import { NewClientInvoiceForm } from './form';
 
-export default function NewClientInvoicePage(props: {
-  searchParams?: Promise<{ client_po_id?: string; account_id?: string }>;
+export default async function NewClientInvoicePage(props: {
+  searchParams?: Promise<{ account_id?: string }>;
 }) {
-  return (
-    <Suspense fallback={null}>
-      <NewClientInvoiceForm searchParamsPromise={props.searchParams} />
-    </Suspense>
-  );
+  const sp = await props.searchParams;
+  return <NewClientInvoiceForm initialAccountId={sp?.account_id} />;
 }

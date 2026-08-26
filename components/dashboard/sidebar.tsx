@@ -67,7 +67,7 @@ const MODULE_CONFIG: ModuleItem[] = [
       { id: "crm-new-customer", label: "Add Customer", href: "/dashboard/crm/new", roles: ["superadmin", "admin", "operations"] },
       { id: "crm-new-project", label: "New Customer Project", href: "/dashboard/crm/projects/new", roles: ["superadmin", "admin", "operations"] },
       { id: "client-pos", label: "Client POs", href: "/dashboard/client-pos", roles: ["superadmin", "admin", "operations"] },
-      { id: "client-invoices", label: "Client Invoices", href: "/dashboard/client-invoices", roles: ["superadmin", "admin", "finance"] },
+      { id: "client-invoices", label: "Client Billing", href: "/dashboard/client-invoices", roles: ["superadmin", "admin", "finance"] },
     ],
   },
   {

@@ -2,79 +2,131 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/utils/supabase/server";
+import { createServiceRoleClient } from "@/utils/supabase/service";
 import { requireCapability } from "@/lib/auth/permissions";
 import { recordAuditLog } from "@/utils/audit";
+import { canTransition, normalizeBillingStatus } from "@/lib/billing/status";
+import { parseFile } from "@/utils/import-export";
 
-export async function createClientInvoice(formData: FormData) {
+const BILLING_STATUSES = new Set([
+  "for_billing",
+  "for_approval",
+  "for_payment",
+  "pending_payment",
+  "collected",
+]);
+
+function todayISO(): string {
+  return new Date().toISOString().split("T")[0]!;
+}
+
+function parseExcelDate(v: any): string | null {
+  if (v == null || v === "") return null;
+  if (typeof v === "number" && v > 20000 && v < 60000) {
+    // Excel serial date
+    const d = new Date(Math.round((v - 25569) * 86400 * 1000));
+    return d.toISOString().split("T")[0]!;
+  }
+  const s = String(v).trim();
+  if (!s) return null;
+  // Try native parse; handles 6-Jul-26, 2026-07-06, 7/6/2026
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) return d.toISOString().split("T")[0]!;
+  return null;
+}
+
+function parseNum(v: any): number | null {
+  if (v == null || v === "") return null;
+  const n = Number(String(v).replace(/,/g, "").trim());
+  return isNaN(n) ? null : n;
+}
+
+// ponytail: helper to enforce exact status transition and stamp dates
+async function writeTransition(
+  billingId: string,
+  from: string,
+  to: string,
+  userId: string,
+  supabase: any,
+  note?: string | null,
+) {
+  const now = new Date().toISOString();
+  const patch: Record<string, any> = { status: to, updated_at: now };
+  if (to === "for_payment" || to === "pending_payment") {
+    // auto-stamp date_endorsed on first entry into payment phase
+    const { data: cur } = await supabase.from("client_billing").select("date_endorsed").eq("id", billingId).single();
+    if (!cur?.date_endorsed) patch.date_endorsed = todayISO();
+  }
+  if (to === "collected") patch.collected_at = now;
+  const { error } = await supabase.from("client_billing").update(patch).eq("id", billingId);
+  if (error) return { error: error.message };
+  await supabase.from("client_billing_timeline").insert({
+    billing_id: billingId,
+    from_status: from,
+    to_status: to,
+    changed_by: userId,
+    note: note || null,
+  });
+  await recordAuditLog({
+    entity_type: "client_billing",
+    entity_id: billingId,
+    action: "UPDATE",
+    changes: { after: { status: to } },
+    performed_by: userId,
+  });
+  return { success: true };
+}
+
+export async function createClientBilling(formData: FormData) {
   const supabase = await createClient();
   const { user, error: authError } = await requireCapability("client_invoice.write", supabase);
   if (authError || !user) return { error: authError || "Unauthorized" };
 
-  const account_id = formData.get("account_id") as string;
-  const client_po_id = formData.get("client_po_id") as string;
+  const account_id = (formData.get("account_id") as string)?.trim();
+  const project_id = (formData.get("project_id") as string)?.trim() || null;
   const invoice_number = (formData.get("invoice_number") as string)?.trim();
-  const amount = parseFloat(formData.get("amount") as string);
-  const currency = (formData.get("currency") as string) || "PHP";
-  const invoice_date = formData.get("invoice_date") as string;
+  const invoice_batch = (formData.get("invoice_batch") as string)?.trim() || null;
+  const region = (formData.get("region") as string)?.trim() || null;
+  const num_nodes = formData.get("num_nodes") ? parseInt(formData.get("num_nodes") as string, 10) : null;
+  const amount_vat_ex = parseNum(formData.get("amount_vat_ex") as string) ?? 0;
+  const amount_vat_inc = parseNum(formData.get("amount_vat_inc") as string) ?? 0;
   const due_date = (formData.get("due_date") as string) || null;
+  const est_payment_date = (formData.get("est_payment_date") as string) || null;
   const notes = (formData.get("notes") as string)?.trim() || null;
   const file = formData.get("file") as File | null;
 
   if (!account_id) return { error: "Client is required." };
-  if (!client_po_id) return { error: "Client PO is required." };
   if (!invoice_number) return { error: "Invoice number is required." };
-  if (!invoice_date) return { error: "Invoice date is required." };
-  if (isNaN(amount) || amount <= 0) return { error: "A valid amount is required." };
-
-  // Guard: sum of invoices must not exceed PO amount
-  const { data: po } = await supabase
-    .from("client_purchase_orders")
-    .select("amount, currency")
-    .eq("id", client_po_id)
-    .single();
-
-  if (!po) return { error: "Client PO not found." };
-
-  const { data: existingInvoices } = await supabase
-    .from("client_invoices")
-    .select("amount")
-    .eq("client_po_id", client_po_id)
-    .is("deleted_at", null)
-    .neq("status", "cancelled");
-
-  const totalBilled = (existingInvoices || []).reduce((sum, inv) => sum + Number(inv.amount), 0);
-  if (totalBilled + amount > Number(po.amount)) {
-    return {
-      error: `Invoice amount exceeds PO limit. PO amount: ${po.currency} ${Number(po.amount).toLocaleString()}. Already billed: ${po.currency} ${totalBilled.toLocaleString()}.`,
-    };
-  }
+  if (!amount_vat_inc && !amount_vat_ex) return { error: "Amount is required." };
 
   let file_url: string | null = null;
   let file_name: string | null = null;
-
   if (file && file.size > 0) {
-    const fileExt = file.name.split(".").pop();
-    const filePath = `client-invoices/${account_id}/${Date.now()}.${fileExt}`;
-    const { error: uploadError } = await supabase.storage
-      .from("crm-documents")
-      .upload(filePath, file, { contentType: file.type, upsert: false });
-    if (uploadError) return { error: uploadError.message };
-    const { data: { publicUrl } } = supabase.storage.from("crm-documents").getPublicUrl(filePath);
+    const ext = file.name.split(".").pop();
+    const path = `client-billing/${account_id}/${Date.now()}.${ext}`;
+    const { error: upErr } = await supabase.storage.from("crm-documents").upload(path, file, { contentType: file.type, upsert: false });
+    if (upErr) return { error: upErr.message };
+    const { data: { publicUrl } } = supabase.storage.from("crm-documents").getPublicUrl(path);
     file_url = publicUrl;
     file_name = file.name;
   }
 
-  const { data: newInvoice, error } = await supabase
-    .from("client_invoices")
+  const date_issued = todayISO();
+  const { data: row, error } = await supabase
+    .from("client_billing")
     .insert({
       account_id,
-      client_po_id,
+      project_id,
       invoice_number,
-      amount,
-      currency,
-      invoice_date,
+      invoice_batch,
+      num_nodes: isNaN(num_nodes as number) ? null : num_nodes,
+      region,
+      amount_vat_ex,
+      amount_vat_inc: amount_vat_inc || amount_vat_ex,
+      date_issued,
       due_date,
-      status: "draft",
+      est_payment_date,
+      status: "for_billing",
       notes,
       file_url,
       file_name,
@@ -83,162 +135,276 @@ export async function createClientInvoice(formData: FormData) {
     .select("id")
     .single();
 
-  if (error || !newInvoice) return { error: error?.message || "Failed to create invoice." };
+  if (error || !row) return { error: error?.message || "Failed to create billing record." };
 
+  await supabase.from("client_billing_timeline").insert({
+    billing_id: row.id,
+    from_status: null,
+    to_status: "for_billing",
+    changed_by: user.id,
+  });
   await recordAuditLog({
-    entity_type: "client_invoice",
-    entity_id: newInvoice.id,
+    entity_type: "client_billing",
+    entity_id: row.id,
     action: "CREATE",
-    changes: { after: { invoice_number, amount, currency, invoice_date, status: "draft" } },
+    changes: { after: { invoice_number, status: "for_billing" } },
     performed_by: user.id,
   });
-
   revalidatePath("/dashboard/client-invoices");
-  revalidatePath(`/dashboard/crm/${account_id}`);
-  return { success: true, id: newInvoice.id };
+  return { success: true, id: row.id };
 }
 
-export async function updateClientInvoiceStatus(
-  invoiceId: string,
-  status: "draft" | "sent" | "partially_paid" | "paid" | "cancelled",
-) {
+export async function transitionBillingStatus(billingId: string, toStatus: string, note?: string) {
+  const supabase = await createClient();
+  // Collected is finance-gated; everything else is plain write
+  const cap = toStatus === "collected" ? "client_invoice.pay" : "client_invoice.write";
+  const { user, error: authError } = await requireCapability(cap as any, supabase);
+  if (authError || !user) return { error: authError || "Unauthorized" };
+  if (!BILLING_STATUSES.has(toStatus)) return { error: "Invalid status." };
+
+  const { data: cur } = await supabase.from("client_billing").select("status").eq("id", billingId).single();
+  if (!cur) return { error: "Billing record not found." };
+  const from = cur.status as string;
+  if (from === toStatus) return { success: true };
+
+  // Direct guard; auto For Payment -> Pending Payment
+  if (toStatus === "pending_payment" && from === "for_approval") {
+    // Approve path: must go via for_payment first (auto). So route through it.
+    const r1 = await writeTransition(billingId, from, "for_payment", user.id, supabase, note);
+    if ((r1 as any).error) return r1;
+    revalidatePath("/dashboard/client-invoices");
+    revalidatePath(`/dashboard/client-invoices/${billingId}`);
+    // auto second hop
+    const r2 = await writeTransition(billingId, "for_payment", "pending_payment", user.id, supabase);
+    if ((r2 as any).error) return r2;
+    revalidatePath("/dashboard/client-invoices");
+    revalidatePath(`/dashboard/client-invoices/${billingId}`);
+    return { success: true };
+  }
+  if (!canTransition(from, toStatus)) {
+    // allow auto hop for_payment->pending is fine; everything else must be explicit
+    if (!(from === "for_payment" && toStatus === "pending_payment")) {
+      return { error: `Cannot move from ${from} to ${toStatus}.` };
+    }
+  }
+
+  // Normal single hop
+  const res = await writeTransition(billingId, from, toStatus, user.id, supabase, note);
+  if ((res as any).error) return res;
+
+  // Auto: For Payment -> Pending Payment (so endorsed rows immediately enter aging)
+  if (toStatus === "for_payment") {
+    await writeTransition(billingId, "for_payment", "pending_payment", user.id, supabase);
+  }
+
+  revalidatePath("/dashboard/client-invoices");
+  revalidatePath(`/dashboard/client-invoices/${billingId}`);
+  return { success: true };
+}
+
+export async function updateClientBilling(billingId: string, formData: FormData) {
   const supabase = await createClient();
   const { user, error: authError } = await requireCapability("client_invoice.write", supabase);
   if (authError || !user) return { error: authError || "Unauthorized" };
 
-  const { data: inv } = await supabase
-    .from("client_invoices")
-    .select("account_id, client_po_id")
-    .eq("id", invoiceId)
-    .single();
+  const patch: Record<string, any> = { updated_at: new Date().toISOString() };
+  const fields = ["invoice_number", "invoice_batch", "region", "notes"] as const;
+  for (const f of fields) {
+    const v = formData.get(f);
+    if (v !== null) patch[f] = String(v).trim() || null;
+  }
+  const num_nodes = formData.get("num_nodes");
+  if (num_nodes !== null) patch.num_nodes = String(num_nodes).trim() ? parseInt(String(num_nodes), 10) : null;
+  const vatEx = formData.get("amount_vat_ex");
+  if (vatEx !== null) patch.amount_vat_ex = parseNum(vatEx as string) ?? 0;
+  const vatInc = formData.get("amount_vat_inc");
+  if (vatInc !== null) patch.amount_vat_inc = parseNum(vatInc as string) ?? 0;
+  const due = formData.get("due_date");
+  if (due !== null) patch.due_date = String(due).trim() || null;
+  const est = formData.get("est_payment_date");
+  if (est !== null) patch.est_payment_date = String(est).trim() || null;
+  const proj = formData.get("project_id");
+  if (proj !== null) patch.project_id = String(proj).trim() || null;
 
-  const { error } = await supabase
-    .from("client_invoices")
-    .update({ status, updated_at: new Date().toISOString() })
-    .eq("id", invoiceId);
-
+  const { error } = await supabase.from("client_billing").update(patch).eq("id", billingId);
   if (error) return { error: error.message };
-
-  await recordAuditLog({
-    entity_type: "client_invoice",
-    entity_id: invoiceId,
-    action: "UPDATE",
-    changes: { after: { status } },
-    performed_by: user.id,
-  });
-
+  await recordAuditLog({ entity_type: "client_billing", entity_id: billingId, action: "UPDATE", changes: { after: patch }, performed_by: user.id });
   revalidatePath("/dashboard/client-invoices");
-  if (inv?.account_id) revalidatePath(`/dashboard/crm/${inv.account_id}`);
+  revalidatePath(`/dashboard/client-invoices/${billingId}`);
   return { success: true };
 }
 
-export async function recordClientPayment(formData: FormData) {
+export async function deleteClientBilling(billingId: string) {
   const supabase = await createClient();
-  const { user, error: authError } = await requireCapability("client_invoice.pay", supabase);
+  const { user, error: authError } = await requireCapability("client_invoice.write", supabase);
   if (authError || !user) return { error: authError || "Unauthorized" };
+  const { error } = await supabase.from("client_billing").update({ deleted_at: new Date().toISOString() }).eq("id", billingId);
+  if (error) return { error: error.message };
+  revalidatePath("/dashboard/client-invoices");
+  return { success: true };
+}
 
-  const invoice_id = formData.get("invoice_id") as string;
-  const amount_paid = Math.round(parseFloat(formData.get("amount_paid") as string) * 100) / 100;
-  const payment_date = formData.get("payment_date") as string;
-  const payment_type = formData.get("payment_type") as string;
-  const payment_method = formData.get("payment_method") as string;
-  const reference_number = (formData.get("reference_number") as string)?.trim() || null;
-  const notes = (formData.get("notes") as string)?.trim() || null;
+export async function importClientBilling(formData: FormData) {
+  const { user, error: roleError } = await requireCapability("client_invoice.write");
+  if (roleError || !user) return { error: roleError || "Unauthorized" };
+  const supabase = createServiceRoleClient();
 
-  if (!invoice_id) return { error: "Invoice ID is required." };
-  if (isNaN(amount_paid) || amount_paid <= 0) return { error: "A valid payment amount is required." };
-  if (!payment_date) return { error: "Payment date is required." };
-  if (payment_method !== "cash" && !reference_number) {
-    return { error: "Reference number is required for the selected payment method." };
+  const file = formData.get("file") as File | null;
+  const fallbackAccountId = (formData.get("account_id") as string)?.trim() || null;
+  if (!file) return { error: "No file provided." };
+  const buf = await file.arrayBuffer();
+  let rows: Record<string, any>[];
+  try {
+    rows = parseFile(buf) as any;
+  } catch {
+    return { error: "Failed to parse file. Use a valid CSV or Excel file." };
   }
+  if (!rows.length) return { error: "File is empty." };
 
-  const { data: invoice } = await supabase
-    .from("client_invoices")
-    .select("account_id, client_po_id, amount, status")
-    .eq("id", invoice_id)
-    .single();
+  // header -> field mapping for this workflow
+  const alias: Record<string, string> = {
+    "s/n": "__ignore",
+    "s/n.": "__ignore",
+    "invoice batch": "invoice_batch",
+    "batch": "invoice_batch",
+    "invoice number": "invoice_number",
+    "invoice no": "invoice_number",
+    "invoice no.": "invoice_number",
+    "# of nodes": "num_nodes",
+    "no of nodes": "num_nodes",
+    "nodes": "num_nodes",
+    "region": "region",
+    "date issued": "date_issued",
+    "date issued ": "date_issued",
+    "date endorsed to sky finance": "date_endorsed",
+    "date endorsed": "date_endorsed",
+    "amount due (in php) vat-ex": "amount_vat_ex",
+    "amount due vat-ex": "amount_vat_ex",
+    "vat-ex": "amount_vat_ex",
+    "amount due (in php) vat-inc": "amount_vat_inc",
+    "amount due vat-inc": "amount_vat_inc",
+    "vat-inc": "amount_vat_inc",
+    "due date": "due_date",
+    "estimated payment date": "est_payment_date",
+    "est payment date": "est_payment_date",
+    "number of days of delay": "__ignore",
+    "days of delay": "__ignore",
+    "status": "status",
+    "client": "account_name",
+    "company name": "account_name",
+  };
 
-  if (!invoice) return { error: "Invoice not found." };
+  let created = 0;
+  let updated = 0;
+  const errors: { row: number; reason: string }[] = [];
 
-  const { error: insertError } = await supabase
-    .from("client_payments")
-    .insert({
-      invoice_id,
-      amount_paid,
-      payment_date,
-      payment_type,
-      payment_method,
-      reference_number,
-      notes,
-      recorded_by: user.id,
-    });
-
-  if (insertError) return { error: insertError.message };
-
-  // Recalculate invoice status from all payments
-  const { data: allPayments } = await supabase
-    .from("client_payments")
-    .select("amount_paid")
-    .eq("invoice_id", invoice_id)
-    .is("deleted_at", null);
-
-  const totalPaid = (allPayments || []).reduce((sum, p) => sum + Number(p.amount_paid), 0);
-  const invoiceAmount = Number(invoice.amount);
-  let newStatus: string;
-  if (totalPaid >= invoiceAmount) {
-    newStatus = "paid";
-  } else if (totalPaid > 0) {
-    newStatus = "partially_paid";
-  } else {
-    newStatus = invoice.status;
-  }
-
-  await supabase
-    .from("client_invoices")
-    .update({ status: newStatus, updated_at: new Date().toISOString() })
-    .eq("id", invoice_id);
-
-  // Update client PO status based on all invoices for it
-  if (invoice.client_po_id) {
-    const { data: poInvoices } = await supabase
-      .from("client_invoices")
-      .select("amount, status")
-      .eq("client_po_id", invoice.client_po_id)
-      .is("deleted_at", null)
-      .neq("status", "cancelled");
-
-    const { data: clientPO } = await supabase
-      .from("client_purchase_orders")
-      .select("amount")
-      .eq("id", invoice.client_po_id)
-      .single();
-
-    if (poInvoices && clientPO) {
-      const totalBilled = poInvoices.reduce((sum, inv) => sum + Number(inv.amount), 0);
-      const allPaid = poInvoices.every((inv) => inv.status === "paid");
-      let poStatus = "received";
-      if (allPaid && totalBilled >= Number(clientPO.amount)) {
-        poStatus = "fully_billed";
-      } else if (totalBilled > 0) {
-        poStatus = "partially_billed";
+  for (let i = 0; i < rows.length; i++) {
+    const raw = rows[i] as Record<string, any>;
+    // normalize keys lower
+    const norm: Record<string, any> = {};
+    for (const [k, v] of Object.entries(raw)) {
+      const key = k.trim().toLowerCase().replace(/\s+/g, " ");
+      norm[key] = v;
+    }
+    const pick = (field: string) => {
+      for (const [k, v] of Object.entries(norm)) {
+        if ((alias[k] || "") === field) return v;
       }
-      await supabase
-        .from("client_purchase_orders")
-        .update({ status: poStatus, updated_at: new Date().toISOString() })
-        .eq("id", invoice.client_po_id);
+      return undefined;
+    };
+
+    try {
+      const invoice_number = String(pick("invoice_number") ?? "").trim();
+      if (!invoice_number) {
+        errors.push({ row: i + 2, reason: "Missing invoice number." });
+        continue;
+      }
+      // resolve account: by name if present, else fallback
+      let account_id: string | null = null;
+      const accountName = pick("account_name") != null ? String(pick("account_name")).trim() : "";
+      if (accountName) {
+        const { data: acct } = await supabase.from("crm_accounts").select("id").ilike("company_name", accountName).is("deleted_at", null).maybeSingle();
+        account_id = (acct as any)?.id || null;
+        if (!account_id) {
+          errors.push({ row: i + 2, reason: `Client not found: ${accountName}` });
+          continue;
+        }
+      } else {
+        account_id = fallbackAccountId;
+      }
+      if (!account_id) {
+        errors.push({ row: i + 2, reason: "Client is required (add a Client column or choose a target client)." });
+        continue;
+      }
+
+      const amount_vat_ex = parseNum(pick("amount_vat_ex")) ?? 0;
+      const amount_vat_inc = parseNum(pick("amount_vat_inc")) ?? amount_vat_ex;
+      const region = pick("region") != null ? String(pick("region")).trim() || null : null;
+      const num_nodes = pick("num_nodes") != null ? parseInt(String(pick("num_nodes")), 10) : null;
+      const invoice_batch = pick("invoice_batch") != null ? String(pick("invoice_batch")).trim() || null : null;
+      const date_issued = parseExcelDate(pick("date_issued"));
+      const date_endorsed = parseExcelDate(pick("date_endorsed"));
+      const due_date = parseExcelDate(pick("due_date"));
+      const est_payment_date = parseExcelDate(pick("est_payment_date"));
+      const statusRaw = String(pick("status") ?? "for_billing").trim();
+      let status = normalizeBillingStatus(statusRaw) || "for_billing";
+      // For Payment rows with a date_endorsed should land in pending_payment (auto)
+      if (status === "for_payment" && date_endorsed) status = "pending_payment" as any;
+
+      const { data: existing } = await supabase
+        .from("client_billing")
+        .select("id")
+        .eq("invoice_number", invoice_number)
+        .eq("account_id", account_id)
+        .is("deleted_at", null)
+        .maybeSingle();
+
+      const payload: Record<string, any> = {
+        account_id,
+        invoice_number,
+        invoice_batch,
+        num_nodes: isNaN(num_nodes as number) ? null : num_nodes,
+        region,
+        amount_vat_ex,
+        amount_vat_inc,
+        date_issued: date_issued || todayISO(),
+        date_endorsed,
+        due_date,
+        est_payment_date,
+        status,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (existing) {
+        const { error: upErr } = await supabase.from("client_billing").update(payload).eq("id", (existing as any).id);
+        if (upErr) errors.push({ row: i + 2, reason: upErr.message });
+        else updated++;
+      } else {
+        const { data: ins, error: insErr } = await supabase.from("client_billing").insert({ ...payload, created_by: user.id }).select("id").single();
+        if (insErr || !ins) errors.push({ row: i + 2, reason: insErr?.message || "Insert failed." });
+        else {
+          created++;
+          await supabase.from("client_billing_timeline").insert({
+            billing_id: (ins as any).id,
+            from_status: null,
+            to_status: status,
+            changed_by: user.id,
+            note: "Imported from spreadsheet",
+          });
+        }
+      }
+    } catch (e: any) {
+      errors.push({ row: i + 2, reason: e?.message || "Unexpected error" });
     }
   }
 
   await recordAuditLog({
-    entity_type: "client_payment",
-    entity_id: invoice_id,
+    entity_type: "client_billing",
+    entity_id: "bulk",
     action: "CREATE",
-    changes: { after: { amount_paid, payment_date, payment_type, payment_method } },
+    changes: { after: { import_summary: { created, updated, errors: errors.length } } },
     performed_by: user.id,
   });
-
   revalidatePath("/dashboard/client-invoices");
-  revalidatePath(`/dashboard/client-invoices/${invoice_id}`);
-  if (invoice.account_id) revalidatePath(`/dashboard/crm/${invoice.account_id}`);
-  return { success: true };
+  return { created, updated, errors, totalRows: rows.length };
 }
