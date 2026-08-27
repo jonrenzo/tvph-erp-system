@@ -157,7 +157,7 @@ async function main() {
   console.log(`Seed client_billing — ${specs.length} rows — ${wipe ? "WIPE first" : "upsert"}${dryRun ? " (dry-run)" : ""}\n`);
 
   const accounts = await ensureAccounts();
-  const projects = await ensureProjects(accounts.map((a) => a.id));
+  const projects = await ensureProjects(accounts.map((a: { id: string }) => a.id));
   const { data: profiles } = await supabase.from("profiles").select("id").limit(1);
   const createdBy = profiles?.[0]?.id ?? null;
 
