@@ -9,6 +9,7 @@ import { Suspense } from 'react';
 import TabbedNav from '@/components/dashboard/tabbed-nav';
 import VendorDetailHeader from '@/components/dashboard/vendors/vendor-detail-header';
 import { invoiceStatusLabel, invoiceStatusBadgeClasses } from '@/lib/invoices/status';
+import { hasCapability } from '@/lib/auth/permissions';
 
 export default function VendorDetailPage(props: { 
   params: Promise<{ id: string }>,
@@ -118,7 +119,7 @@ supabase
 
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <VendorDetailHeader vendor={vendor} />
+      <VendorDetailHeader vendor={vendor} canDelete={hasCapability(userRole, "vendor.delete")} />
 
       <TabbedNav
         defaultTab={tab}

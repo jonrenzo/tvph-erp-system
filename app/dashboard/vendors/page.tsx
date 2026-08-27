@@ -10,6 +10,7 @@ import { parsePage, pageRange } from "@/components/ui/pagination-utils";
 import { VendorsTableBody } from "@/components/dashboard/vendors/vendors-table-body";
 import { ImportExportButtons } from "@/components/dashboard/import-export-buttons";
 import { importVendors } from "@/app/dashboard/vendors/actions";
+import { getCurrentProfile, hasCapability } from "@/lib/auth/permissions";
 
 const VENDORS_PAGE_SIZE = 10;
 
@@ -81,6 +82,7 @@ async function VendorsContent({
   }
 
   const { data: vendors, error, count } = await query.range(from, to);
+  const { role } = await getCurrentProfile(supabase);
 
   return (
     <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
@@ -113,7 +115,7 @@ async function VendorsContent({
               <th className="px-4 py-3 font-semibold w-[7%] text-right">Actions</th>
             </tr>
           </thead>
-          <VendorsTableBody vendors={vendors} error={error} />
+          <VendorsTableBody vendors={vendors} error={error} canDelete={hasCapability(role, "vendor.delete")} />
         </table>
       </div>
 

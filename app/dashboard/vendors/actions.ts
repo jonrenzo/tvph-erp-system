@@ -788,6 +788,15 @@ export async function deleteVendor(vendorId: string) {
   const { user, error: authError } = await requireCapability("vendor.delete", supabase);
   if (authError || !user) return { error: authError || "Unauthorized." };
 
+  // Guard: block hard delete when vendor still has non-deleted POs/invoices linked
+  const [{ count: poCount }, { count: invCount }] = await Promise.all([
+    supabase.from("purchase_orders").select("id", { count: "exact", head: true }).eq("vendor_id", vendorId).is("deleted_at", null),
+    supabase.from("service_invoices").select("id", { count: "exact", head: true }).eq("vendor_id", vendorId).is("deleted_at", null),
+  ]);
+  if ((poCount ?? 0) > 0 || (invCount ?? 0) > 0) {
+    return { error: `Cannot delete: vendor has ${poCount ?? 0} purchase order(s) and ${invCount ?? 0} invoice(s) linked. Deactivate the vendor instead, or delete/reassign the linked records first.` };
+  }
+
   const { error } = await supabase.from("vendors").delete().eq("id", vendorId);
 
   if (error) return { error: error.message };

@@ -7,8 +7,9 @@ import { isVendorProfileComplete, getVendorMissingFields } from '@/utils/complet
 import { Tooltip } from '@/components/ui/tooltip'
 import { TOTAL_REQUIRED_DOCS } from '@/lib/reports/compliance'
 import { statusBadgeClasses } from '@/lib/ui/status-badge'
+import { DeleteVendorButton } from '@/components/dashboard/vendors/delete-vendor-button'
 
-export function VendorsTableBody({ vendors, error }: { vendors: any[] | null; error: any }) {
+export function VendorsTableBody({ vendors, error, canDelete }: { vendors: any[] | null; error: any; canDelete?: boolean }) {
   const router = useRouter()
 
   return (
@@ -146,12 +147,21 @@ className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-m
               })()}
             </td>
             <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-              <Link
-                href={`/dashboard/vendors/${vendor.id}`}
-                className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-slate-400 group-hover:text-primary group-hover:bg-primary/10 transition-colors"
-              >
-                <ChevronRight className="h-5 w-5" />
-              </Link>
+              <div className="flex items-center justify-end gap-1">
+                {canDelete && (
+                  <DeleteVendorButton
+                    vendorId={vendor.id}
+                    vendorName={vendor.name}
+                    onDeleted={() => router.refresh()}
+                  />
+                )}
+                <Link
+                  href={`/dashboard/vendors/${vendor.id}`}
+                  className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-slate-400 group-hover:text-primary group-hover:bg-primary/10 transition-colors"
+                >
+                  <ChevronRight className="h-5 w-5" />
+                </Link>
+              </div>
             </td>
           </tr>
         ))

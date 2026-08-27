@@ -7,9 +7,10 @@ import { ArrowLeft, FileText, CheckCircle2, XCircle, Edit2 } from "lucide-react"
 import { Tooltip } from "@/components/ui/tooltip";
 import { isVendorProfileComplete, getVendorMissingFields } from "@/utils/completeness";
 import GenerateLinkButton from "@/components/dashboard/vendors/generate-link-button";
+import { DeleteVendorButton } from "@/components/dashboard/vendors/delete-vendor-button";
 import { updateVendorStatus } from "@/app/dashboard/vendors/actions";
 
-export default function VendorDetailHeader({ vendor }: { vendor: any }) {
+export default function VendorDetailHeader({ vendor, canDelete }: { vendor: any; canDelete?: boolean }) {
   const [status, setStatus] = useState(vendor.status);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
@@ -71,6 +72,7 @@ export default function VendorDetailHeader({ vendor }: { vendor: any }) {
         </div>
       </div>
       <div className="flex items-center gap-3 md:ml-auto">
+        {canDelete && <DeleteVendorButton vendorId={vendor.id} vendorName={vendor.name} onDeleted={() => router.push("/dashboard/vendors")} />}
         <Link
           href={`/dashboard/vendors/${vendor.id}/edit`}
           className="inline-flex items-center gap-2 bg-white dark:bg-[#0a0a0a] border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm active:scale-95"
