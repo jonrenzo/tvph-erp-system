@@ -54,11 +54,14 @@ async function POEditorContent({
     ]);
 
   // Gate: mirrors the detail-page rules — originator may fix draft/pending POs;
-  // po.write holders may edit terms/T&C while a draft. Everything else bounces.
+  // po.write holders may edit terms/T&C while a draft. Placeholder legacy POs
+  // (issued, legacy, amount 0) stay editable so stubs can be completed.
   const isOriginator = !!currentUser && currentUser.id === po?.created_by;
-  const canEditDraft = isOriginator && ["draft", "pending_approval"].includes(po?.status ?? "");
+  const isPlaceholderLegacy = po?.source === 'legacy' && Number(po?.amount ?? 0) === 0;
+  const canEditLegacyPlaceholder = !!isPlaceholderLegacy && (isOriginator || hasCapability(currentRole, 'po.write'));
+  const canEditDraft = (isOriginator && ["draft", "pending_approval"].includes(po?.status ?? "")) || canEditLegacyPlaceholder;
   const canEditTerms = hasCapability(currentRole, "po.write");
-  const editable = canEditDraft || (canEditTerms && po?.status === "draft");
+  const editable = canEditDraft || (canEditTerms && po?.status === "draft") || canEditLegacyPlaceholder;
   if (!po || !editable) redirect(`/dashboard/purchase-orders/${params.id}`);
 
   const currencySymbol = po.currency === "USD" ? "$" : "₱";

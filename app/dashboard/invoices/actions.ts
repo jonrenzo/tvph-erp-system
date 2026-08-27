@@ -258,10 +258,10 @@ export async function createInvoice(prevState: any, formData: FormData) {
   let linkedPo: { id: string; amount: number; net_days?: number | null; project_id?: string | null; vendor_id: string } | null = null;
   let topCert: { percent_complete: number; id: string } | null = null;
 
-  // PO guards (accreditation + ceiling) — moved from payment_request flow, now required for invoices linked to PO. Applies to all POs including legacy.
+  // PO guards (accreditation + ceiling) — moved from payment_request flow, now required for invoices linked to PO.
   if (po_id) {
     const [{ data: po, error: poError }, { data: existingInvoices }, { data: cert }, { data: vendorDocs }] = await Promise.all([
-      supabase.from('purchase_orders').select('id, amount, net_days, project_id, vendor_id').eq('id', po_id).single(),
+      supabase.from('purchase_orders').select('id, amount, net_days, project_id, vendor_id, source').eq('id', po_id).single(),
       supabase.from('service_invoices').select('amount').eq('po_id', po_id).is('deleted_at', null),
       supabase.from('po_completion_certificates').select('id, percent_complete').eq('po_id', po_id).eq('status', 'approved').order('percent_complete', { ascending: false }).limit(1).maybeSingle(),
       supabase.from('vendor_documents').select('doc_type, status').eq('vendor_id', vendor_id).in('doc_type', PAYMENT_REQUIRED_DOC_TYPES).is('archived_at', null),
@@ -270,25 +270,34 @@ export async function createInvoice(prevState: any, formData: FormData) {
     if (poError || !po) return { error: 'Linked purchase order could not be loaded.' };
     if (po.vendor_id !== vendor_id) return { error: 'Invoice vendor does not match the PO vendor.' };
 
-    linkedPo = { id: po.id, amount: Number(po.amount), net_days: po.net_days, project_id: po.project_id, vendor_id: po.vendor_id };
+    const isPlaceholderLegacy = (po as any).source === 'legacy' && Number((po as any).amount) === 0;
+    linkedPo = { id: po.id, amount: isPlaceholderLegacy ? parseFloat(amount) : Number(po.amount), net_days: po.net_days, project_id: po.project_id, vendor_id: po.vendor_id };
     topCert = cert ? { percent_complete: Number(cert.percent_complete), id: cert.id } : null;
 
-    // Accreditation gate (all POs, including legacy — per new workflow)
-    const missingRequiredDocs = getMissingPaymentRequiredDocTypes(vendorDocs || []);
-    if (missingRequiredDocs.length > 0) {
-      return {
-        error: `Blocked: required accreditation document${missingRequiredDocs.length > 1 ? 's' : ''} ${missingRequiredDocs.map((t) => docTypeLabel(t)).join(', ')} ${missingRequiredDocs.length > 1 ? 'are' : 'is'} missing or not submitted. Complete vendor accreditation before invoicing this PO.`,
-      };
+    // Accreditation gate — legacy placeholder bypasses so po_number+vendor is enough to enroll
+    if (!isPlaceholderLegacy) {
+      const missingRequiredDocs = getMissingPaymentRequiredDocTypes(vendorDocs || []);
+      if (missingRequiredDocs.length > 0) {
+        return {
+          error: `Blocked: required accreditation document${missingRequiredDocs.length > 1 ? 's' : ''} ${missingRequiredDocs.map((t) => docTypeLabel(t)).join(', ')} ${missingRequiredDocs.length > 1 ? 'are' : 'is'} missing or not submitted. Complete vendor accreditation before invoicing this PO.`,
+        };
+      }
     }
 
-    const poAmount = Number(po.amount);
-    const ceiling = topCert ? (topCert.percent_complete / 100) * poAmount : poAmount;
-    const totalExisting = existingInvoices?.reduce((sum, inv) => sum + Number(inv.amount), 0) ?? 0;
-    const newTotal = totalExisting + parseFloat(amount);
-    if (newTotal > ceiling) {
-      const remaining = Math.max(0, ceiling - totalExisting);
-      const ceilingLabel = topCert ? `${topCert.percent_complete}% approved completion (₱${ceiling.toLocaleString()})` : `PO limit (₱${poAmount.toLocaleString()})`;
-      return { error: `Invoice amount exceeds ${ceilingLabel}. Available to bill: ₱${remaining.toLocaleString()}.` };
+    if (!isPlaceholderLegacy) {
+      const poAmount = Number(po.amount);
+      const ceiling = topCert ? (topCert.percent_complete / 100) * poAmount : poAmount;
+      const totalExisting = existingInvoices?.reduce((sum, inv) => sum + Number(inv.amount), 0) ?? 0;
+      const newTotal = totalExisting + parseFloat(amount);
+      if (newTotal > ceiling) {
+        const remaining = Math.max(0, ceiling - totalExisting);
+        const ceilingLabel = topCert ? `${topCert.percent_complete}% approved completion (₱${ceiling.toLocaleString()})` : `PO limit (₱${poAmount.toLocaleString()})`;
+        return { error: `Invoice amount exceeds ${ceilingLabel}. Available to bill: ₱${remaining.toLocaleString()}.` };
+      }
+    }
+    // ponytail: self-heal placeholder amount from first invoice so later invoices have a real ceiling
+    if (isPlaceholderLegacy) {
+      await supabase.from('purchase_orders').update({ amount: parseFloat(amount), updated_at: new Date().toISOString() } as any).eq('id', po.id).eq('amount', 0);
     }
   }
 

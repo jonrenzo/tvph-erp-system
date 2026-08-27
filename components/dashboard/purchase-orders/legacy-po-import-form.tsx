@@ -147,12 +147,11 @@ export function LegacyPoImportForm({ vendors }: LegacyPoImportFormProps) {
           <div>
             <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">
               <Calendar className="h-4 w-4 inline -mt-0.5 mr-1.5" />
-              Issued Date
+              Issued Date <span className="font-normal text-slate-400">(defaults to today if empty)</span>
             </label>
             <input
               name="issued_date"
               type="date"
-              required
               className={inputClass}
               value={issuedDate}
               onChange={(e) => setIssuedDate(e.target.value)}
@@ -161,20 +160,20 @@ export function LegacyPoImportForm({ vendors }: LegacyPoImportFormProps) {
           <div>
             <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">
               <CircleDollarSign className="h-4 w-4 inline -mt-0.5 mr-1.5" />
-              Total Amount
+              Total Amount <span className="font-normal text-slate-400">(optional for placeholder)</span>
             </label>
             <input
               name="amount"
               type="number"
-              required
               min="0"
               step="0.01"
+              placeholder="Leave 0 if unknown — first invoice will set it"
               className={inputClass}
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
             />
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Read from the PDF automatically — it caps what can be invoiced against this PO.
+              {amount ? 'Caps what can be invoiced against this PO.' : 'Placeholder will use the first invoice amount as the ceiling. You can edit this later.'}
             </p>
           </div>
           <div>
@@ -210,18 +209,17 @@ export function LegacyPoImportForm({ vendors }: LegacyPoImportFormProps) {
         <div className="p-6">
           <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">
             <FileUp className="h-4 w-4 inline -mt-0.5 mr-1.5" />
-            PO Document (PDF)
+            PO Document (PDF) <span className="font-normal text-slate-400">(optional for placeholder)</span>
           </label>
           <input
             name="file"
             type="file"
             accept="application/pdf,.pdf"
-            required
             className="block w-full text-sm text-slate-500 dark:text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-primary file:text-white file:font-medium file:cursor-pointer hover:file:bg-primary/90"
             onChange={(e) => setFile(e.target.files?.[0] || null)}
           />
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            The uploaded PDF becomes the PO&apos;s document — it should look like the PDF this system generates.
+            {file ? "The uploaded PDF becomes the PO's document." : "Leave empty to create a placeholder with just PO number + vendor — you can link the invoice now and upload the scan or edit the PO later."}
           </p>
           <button
             type="button"

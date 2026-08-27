@@ -25,6 +25,7 @@ import {
   Eye,
   Wallet,
   PenLine,
+  AlertTriangle,
 } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
@@ -163,10 +164,13 @@ async function PODetailContent({ paramsPromise, searchParamsPromise }: { paramsP
 
   // Originator-only draft editing: only the user who drafted the PO can fix it
   // while it is still a draft or pending approval. Editing happens on the
-  // dedicated /editor page — this page is read-only.
+  // dedicated /editor page — this page is read-only. Legacy placeholder POs
+  // (amount 0, no scan) remain editable after issued so stubs can be completed.
   const isOriginator = !!currentUser && currentUser.id === po.created_by;
-  const canEditDraft = isOriginator && ["draft", "pending_approval"].includes(po.status);
-  const canEditAny = canEditDraft || (canEditTerms && po.status === "draft");
+  const isPlaceholderLegacy = isLegacy && Number(po.amount) === 0;
+  const canEditLegacyPlaceholder = isPlaceholderLegacy && (isOriginator || canEditTerms);
+  const canEditDraft = (isOriginator && ["draft", "pending_approval"].includes(po.status)) || canEditLegacyPlaceholder;
+  const canEditAny = canEditDraft || (canEditTerms && po.status === "draft") || canEditLegacyPlaceholder;
   const currencySymbol = po.currency === "USD" ? "$" : "₱";
 
   const invoiceIds = invoices?.map((i) => i.id) || [];
@@ -406,6 +410,11 @@ async function PODetailContent({ paramsPromise, searchParamsPromise }: { paramsP
                   LEGACY
                 </span>
               )}
+              {isPlaceholderLegacy && (
+                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border border-amber-300 dark:border-amber-700 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300">
+                  PLACEHOLDER — NO SCAN
+                </span>
+              )}
               {dpAmount > 0 && (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800/50 text-sm font-bold">
                   DP — ₱{dpAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
@@ -493,6 +502,24 @@ async function PODetailContent({ paramsPromise, searchParamsPromise }: { paramsP
           )}
         </div>
       </div>
+
+      {/* Placeholder legacy banner — created with only PO number + vendor */}
+      {isPlaceholderLegacy && (
+        <div className="flex items-start gap-3 p-4 rounded-2xl bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/50">
+          <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Placeholder legacy PO — no scan yet</p>
+            <p className="text-xs text-amber-600/80 dark:text-amber-400/60 mt-1">
+              Created with only PO number and vendor. You can link service invoices now. The amount will update from the first invoice. Use Edit PO to fill issued date, amount, or upload the scan later.
+            </p>
+            {canEditAny && (
+              <Link href={`/dashboard/purchase-orders/${po.id}/editor`} className="inline-flex items-center gap-1.5 mt-2 text-xs font-bold text-amber-700 dark:text-amber-300 hover:underline">
+                <Pencil className="h-3 w-3" /> Edit PO
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Email-failed banner — the PO was issued but the vendor email didn't send */}
       {lastPoEmail?.status === "failed" && (

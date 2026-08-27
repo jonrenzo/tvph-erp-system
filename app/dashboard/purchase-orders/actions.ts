@@ -465,19 +465,28 @@ export async function updatePOTermsAndConditions(poId: string, formData: FormDat
 
 // ── Originator-only draft editing ────────────────────────────────────────
 // The user who drafted the PO (created_by) may fix human errors while the PO
-// is still a draft or pending approval. No other role can edit these fields.
+// is still a draft or pending approval. Legacy placeholder POs (source='legacy'
+// + amount 0 + no artifact) are also editable after creation so a stub with
+// only po_number+vendor can be completed. Other roles with po.write can edit
+// those placeholders too.
 async function assertOriginatorCanEdit(poId: string) {
   const supabase = await createClient();
-  const { user, error: authError } = await getCurrentProfile(supabase);
+  const { user, role, error: authError } = await getCurrentProfile(supabase);
   if (authError || !user) return { error: authError || 'Unauthorized' };
 
   const { data: po } = await supabase
     .from('purchase_orders')
-    .select('id, created_by, status, amount, dp_amount, description, due_date')
+    .select('id, created_by, status, amount, dp_amount, description, due_date, source')
     .eq('id', poId)
     .single();
 
   if (!po) return { error: 'Purchase order not found.' };
+  const isLegacyPlaceholder = (po as any).source === 'legacy' && Number((po as any).amount) === 0;
+  if (isLegacyPlaceholder) {
+    const canEditLegacy = po.created_by === user.id || hasCapability(role, 'po.write');
+    if (!canEditLegacy) return { error: 'Only the creator or a user with PO write access can edit this placeholder legacy PO.' };
+    return { user, po, supabase };
+  }
   if (po.created_by !== user.id) return { error: 'Only the originator who drafted this PO can edit it.' };
   if (po.status !== 'draft' && po.status !== 'pending_approval') {
     return { error: 'This PO can only be edited while it is a draft or pending approval.' };
@@ -2142,22 +2151,26 @@ export async function importLegacyPurchaseOrder(prevState: any, formData: FormDa
 
   const vendor_id = String(formData.get('vendor_id') || '').trim();
   const po_number = String(formData.get('po_number') || '').trim();
-  const issued_date = String(formData.get('issued_date') || '').trim();
+  const issued_date_raw = String(formData.get('issued_date') || '').trim();
+  const issued_date = issued_date_raw && !Number.isNaN(Date.parse(issued_date_raw)) ? issued_date_raw : new Date().toISOString().slice(0, 10);
   const currency = String(formData.get('currency') || 'PHP').trim();
   const legacy_project = String(formData.get('legacy_project') || '').trim() || null;
-  const amount = Number(formData.get('amount'));
+  const rawAmount = formData.get('amount');
+  const parsedAmount = rawAmount != null && String(rawAmount).trim() !== '' ? Number(rawAmount) : 0;
+  // ponytail: placeholder legacy PO — only po_number+vendor required, amount/file default to stub
+  const amount = Number.isFinite(parsedAmount) && parsedAmount > 0 ? parsedAmount : 0;
   const file = formData.get('file') as File | null;
+  const hasFile = !!file && file.size > 0;
 
   if (!vendor_id) return { error: 'Vendor is required.' };
   if (!po_number) return { error: 'PO number is required.' };
-  if (!issued_date || Number.isNaN(Date.parse(issued_date))) return { error: 'A valid issued date is required.' };
-  if (!Number.isFinite(amount) || amount <= 0) return { error: 'Total amount must be greater than zero.' };
   if (currency !== 'PHP' && currency !== 'USD') return { error: 'Currency must be PHP or USD.' };
-  if (!file || file.size === 0) return { error: 'Upload the legacy PO PDF.' };
-  if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-    return { error: 'The document must be a PDF.' };
+  if (hasFile) {
+    if (file!.type !== 'application/pdf' && !file!.name.toLowerCase().endsWith('.pdf')) {
+      return { error: 'The document must be a PDF.' };
+    }
+    if (file!.size > 10 * 1024 * 1024) return { error: 'The PDF must be 10 MB or smaller.' };
   }
-  if (file.size > 10 * 1024 * 1024) return { error: 'The PDF must be 10 MB or smaller.' };
 
   const { data: existing } = await supabase
     .from('purchase_orders')
@@ -2192,44 +2205,47 @@ export async function importLegacyPurchaseOrder(prevState: any, formData: FormDa
     if (rpcError) console.error('ensure_po_sequence failed:', rpcError);
   }
 
-  const filePath = `legacy/${newPO.id}/${po_number}.pdf`;
-  const checksum_sha256 = createHash('sha256').update(Buffer.from(await file.arrayBuffer())).digest('hex');
-  const { error: uploadError } = await supabase.storage
-    .from('po-artifacts')
-    .upload(filePath, file, { contentType: 'application/pdf', upsert: false });
-  if (uploadError) {
-    await supabase.from('purchase_orders').delete().eq('id', newPO.id);
-    return { error: uploadError.message };
-  }
-  const { data: { publicUrl } } = supabase.storage.from('po-artifacts').getPublicUrl(filePath);
+  // ponytail: placeholder has no artifact — amounts self-heal on first invoice; file path only when uploaded
+  if (hasFile) {
+    const filePath = `legacy/${newPO.id}/${po_number}.pdf`;
+    const checksum_sha256 = createHash('sha256').update(Buffer.from(await file!.arrayBuffer())).digest('hex');
+    const { error: uploadError } = await supabase.storage
+      .from('po-artifacts')
+      .upload(filePath, file!, { contentType: 'application/pdf', upsert: false });
+    if (uploadError) {
+      await supabase.from('purchase_orders').delete().eq('id', newPO.id);
+      return { error: uploadError.message };
+    }
+    const { data: { publicUrl } } = supabase.storage.from('po-artifacts').getPublicUrl(filePath);
 
-  const { error: artifactError } = await supabase.from('purchase_order_artifacts').insert({
-    po_id: newPO.id,
-    artifact_type: 'issued_pdf',
-    storage_bucket: 'po-artifacts',
-    storage_path: filePath,
-    file_url: publicUrl,
-    content_type: 'application/pdf',
-    file_size: file.size,
-    checksum_sha256,
-    generated_by: user.id,
-  });
-  if (artifactError) {
-    await supabase.storage.from('po-artifacts').remove([filePath]);
-    await supabase.from('purchase_orders').delete().eq('id', newPO.id);
-    return { error: artifactError.message };
+    const { error: artifactError } = await supabase.from('purchase_order_artifacts').insert({
+      po_id: newPO.id,
+      artifact_type: 'issued_pdf',
+      storage_bucket: 'po-artifacts',
+      storage_path: filePath,
+      file_url: publicUrl,
+      content_type: 'application/pdf',
+      file_size: file!.size,
+      checksum_sha256,
+      generated_by: user.id,
+    });
+    if (artifactError) {
+      await supabase.storage.from('po-artifacts').remove([filePath]);
+      await supabase.from('purchase_orders').delete().eq('id', newPO.id);
+      return { error: artifactError.message };
+    }
   }
 
   await recordAuditLog({
     entity_type: 'purchase_order',
     entity_id: newPO.id,
     action: 'CREATE',
-    changes: { after: { vendor_id, po_number, amount, status: 'issued', source: 'legacy', currency, legacy_project } },
+    changes: { after: { vendor_id, po_number, amount, issued_date, status: 'issued', source: 'legacy', currency, legacy_project, has_artifact: hasFile } },
     performed_by: user.id,
   });
 
   revalidatePath('/dashboard/purchase-orders');
-  return { id: newPO.id, success: true, message: `Legacy PO ${newPO.po_number} imported and marked issued.` };
+  return { id: newPO.id, success: true, message: hasFile ? `Legacy PO ${newPO.po_number} imported and marked issued.` : `Legacy PO ${newPO.po_number} created as placeholder (no scan) — you can edit it and link invoices now.` };
 }
 
 export async function extractLegacyPoDetails(prevState: any, formData: FormData) {
