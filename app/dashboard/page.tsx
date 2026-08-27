@@ -4,6 +4,9 @@ import { computeComplianceSummary } from "@/lib/reports/compliance";
 import { EMPTY_DASHBOARD_FINANCIALS, getDashboardFinancials, getProjectProgress } from "@/lib/dashboard/queries";
 import { ProjectProgressList } from "@/components/dashboard/project-progress-list";
 import { TrendsChartLazy } from "@/components/dashboard/trends-chart-lazy";
+import { AttentionLane, type LaneItem } from "@/components/dashboard/command-center/attention-lane";
+import { KpiBento, KpiBentoItem } from "@/components/dashboard/command-center/kpi-bento";
+import { CountUp } from "@/components/dashboard/command-center/count-up";
 import {
   Building2,
   FileText,
@@ -15,8 +18,6 @@ import {
   Clock,
   History,
   ChevronDown,
-  AlertCircle,
-  CalendarClock,
   Plus,
   FolderKanban,
   ShieldCheck,
@@ -26,7 +27,7 @@ import { Suspense } from "react";
 
 export default function DashboardPage() {
   return (
-    <div className="p-6 lg:p-8 space-y-8 animate-in fade-in duration-700">
+    <div className="p-6 lg:p-8 space-y-8">
       <Suspense fallback={<DashboardSkeleton />}>
         <DashboardContent />
       </Suspense>
@@ -35,37 +36,6 @@ export default function DashboardPage() {
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
-
-function UrgencyBadge({ days }: { days: number }) {
-  if (days <= 2) {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800">
-        <AlertCircle className="h-2.5 w-2.5" />
-        {days === 0 ? "Today" : days === 1 ? "Tomorrow" : `${days}d`}
-      </span>
-    );
-  }
-  if (days <= 5) {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
-        <Clock className="h-2.5 w-2.5" />
-        {days}d
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-yellow-50 dark:bg-yellow-950/40 text-yellow-600 dark:text-yellow-500 border border-yellow-200 dark:border-yellow-800">
-      <CalendarClock className="h-2.5 w-2.5" />
-      {days}d
-    </span>
-  );
-}
-
-function urgencyRowClass(days: number) {
-  if (days <= 2) return "border-l-4 border-l-red-500 bg-red-50/30 dark:bg-red-950/10";
-  if (days <= 5) return "border-l-4 border-l-amber-500 bg-amber-50/30 dark:bg-amber-950/10";
-  return "border-l-4 border-l-yellow-400 bg-yellow-50/20 dark:bg-yellow-950/10";
-}
 
 function StatChip({
   label, value, color,
@@ -86,31 +56,31 @@ function StatChip({
 }
 
 function KpiCard({
-  label, value, description, icon, accent, link,
+  label, value, description, icon, accent, link, hero,
 }: {
-  label: string; value: string | number; description: string;
-  icon: React.ReactNode; accent: string; link: string;
+  label: string; value: React.ReactNode; description: string;
+  icon: React.ReactNode; accent: string; link: string; hero?: boolean;
 }) {
   return (
-    <a
+    <Link
       href={link}
-      className="group flex items-center gap-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#071F15] px-5 py-4 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
+      className={`group flex items-center gap-4 rounded-2xl px-5 py-4 glass-card transition-colors hover:border-slate-300/30 dark:hover:border-white/10 active:scale-[0.97] duration-100 ${hero ? "lg:py-6" : ""}`}
     >
-      <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 group-hover:bg-primary/10 transition-colors shrink-0">
+      <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-white/5 group-hover:bg-primary/10 transition-colors shrink-0">
         {icon}
       </div>
       <div className="min-w-0">
-        <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">{label}</p>
-        <p className="text-lg font-bold text-slate-900 dark:text-white leading-tight">{value}</p>
+        <p className="text-[11px] font-medium tracking-wide text-slate-500 dark:text-slate-400 truncate">{label}</p>
+        <p className={`font-bold tracking-tight text-slate-900 dark:text-white leading-tight tabular-nums truncate ${hero ? "text-[22px]" : "text-lg"}`}>{value}</p>
         <p className={`text-[10px] font-medium ${accent} truncate`}>{description}</p>
       </div>
-    </a>
+    </Link>
   );
 }
 
 function SectionCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#071F15] overflow-hidden shadow-sm ${className}`}>
+    <div className={`glass-card rounded-2xl overflow-hidden ${className}`}>
       {children}
     </div>
   );
@@ -122,12 +92,12 @@ function CardHeader({
   icon: React.ReactNode; title: string; subtitle?: string; badge?: React.ReactNode;
 }) {
   return (
-    <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+    <div className="px-5 py-4 border-b border-slate-100 dark:border-white/10 flex items-center justify-between">
       <div className="flex items-center gap-3">
-        <div className="p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800/50">{icon}</div>
+        <div className="p-1.5 rounded-lg bg-slate-50 dark:bg-white/5">{icon}</div>
         <div>
-          <h2 className="text-sm font-bold text-slate-900 dark:text-white">{title}</h2>
-          {subtitle && <p className="text-[10px] text-slate-400">{subtitle}</p>}
+          <h2 className="text-sm font-bold tracking-tight text-slate-900 dark:text-white">{title}</h2>
+          {subtitle && <p className="text-[10px] leading-none text-slate-400">{subtitle}</p>}
         </div>
       </div>
       {badge}
@@ -183,7 +153,7 @@ export async function DashboardContent() {
       ? supabase.from("service_invoices").select("id, amount, due_date, vendors(name)").neq("status", "paid").is("deleted_at", null).gte("due_date", todayStr).lte("due_date", fourteenDayStr).order("due_date", { ascending: true })
       : Promise.resolve({ data: [] }),
     canOps || isAdminUp
-      ? supabase.from("purchase_orders")      .select("id, po_number, description, amount, due_date, vendors(name)").in("status", ["issued", "pending_signature", "signed_received", "signed", "partially_paid"]).is("deleted_at", null).gte("due_date", todayStr).lte("due_date", fourteenDayStr).order("due_date", { ascending: true })
+      ? supabase.from("purchase_orders").select("id, po_number, description, amount, due_date, vendors(name)").in("status", ["issued", "pending_signature", "signed_received", "signed", "partially_paid"]).is("deleted_at", null).gte("due_date", todayStr).lte("due_date", fourteenDayStr).order("due_date", { ascending: true })
       : Promise.resolve({ data: [] }),
     canAudit
       ? supabase.from("audit_logs").select("id, action, entity_type, created_at, profiles(full_name)").order("created_at", { ascending: false }).limit(5)
@@ -211,29 +181,51 @@ export async function DashboardContent() {
 
   const { apPaidThisMonth, apOverdue, arCollectedThisMonth, arOutstanding, arOverdue, clientTotalPaid } = financials;
   const apSettledPct = (totalPaid + outstandingLiability) > 0 ? (totalPaid / (totalPaid + outstandingLiability)) * 100 : 0;
-
   const arSettledPct = (clientTotalPaid + arOutstanding) > 0 ? (clientTotalPaid / (clientTotalPaid + arOutstanding)) * 100 : 0;
 
   const compliance = computeComplianceSummary(vendorsForComplianceResult?.data as any);
-  const nearDueInvoices = nearDueInvoicesResult?.data ?? [];
-  const nearDuePOs = nearDuePOsResult?.data ?? [];
+  const nearDueInvoices = (nearDueInvoicesResult?.data ?? []) as any[];
+  const nearDuePOs = (nearDuePOsResult?.data ?? []) as any[];
   const recentLogs = recentLogsResult?.data ?? [];
   const projectProgress = projectProgressResult ?? [];
   const monthlyTrends = financials.monthlyTrends;
 
-  const showAttentionStrip = canOps || canFinance || isAdminUp;
   const showFinancePanel = canFinance;
   const showTrends = (canFinance || isAdminUp) && monthlyTrends.length > 0;
+
+  // Fused lane items, sorted by urgency
+  const laneItems: LaneItem[] = [
+    ...nearDueInvoices.map((inv: any) => ({
+      id: inv.id,
+      href: `/dashboard/invoices/${inv.id}`,
+      vendorName: inv.vendors?.name ?? "—",
+      label: "Invoice",
+      amount: Number(inv.amount),
+      dueDate: inv.due_date,
+      days: daysUntil(inv.due_date),
+      type: "invoice" as const,
+    })),
+    ...nearDuePOs.map((po: any) => ({
+      id: po.id,
+      href: `/dashboard/purchase-orders/${po.id}`,
+      vendorName: po.vendors?.name ?? "—",
+      label: po.po_number + (po.description ? ` · ${po.description}` : ""),
+      amount: Number(po.amount),
+      dueDate: po.due_date,
+      days: daysUntil(po.due_date),
+      type: "po" as const,
+    })),
+  ];
 
   return (
     <>
       {/* ── HEADER + QUICK ACTIONS ── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="font-plus-jakarta text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
+          <h1 className="font-plus-jakarta text-[32px] font-bold tracking-[-0.03em] leading-none text-slate-900 dark:text-white">
             Command Center
           </h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-1">
+          <p className="text-[13px] leading-5 text-slate-500 dark:text-slate-400 mt-2">
             Welcome back. Here is the operational pulse of TelcoVantage.
           </p>
         </div>
@@ -241,7 +233,7 @@ export async function DashboardContent() {
           {canOps && (
             <Link
               href="/dashboard/purchase-orders/new"
-              className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-lg shadow-primary/20"
+              className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 active:scale-[0.97] text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors shadow-sm"
             >
               <Plus className="h-4 w-4" />
               New PO
@@ -250,7 +242,7 @@ export async function DashboardContent() {
           {canFinance && (
             <Link
               href="/dashboard/invoices/new"
-              className="inline-flex items-center gap-2 bg-white dark:bg-[#0a0a0a] border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm"
+              className="inline-flex items-center gap-2 glass-card hover:bg-white/80 dark:hover:bg-white/10 active:scale-[0.97] text-slate-700 dark:text-slate-300 px-4 py-2 rounded-xl text-sm font-medium transition-all"
             >
               <FileText className="h-4 w-4" />
               Record Invoice
@@ -259,172 +251,87 @@ export async function DashboardContent() {
         </div>
       </div>
 
-      {/* ── ZONE 1: ATTENTION STRIP ── */}
-      {showAttentionStrip && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Near-Due Invoices */}
-          {(canFinance || isAdminUp) && (
-            <SectionCard>
-              <CardHeader
-                icon={<AlertCircle className="h-4 w-4 text-red-500" />}
-                title="Near-Due Invoices"
-                subtitle="Within 14 days"
-                badge={
-                  <span className="inline-flex items-center justify-center min-w-[1.5rem] h-6 px-2 rounded-full text-[11px] font-bold bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400">
-                    {nearDueInvoices.length}
-                  </span>
-                }
-              />
-              {nearDueInvoices.length === 0 ? (
-                <div className="px-5 py-10 text-center text-slate-400 text-sm">
-                  No invoices due within 14 days.
-                </div>
-              ) : (
-                <div className="divide-y divide-slate-50 dark:divide-slate-800/40">
-                  <div className="px-4 py-2 grid grid-cols-[1fr_auto_auto_auto] gap-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                    <span>Vendor</span><span className="text-right">Amount</span><span className="text-right">Due Date</span><span className="text-right">Left</span>
-                  </div>
-                  {nearDueInvoices.map((inv: any) => {
-                    const days = daysUntil(inv.due_date);
-                    return (
-                      <Link
-                        key={inv.id}
-                        href={`/dashboard/invoices/${inv.id}`}
-                        className={`px-4 py-3 grid grid-cols-[1fr_auto_auto_auto] gap-3 items-center text-sm transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-800/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-md ${urgencyRowClass(days)}`}
-                      >
-                        <span className="font-medium text-slate-800 dark:text-slate-200 truncate">{inv.vendors?.name ?? "—"}</span>
-                        <span className="text-right font-mono text-xs text-slate-700 dark:text-slate-300 tabular-nums">₱{Number(inv.amount).toLocaleString()}</span>
-                        <span className="text-right text-xs text-slate-500 dark:text-slate-400 tabular-nums">{inv.due_date}</span>
-                        <UrgencyBadge days={days} />
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-              <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800">
-                <Link href="/dashboard/invoices" className="text-xs font-bold text-primary hover:underline flex items-center gap-1">
-                  View all invoices <ArrowUpRight className="h-3 w-3" />
-                </Link>
-              </div>
-            </SectionCard>
-          )}
+      {/* ── FUSED ATTENTION LANE (collapses when empty) ── */}
+      <AttentionLane items={laneItems} />
 
-          {/* Near-Due POs */}
-          {(canOps || isAdminUp) && (
-            <SectionCard>
-              <CardHeader
-                icon={<CalendarClock className="h-4 w-4 text-amber-500" />}
-                title="Near-Due Purchase Orders"
-                subtitle="Within 14 days"
-                badge={
-                  <span className="inline-flex items-center justify-center min-w-[1.5rem] h-6 px-2 rounded-full text-[11px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400">
-                    {nearDuePOs.length}
-                  </span>
-                }
-              />
-              {nearDuePOs.length === 0 ? (
-                <div className="px-5 py-10 text-center text-slate-400 text-sm">
-                  No purchase orders due within 14 days.
-                </div>
-              ) : (
-                <div className="divide-y divide-slate-50 dark:divide-slate-800/40">
-                  <div className="px-4 py-2 grid grid-cols-[auto_1fr_1fr_auto_auto_auto] gap-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                    <span>PO #</span><span>Vendor</span><span>Description</span><span className="text-right">Amount</span><span className="text-right">Due Date</span><span className="text-right">Left</span>
-                  </div>
-                  {nearDuePOs.map((po: any) => {
-                    const days = daysUntil(po.due_date);
-                    return (
-                      <Link
-                        key={po.id}
-                        href={`/dashboard/purchase-orders/${po.id}`}
-                        className={`px-4 py-3 grid grid-cols-[auto_1fr_1fr_auto_auto_auto] gap-3 items-center text-sm transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-800/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-md ${urgencyRowClass(days)}`}
-                      >
-                        <span className="font-mono text-xs font-medium text-slate-700 dark:text-slate-300">{po.po_number}</span>
-                        <span className="font-medium text-slate-800 dark:text-slate-200 truncate">{po.vendors?.name ?? "—"}</span>
-                        <span className="text-xs text-slate-500 dark:text-slate-400 truncate">{po.description ?? "—"}</span>
-                        <span className="text-right font-mono text-xs text-slate-700 dark:text-slate-300 tabular-nums">₱{Number(po.amount).toLocaleString()}</span>
-                        <span className="text-right text-xs text-slate-500 dark:text-slate-400 tabular-nums">{po.due_date}</span>
-                        <UrgencyBadge days={days} />
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-              <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800">
-                <Link href="/dashboard/purchase-orders" className="text-xs font-bold text-primary hover:underline flex items-center gap-1">
-                  View all POs <ArrowUpRight className="h-3 w-3" />
-                </Link>
-              </div>
-            </SectionCard>
-          )}
-        </div>
-      )}
-
-      {/* ── ZONE 2: KPI ROW ── */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* ── KPI BENTO: liability is hero (2 cols) ── */}
+      <KpiBento>
         {canFinance && (
-          <KpiCard
-            label="Current Liability"
-            value={`₱${outstandingLiability.toLocaleString()}`}
-            description="Total unpaid invoices"
-            icon={<CreditCard className="h-4 w-4 text-amber-500" />}
-            accent="text-amber-600 dark:text-amber-400"
-            link="/dashboard/invoices"
-          />
+          <KpiBentoItem hero>
+            <KpiCard
+              hero
+              label="Current Liability"
+              value={<CountUp value={outstandingLiability} prefix="₱" />}
+              description="Total unpaid invoices"
+              icon={<CreditCard className="h-4 w-4 text-amber-500" />}
+              accent="text-amber-600 dark:text-amber-400"
+              link="/dashboard/invoices"
+            />
+          </KpiBentoItem>
         )}
         {(canOps || isAdminUp) && (
-          <KpiCard
-            label="Active POs"
-            value={activePOsResult.count ?? 0}
-            description={`₱${totalPOCommitment.toLocaleString()} committed`}
-            icon={<FileText className="h-4 w-4 text-blue-500" />}
-            accent="text-blue-600 dark:text-blue-400"
-            link="/dashboard/purchase-orders"
-          />
+          <KpiBentoItem>
+            <KpiCard
+              label="Active POs"
+              value={<CountUp value={activePOsResult.count ?? 0} />}
+              description={`₱${totalPOCommitment.toLocaleString()} committed`}
+              icon={<FileText className="h-4 w-4 text-blue-500" />}
+              accent="text-blue-600 dark:text-blue-400"
+              link="/dashboard/purchase-orders"
+            />
+          </KpiBentoItem>
         )}
         {(canOps || isAdminUp) && (
-          <KpiCard
-            label="Pending Vendors"
-            value={pendingVendors ?? 0}
-            description="Awaiting accreditation"
-            icon={<Building2 className="h-4 w-4 text-emerald-500" />}
-            accent="text-emerald-600 dark:text-emerald-400"
-            link="/dashboard/vendors"
-          />
+          <KpiBentoItem>
+            <KpiCard
+              label="Pending Vendors"
+              value={<CountUp value={pendingVendors ?? 0} />}
+              description="Awaiting accreditation"
+              icon={<Building2 className="h-4 w-4 text-emerald-500" />}
+              accent="text-emerald-600 dark:text-emerald-400"
+              link="/dashboard/vendors"
+            />
+          </KpiBentoItem>
         )}
         {canProjects && (
-          <KpiCard
-            label="Active Projects"
-            value={activeProjectCount ?? 0}
-            description="Across all clients"
-            icon={<FolderKanban className="h-4 w-4 text-violet-500" />}
-            accent="text-violet-600 dark:text-violet-400"
-            link="/dashboard/projects"
-          />
+          <KpiBentoItem>
+            <KpiCard
+              label="Active Projects"
+              value={<CountUp value={activeProjectCount ?? 0} />}
+              description="Across all clients"
+              icon={<FolderKanban className="h-4 w-4 text-violet-500" />}
+              accent="text-violet-600 dark:text-violet-400"
+              link="/dashboard/projects"
+            />
+          </KpiBentoItem>
         )}
         {(canOps || isAdminUp) && (
-          <KpiCard
-            label="Expiring Docs"
-            value={expiringDocs ?? 0}
-            description="Next 30 days"
-            icon={<AlertTriangle className="h-4 w-4 text-red-500" />}
-            accent="text-red-600 dark:text-red-400"
-            link="/dashboard/documents"
-          />
+          <KpiBentoItem>
+            <KpiCard
+              label="Expiring Docs"
+              value={<CountUp value={expiringDocs ?? 0} />}
+              description="Next 30 days"
+              icon={<AlertTriangle className="h-4 w-4 text-red-500" />}
+              accent="text-red-600 dark:text-red-400"
+              link="/dashboard/documents"
+            />
+          </KpiBentoItem>
         )}
         {canFinance && (
-          <KpiCard
-            label="AR Outstanding"
-            value={`₱${arOutstanding.toLocaleString()}`}
-            description="Uncollected client invoices"
-            icon={<ArrowUpRight className="h-4 w-4 text-emerald-500" />}
-            accent="text-emerald-600 dark:text-emerald-400"
-            link="/dashboard/client-invoices"
-          />
+          <KpiBentoItem>
+            <KpiCard
+              label="AR Outstanding"
+              value={<CountUp value={arOutstanding} prefix="₱" />}
+              description="Uncollected client invoices"
+              icon={<ArrowUpRight className="h-4 w-4 text-emerald-500" />}
+              accent="text-emerald-600 dark:text-emerald-400"
+              link="/dashboard/client-invoices"
+            />
+          </KpiBentoItem>
         )}
-      </div>
+      </KpiBento>
 
-      {/* ── ZONE 3: TRENDS ── */}
+      {/* ── TRENDS ── */}
       {showTrends && (
         <SectionCard>
           <CardHeader
@@ -438,7 +345,7 @@ export async function DashboardContent() {
         </SectionCard>
       )}
 
-      {/* ── ZONE 4: PAYMENT OVERVIEW (finance / admin) ── */}
+      {/* ── PAYMENT OVERVIEW (finance) ── */}
       {showFinancePanel && (
         <SectionCard>
           <CardHeader
@@ -446,7 +353,7 @@ export async function DashboardContent() {
             title="Payment Overview"
             subtitle={monthLabel}
           />
-          <div className="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-slate-100 dark:divide-slate-800">
+          <div className="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-slate-100 dark:divide-white/10">
             <div className="p-5 space-y-4">
               <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
                 <ArrowDownLeft className="h-3.5 w-3.5 text-red-400" />
@@ -460,12 +367,12 @@ export async function DashboardContent() {
               <div>
                 <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mb-1.5">
                   <span>Settlement rate (all-time)</span>
-                  <span className="font-medium">{apSettledPct.toFixed(1)}%</span>
+                  <span className="font-medium tabular-nums">{apSettledPct.toFixed(1)}%</span>
                 </div>
-                <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div className="h-2 w-full bg-slate-100 dark:bg-white/10 rounded-full overflow-hidden">
                   <div className="h-full bg-emerald-500 rounded-full transition-all duration-700" style={{ width: `${apSettledPct}%` }} />
                 </div>
-                <div className="flex justify-between text-[10px] text-slate-400 mt-1.5">
+                <div className="flex justify-between text-[10px] text-slate-400 mt-1.5 tabular-nums">
                   <span>₱{totalPaid.toLocaleString()} paid</span>
                   <span>₱{outstandingLiability.toLocaleString()} left</span>
                 </div>
@@ -484,19 +391,19 @@ export async function DashboardContent() {
               <div>
                 <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mb-1.5">
                   <span>Collection rate (all-time)</span>
-                  <span className="font-medium">{arSettledPct.toFixed(1)}%</span>
+                  <span className="font-medium tabular-nums">{arSettledPct.toFixed(1)}%</span>
                 </div>
-                <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div className="h-2 w-full bg-slate-100 dark:bg-white/10 rounded-full overflow-hidden">
                   <div className="h-full bg-emerald-500 rounded-full transition-all duration-700" style={{ width: `${arSettledPct}%` }} />
                 </div>
-                <div className="flex justify-between text-[10px] text-slate-400 mt-1.5">
+                <div className="flex justify-between text-[10px] text-slate-400 mt-1.5 tabular-nums">
                   <span>₱{clientTotalPaid.toLocaleString()} collected</span>
                   <span>₱{arOutstanding.toLocaleString()} left</span>
                 </div>
               </div>
             </div>
           </div>
-          <div className="border-t border-slate-100 dark:border-slate-800 px-6 py-3 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/20">
+          <div className="border-t border-slate-100 dark:border-white/10 px-6 py-3 flex items-center justify-between bg-slate-50/50 dark:bg-white/[0.02]">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Net Cash Flow — {monthLabel}</span>
             <span className={`text-sm font-bold tabular-nums ${arCollectedThisMonth - apPaidThisMonth >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
               {arCollectedThisMonth - apPaidThisMonth >= 0 ? "+" : ""}₱{Math.abs(arCollectedThisMonth - apPaidThisMonth).toLocaleString()}
@@ -505,9 +412,8 @@ export async function DashboardContent() {
         </SectionCard>
       )}
 
-      {/* ── ZONE 5: ROLE PANELS ── */}
+      {/* ── ROLE PANELS ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Projects progress */}
         {canProjects && (
           <SectionCard>
             <CardHeader
@@ -522,7 +428,7 @@ export async function DashboardContent() {
             ) : (
               <ProjectProgressList projects={projectProgress} />
             )}
-            <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800">
+            <div className="px-5 py-3 border-t border-slate-100 dark:border-white/10">
               <Link href="/dashboard/projects" className="text-xs font-bold text-primary hover:underline flex items-center gap-1">
                 View all projects <ArrowUpRight className="h-3 w-3" />
               </Link>
@@ -530,7 +436,6 @@ export async function DashboardContent() {
           </SectionCard>
         )}
 
-        {/* Compliance health */}
         {(canOps || role === "viewer" || isAdminUp) && (
           <SectionCard>
             <CardHeader
@@ -539,7 +444,6 @@ export async function DashboardContent() {
               subtitle={`${compliance.totalVendors} active vendors`}
             />
             <div className="p-5 space-y-5">
-              {/* Overall gauge */}
               <div>
                 <div className="flex items-end justify-between mb-2">
                   <span className="text-xs text-slate-500 dark:text-slate-400">Overall compliance</span>
@@ -547,7 +451,7 @@ export async function DashboardContent() {
                     {compliance.overallPercentage}%
                   </span>
                 </div>
-                <div className="h-3 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div className="h-3 w-full bg-slate-100 dark:bg-white/10 rounded-full overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all duration-700 ${compliance.overallPercentage >= 80 ? "bg-emerald-500" : compliance.overallPercentage >= 50 ? "bg-amber-400" : "bg-red-500"}`}
                     style={{ width: `${compliance.overallPercentage}%` }}
@@ -555,7 +459,6 @@ export async function DashboardContent() {
                 </div>
               </div>
 
-              {/* Stats row */}
               <div className="grid grid-cols-3 gap-3">
                 <div className="rounded-xl border border-red-200 dark:border-red-900 bg-red-400 dark:bg-red-950/20 px-3 py-2.5 flex flex-col gap-0.5">
                   <span className="text-[10px] font-medium text-white dark:text-red-400 opacity-80">Non-compliant</span>
@@ -573,7 +476,7 @@ export async function DashboardContent() {
                 </div>
               </div>
             </div>
-            <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800">
+            <div className="px-5 py-3 border-t border-slate-100 dark:border-white/10">
               <Link href="/dashboard/compliance" className="text-xs font-bold text-primary hover:underline flex items-center gap-1">
                 View compliance hub <ArrowUpRight className="h-3 w-3" />
               </Link>
@@ -582,11 +485,11 @@ export async function DashboardContent() {
         )}
       </div>
 
-      {/* ── ZONE 6: ACTIVITY FEED ── */}
+      {/* ── ACTIVITY FEED ── */}
       {canAudit && (
-        <details className="group rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#071F15] overflow-hidden shadow-sm">
+        <details className="group glass-card rounded-2xl overflow-hidden">
           <summary className="px-6 py-4 flex items-center justify-between cursor-pointer select-none list-none">
-            <h2 className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+            <h2 className="text-sm font-bold tracking-tight text-slate-700 dark:text-slate-300 flex items-center gap-2">
               <History className="h-4 w-4 text-slate-400" />
               Recent System Activity
             </h2>
@@ -597,12 +500,12 @@ export async function DashboardContent() {
               <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-open:rotate-180" />
             </div>
           </summary>
-          <div className="border-t border-slate-100 dark:border-slate-800 divide-y divide-slate-50 dark:divide-slate-800/50">
+          <div className="border-t border-slate-100 dark:border-white/10 divide-y divide-slate-50 dark:divide-white/5">
             {recentLogs.length === 0 ? (
               <div className="p-10 text-center text-slate-400 italic text-sm">No activity recorded yet.</div>
             ) : (
               recentLogs.map((log: any) => (
-                <div key={log.id} className="px-6 py-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors flex items-start gap-4">
+                <div key={log.id} className="px-6 py-3 hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors flex items-start gap-4">
                   <div className={`mt-0.5 p-1.5 rounded-full shrink-0 ${log.action === "CREATE" ? "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400" : log.action === "UPDATE" ? "bg-blue-100 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400" : "bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400"}`}>
                     <Clock className="h-3 w-3" />
                   </div>
@@ -612,7 +515,7 @@ export async function DashboardContent() {
                       {log.action.toLowerCase()}d a{" "}
                       <span className="capitalize">{log.entity_type.replace("_", " ")}</span>
                     </p>
-                    <p className="mt-0.5 text-[10px] text-slate-400">{new Date(log.created_at).toLocaleString()}</p>
+                    <p className="mt-0.5 text-[10px] text-slate-400 tabular-nums">{new Date(log.created_at).toLocaleString()}</p>
                   </div>
                 </div>
               ))
@@ -634,12 +537,9 @@ function DashboardSkeleton() {
         </div>
         <div className="h-9 w-28 rounded-xl bg-slate-100 dark:bg-slate-800/50" />
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="h-64 rounded-2xl bg-slate-100 dark:bg-slate-800/50" />
-        <div className="h-64 rounded-2xl bg-slate-100 dark:bg-slate-800/50" />
-      </div>
+      <div className="h-44 rounded-2xl bg-slate-100 dark:bg-slate-800/50" />
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {[...Array(4)].map((_, i) => <div key={i} className="h-20 rounded-xl bg-slate-100 dark:bg-slate-800/50" />)}
+        {[...Array(4)].map((_, i) => <div key={i} className="h-20 rounded-2xl bg-slate-100 dark:bg-slate-800/50" />)}
       </div>
       <div className="h-56 rounded-2xl bg-slate-100 dark:bg-slate-800/50" />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

@@ -1,17 +1,9 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import dynamic from 'next/dynamic'
-import Image from 'next/image'
 import { Sidebar } from './sidebar'
 import { Header } from './header'
 import { AuditLogDrawer } from './audit-log-drawer'
-// Lazy load - AI chat is heavy (AI SDK, markdown renderer). Chunk is fetched
-// only when the user first opens the launcher, not on every page load.
-const AIChatBubble = dynamic(
-  () => import('./ai/chat-bubble').then(mod => ({ default: mod.AIChatBubble })),
-  { ssr: false }
-)
 
 export function DashboardShell({
   children,
@@ -29,7 +21,6 @@ export function DashboardShell({
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [auditOpen, setAuditOpen] = useState(false)
-  const [chatMounted, setChatMounted] = useState(false)
   const mainRef = useRef<HTMLElement>(null)
 
   return (
@@ -60,23 +51,6 @@ export function DashboardShell({
           </main>
         </div>
 
-        {chatMounted && <AIChatBubble onDismiss={() => setChatMounted(false)} />}
-        {!chatMounted && (
-          <button
-            onClick={() => setChatMounted(true)}
-            className="fixed z-[var(--z-dropdown)]"
-            style={{ left: 24, bottom: 24 }}
-            title="Open chat assistant"
-          >
-            <Image
-              src="/clippy-waiting.gif"
-              alt="Chat assistant"
-              width={80}
-              height={80}
-              className="h-20 w-auto drop-shadow-2xl hover:scale-110 active:scale-95 transition-all"
-            />
-          </button>
-        )}
         <AuditLogDrawer isOpen={auditOpen} onClose={() => setAuditOpen(false)} />
       </div>
   )

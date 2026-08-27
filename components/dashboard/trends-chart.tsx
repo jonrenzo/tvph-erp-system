@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { motion } from "motion/react";
 import {
   ResponsiveContainer,
   LineChart,
@@ -11,6 +13,7 @@ import {
   Legend,
 } from "recharts";
 import type { MonthlyTrendPoint } from "@/lib/dashboard/queries";
+import { usePrefersReducedMotion } from "./command-center/motion";
 
 function fmt(v: number) {
   if (v >= 1_000_000) return `₱${(v / 1_000_000).toFixed(1)}M`;
@@ -19,8 +22,29 @@ function fmt(v: number) {
 }
 
 export function TrendsChart({ data }: { data: MonthlyTrendPoint[] }) {
+  const reduced = usePrefersReducedMotion();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  if (reduced) {
+    return (
+      <ResponsiveContainer width="100%" height={200}>
+        <LineChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,.15)" />
+          <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+          <YAxis tickFormatter={fmt} tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={52} />
+          <Tooltip formatter={(v) => fmt(Number(v))} contentStyle={{ background: "#071F15", border: "1px solid rgba(148,163,184,.2)", borderRadius: 8, fontSize: 12 }} labelStyle={{ color: "#94a3b8", fontWeight: 600 }} itemStyle={{ color: "#e2e8f0" }} />
+          <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} formatter={(v) => (v === "apPaid" ? "AP Paid" : "AR Collected")} />
+          <Line type="monotone" dataKey="apPaid" stroke="#f59e0b" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+          <Line type="monotone" dataKey="arCollected" stroke="#10b981" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+        </LineChart>
+      </ResponsiveContainer>
+    );
+  }
+
   return (
-    <ResponsiveContainer width="100%" height={200}>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: mounted ? 1 : 0 }} transition={{ duration: 0.5, ease: "easeOut" }}>
+      <ResponsiveContainer width="100%" height={200}>
       <LineChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,.15)" />
         <XAxis
@@ -68,6 +92,7 @@ export function TrendsChart({ data }: { data: MonthlyTrendPoint[] }) {
           activeDot={{ r: 4 }}
         />
       </LineChart>
-    </ResponsiveContainer>
+      </ResponsiveContainer>
+      </motion.div>
   );
 }
