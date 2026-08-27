@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { createClient } from '@/utils/supabase/server';
 import { notFound } from 'next/navigation';
-import { ArrowLeft, Clock, ExternalLink } from 'lucide-react';
+import { ArrowLeft, ExternalLink, FileText, Clock3, BadgeCheck, Banknote, Hourglass, CheckCircle2, User } from 'lucide-react';
 import { Suspense } from 'react';
 import { billingStatusLabel, billingStatusBadgeClasses, agingBand, agingBadgeClasses, agingLabel } from '@/lib/billing/status';
 import { TransitionPanel } from '@/components/dashboard/client-invoices/transition-panel';
+import { Timeline, type TimelineItem } from '@/components/ui/timeline';
 
 export default function BillingDetailPage(props: {
   params: Promise<{ id: string }>;
@@ -52,15 +53,15 @@ async function Content({ paramsPromise }: { paramsPromise: Promise<{ id: string 
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+        <div className="glass-card rounded-2xl p-5">
           <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">VAT-ex</p>
           <p className="text-xl font-bold text-slate-900 dark:text-white mt-1">₱ {Number(row.amount_vat_ex || 0).toLocaleString()}</p>
         </div>
-        <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+        <div className="glass-card rounded-2xl p-5">
           <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">VAT-inc</p>
           <p className="text-xl font-bold text-slate-900 dark:text-white mt-1">₱ {Number(row.amount_vat_inc || 0).toLocaleString()}</p>
         </div>
-        <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+        <div className="glass-card rounded-2xl p-5">
           <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Aging</p>
           <p className="text-sm font-bold text-slate-900 dark:text-white mt-1">{ag.band ? `${agingLabel(ag.band, ag.daysDelayed)}${ag.band==='overdue' ? ` (${ag.daysDelayed}d)` : ''}` : '—'}</p>
         </div>
@@ -68,7 +69,7 @@ async function Content({ paramsPromise }: { paramsPromise: Promise<{ id: string 
 
       <TransitionPanel billingId={row.id} status={row.status} />
 
-      <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-3">
+      <div className="glass-card rounded-2xl p-5 space-y-3">
         <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Details</p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
           <div><p className="text-xs text-slate-400">Region</p><p className="font-medium text-slate-900 dark:text-white mt-0.5">{row.region || '—'}</p></div>
@@ -79,39 +80,61 @@ async function Content({ paramsPromise }: { paramsPromise: Promise<{ id: string 
           <div><p className="text-xs text-slate-400">Est. Payment</p><p className="font-medium text-slate-900 dark:text-white mt-0.5">{row.est_payment_date ? new Date(row.est_payment_date).toLocaleDateString() : '—'}</p></div>
           <div><p className="text-xs text-slate-400">Collected At</p><p className="font-medium text-slate-900 dark:text-white mt-0.5">{row.collected_at ? new Date(row.collected_at).toLocaleDateString() : '—'}</p></div>
         </div>
-        {row.notes && <div className="pt-2 border-t border-slate-100 dark:border-slate-800"><p className="text-xs text-slate-400 mb-1">Notes</p><p className="text-sm text-slate-700 dark:text-slate-300">{row.notes}</p></div>}
+        {row.notes && <div className="pt-2 border-t border-slate-100 dark:border-white/10"><p className="text-xs text-slate-400 mb-1">Notes</p><p className="text-sm text-slate-700 dark:text-slate-300">{row.notes}</p></div>}
       </div>
 
-      <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-[#0a0a0a]/50">
-          <h2 className="font-semibold text-slate-900 dark:text-white">Timeline</h2>
-          <p className="text-xs text-slate-500 mt-0.5">All status changes + fixed dates. Fixed dates below are snapshots; the log above is the source of truth.</p>
-        </div>
-        <div className="divide-y divide-slate-100 dark:divide-slate-800">
-          {(timeline as any[])?.length === 0 ? (
-            <p className="px-6 py-8 text-center text-sm text-slate-500">No transitions yet.</p>
-          ) : (
-            (timeline as any[])?.map((t: any) => (
-              <div key={t.id} className="px-6 py-4 flex items-start gap-3">
-                <div className="h-2 w-2 rounded-full bg-primary mt-2 shrink-0" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-slate-900 dark:text-white">
-                    {t.from_status ? `${billingStatusLabel(t.from_status)} → ` : ''}{billingStatusLabel(t.to_status)}
-                  </p>
-                  <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1"><Clock className="h-3 w-3" /> {new Date(t.changed_at).toLocaleString()} · {(t.profiles as any)?.full_name || (t.profiles as any)?.email || 'System'}</p>
-                  {t.note && <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 italic">{t.note}</p>}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-        <div className="px-6 py-4 bg-slate-50/50 dark:bg-[#0a0a0a]/50 border-t border-slate-200 dark:border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-          <div><span className="text-slate-400">Issued</span><p className="font-medium text-slate-700 dark:text-slate-300">{row.date_issued ? new Date(row.date_issued).toLocaleDateString() : '—'}</p></div>
-          <div><span className="text-slate-400">Endorsed</span><p className="font-medium text-slate-700 dark:text-slate-300">{row.date_endorsed ? new Date(row.date_endorsed).toLocaleDateString() : '—'}</p></div>
-          <div><span className="text-slate-400">Due</span><p className="font-medium text-slate-700 dark:text-slate-300">{row.due_date ? new Date(row.due_date).toLocaleDateString() : '—'}</p></div>
-          <div><span className="text-slate-400">Est Pay</span><p className="font-medium text-slate-700 dark:text-slate-300">{row.est_payment_date ? new Date(row.est_payment_date).toLocaleDateString() : '—'}</p></div>
-        </div>
-      </div>
+      {(() => {
+        const tl = (timeline as any[]) ?? [];
+        const iconFor = (status: string) => {
+          switch (status) {
+            case "for_billing": return <FileText className="h-3 w-3" />;
+            case "for_approval": return <Clock3 className="h-3 w-3" />;
+            case "for_payment": return <Banknote className="h-3 w-3" />;
+            case "pending_payment": return <Hourglass className="h-3 w-3" />;
+            case "collected": return <BadgeCheck className="h-3 w-3" />;
+            default: return <CheckCircle2 className="h-3 w-3" />;
+          }
+        };
+        const items: TimelineItem[] = tl.map((t: any, idx: number) => {
+          const isLast = idx === tl.length - 1;
+          const state: TimelineItem["status"] = isLast && row.status !== "collected" ? "active" : "completed";
+          const actor = (t.profiles as any)?.full_name || (t.profiles as any)?.email || "System";
+          return {
+            id: t.id,
+            title: t.from_status ? `${billingStatusLabel(t.from_status)} → ${billingStatusLabel(t.to_status)}` : billingStatusLabel(t.to_status),
+            description: t.note || undefined,
+            timestamp: t.changed_at ? new Date(t.changed_at) : undefined,
+            status: state,
+            icon: iconFor(t.to_status),
+            content: (
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                <User className="h-3 w-3" /> {actor}
+              </span>
+            ),
+          };
+        });
+        return (
+          <div className="glass-card rounded-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 dark:border-white/10">
+              <h2 className="font-semibold tracking-tight text-slate-900 dark:text-white">Timeline</h2>
+              <p className="text-xs text-slate-500 mt-0.5">All status changes + fixed dates. Fixed dates below are snapshots; the log above is the source of truth.</p>
+            </div>
+            <div className="p-6">
+              {items.length === 0 ? (
+                <p className="text-center text-sm text-slate-500 py-8">No transitions yet.</p>
+              ) : (
+                <Timeline items={items} showTimestamps timestampPosition="top" />
+              )}
+            </div>
+            <div className="px-6 py-4 bg-slate-50/50 dark:bg-white/[0.02] border-t border-slate-100 dark:border-white/10 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div><span className="text-slate-400">Issued</span><p className="font-medium text-slate-700 dark:text-slate-300">{row.date_issued ? new Date(row.date_issued).toLocaleDateString() : '—'}</p></div>
+              <div><span className="text-slate-400">Endorsed</span><p className="font-medium text-slate-700 dark:text-slate-300">{row.date_endorsed ? new Date(row.date_endorsed).toLocaleDateString() : '—'}</p></div>
+              <div><span className="text-slate-400">Due</span><p className="font-medium text-slate-700 dark:text-slate-300">{row.due_date ? new Date(row.due_date).toLocaleDateString() : '—'}</p></div>
+              <div><span className="text-slate-400">Est Pay</span><p className="font-medium text-slate-700 dark:text-slate-300">{row.est_payment_date ? new Date(row.est_payment_date).toLocaleDateString() : '—'}</p></div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

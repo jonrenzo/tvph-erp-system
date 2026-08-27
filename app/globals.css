@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *, .midnight *));
 
@@ -14,6 +15,17 @@
     --color-slate-500: #64748b;
     --color-slate-200: #e2e8f0;
     --color-slate-50: #f8fafc;
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
 }
 
 :root {
@@ -22,6 +34,17 @@
     --primary: #0a5c3b;
     --primary-light: #0c6a43;
     --primary-rgb: 10, 92, 59;
+    --border: #e2e8f0;
+    --input: #e2e8f0;
+    --ring: #0a5c3b;
+    --accent: #f1f5f9;
+    --accent-foreground: #0f172a;
+    --muted: #f1f5f9;
+    --muted-foreground: #64748b;
+    --destructive: #dc2626;
+    --destructive-foreground: #ffffff;
+    --card: #ffffff;
+    --card-foreground: #0f172a;
 
     /* Z-index scale — single source of truth. Use z-[var(--z-*)] in Tailwind. */
     --z-editor: 10;            /* DOCX editor (page content, not an overlay) */
@@ -69,11 +92,33 @@
 .dark {
     --background: #0f172a; /* Make Dark standard deep slate/blue-gray */
     --foreground: #f8fafc;
+    --border: rgba(255, 255, 255, 0.1);
+    --input: rgba(255, 255, 255, 0.1);
+    --ring: #0a5c3b;
+    --accent: #1e293b;
+    --accent-foreground: #f8fafc;
+    --muted: #1e293b;
+    --muted-foreground: #94a3b8;
+    --destructive: #ef4444;
+    --destructive-foreground: #ffffff;
+    --card: #0f172a;
+    --card-foreground: #f8fafc;
 }
 
 .midnight {
     --background: #030712; /* Make Midnight extremely deep black/navy */
     --foreground: #f3f4f6;
+    --border: rgba(255, 255, 255, 0.08);
+    --input: rgba(255, 255, 255, 0.08);
+    --ring: #0a5c3b;
+    --accent: #111827;
+    --accent-foreground: #f3f4f6;
+    --muted: #111827;
+    --muted-foreground: #94a3b8;
+    --destructive: #ef4444;
+    --destructive-foreground: #ffffff;
+    --card: #030712;
+    --card-foreground: #f3f4f6;
 }
 
 body {
