@@ -11,6 +11,7 @@ import {
   Package,
   BarChart3,
   FileText,
+  ReceiptText,
   Lock,
   AlertCircle,
   Settings,
@@ -103,7 +104,7 @@ const MODULE_CONFIG: ModuleItem[] = [
   {
     id: "invoices",
     label: "Invoices",
-    icon: FileText,
+    icon: ReceiptText,
     href: "/dashboard/invoices",
     roles: ["superadmin", "admin", "finance"],
   },
