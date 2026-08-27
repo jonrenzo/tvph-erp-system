@@ -9,7 +9,7 @@ import { LIST_PAGE_SIZE, parsePage, pageRange } from '@/components/ui/pagination
 import { billingStatusBadgeClasses, agingBand, agingBadgeClasses, agingLabel } from '@/lib/billing/status';
 
 export default function ClientInvoicesPage(props: {
-  searchParams?: Promise<{ q?: string; status?: string; page?: string }>;
+  searchParams?: Promise<{ q?: string; status?: string; aging?: string; page?: string }>;
 }) {
   return (
     <Suspense fallback={<Skeleton />}>
@@ -23,8 +23,24 @@ async function Content({ searchParams: searchParamsPromise }: { searchParams?: P
   const supabase = await createClient();
   const q = searchParams?.q || '';
   const statusFilter = searchParams?.status || 'all';
+  const agingFilter = searchParams?.aging || 'all';
   const page = parsePage(searchParams?.page);
   const [from, to] = pageRange(page, LIST_PAGE_SIZE);
+  const todayStr = new Date().toISOString().split("T")[0]!;
+  const plusDays = (d: string, n: number) => new Date(new Date(d).getTime() + n * 86400000).toISOString().split("T")[0]!;
+
+  function applyFilters<T>(qb: T): T {
+    let q_ = qb as any;
+    if (q) q_ = q_.or(`invoice_number.ilike.%${q}%,invoice_batch.ilike.%${q}%`);
+    if (statusFilter !== 'all') q_ = q_.eq('status', statusFilter);
+    if (agingFilter !== 'all') {
+      // aging only meaningful for payment phases; other statuses yield empty
+      if (agingFilter === 'overdue') q_ = q_.in('status', ['for_payment', 'pending_payment']).lt('due_date', todayStr);
+      else if (agingFilter === 'close_due') q_ = q_.in('status', ['for_payment', 'pending_payment']).gte('due_date', todayStr).lte('due_date', plusDays(todayStr, 7));
+      else if (agingFilter === 'healthy') q_ = q_.in('status', ['for_payment', 'pending_payment']).gt('due_date', plusDays(todayStr, 7));
+    }
+    return q_ as T;
+  }
 
   let query = supabase
     .from('client_billing')
@@ -32,10 +48,18 @@ async function Content({ searchParams: searchParamsPromise }: { searchParams?: P
     .is('deleted_at', null)
     .order('date_issued', { ascending: false });
 
-  if (q) query = query.or(`invoice_number.ilike.%${q}%,invoice_batch.ilike.%${q}%`);
-  if (statusFilter !== 'all') query = query.eq('status', statusFilter);
+  query = applyFilters(query);
 
   const { data: rows, error, count } = await query.range(from, to);
+
+  // summary for the *filtered* set (not just current page) — ponytail: one extra query, JS sum
+  let summaryQuery = supabase.from('client_billing').select('amount_vat_inc, status, due_date').is('deleted_at', null);
+  summaryQuery = applyFilters(summaryQuery);
+  const { data: summaryRows } = await summaryQuery.limit(2000);
+  const filteredCount = summaryRows?.length ?? count ?? 0;
+  const filteredSum = (summaryRows ?? []).reduce((a: number, r: any) => a + Number(r.amount_vat_inc || 0), 0);
+  const overdueSum = (summaryRows ?? []).filter((r: any) => r.due_date && ['for_payment', 'pending_payment'].includes(r.status) && r.due_date < todayStr).reduce((a: number, r: any) => a + Number(r.amount_vat_inc || 0), 0);
+  const collectedSum = (summaryRows ?? []).filter((r: any) => r.status === 'collected').reduce((a: number, r: any) => a + Number(r.amount_vat_inc || 0), 0);
 
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -66,6 +90,15 @@ async function Content({ searchParams: searchParamsPromise }: { searchParams?: P
               { value: 'for_payment', label: 'For Payment' },
               { value: 'pending_payment', label: 'Pending Payment' },
               { value: 'collected', label: 'Collected' },
+            ]}
+          />
+          <StatusSelect
+            paramName="aging"
+            options={[
+              { value: 'all', label: 'All Aging' },
+              { value: 'overdue', label: 'Overdue' },
+              { value: 'close_due', label: 'Close Due (≤7d)' },
+              { value: 'healthy', label: 'Healthy (>7d)' },
             ]}
           />
         </div>
@@ -129,6 +162,32 @@ async function Content({ searchParams: searchParamsPromise }: { searchParams?: P
               )}
             </tbody>
           </table>
+        </div>
+        {/* filtered sum — shows total for whatever filters are active */}
+        <div className="px-6 py-4 bg-slate-50 dark:bg-[#0a0a0a]/50 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-4 text-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-medium">
+              <span className="h-2 w-2 rounded-full bg-slate-400" />
+              {filteredCount} invoice{filteredCount !== 1 ? 's' : ''} (filtered)
+            </span>
+            <span className="inline-flex items-center px-3 py-1.5 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold">
+              ₱ {filteredSum.toLocaleString()} VAT-inc
+            </span>
+            {agingFilter === 'overdue' || statusFilter !== 'collected' ? (
+              <span className="inline-flex items-center px-3 py-1.5 rounded-full bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-xs font-bold text-red-600 dark:text-red-400">
+                Overdue ₱ {overdueSum.toLocaleString()}
+              </span>
+            ) : null}
+            {collectedSum > 0 ? (
+              <span className="inline-flex items-center px-3 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                Collected ₱ {collectedSum.toLocaleString()}
+              </span>
+            ) : null}
+          </div>
+          <span className="text-xs text-slate-400">
+            {statusFilter !== 'all' || agingFilter !== 'all' || q ? 'Filtered total — not page total' : 'All invoices'}
+            {count != null && count !== filteredCount ? ` · ${count} total` : ''}
+          </span>
         </div>
         <Pagination page={page} totalCount={count ?? 0} pageSize={LIST_PAGE_SIZE} />
       </div>

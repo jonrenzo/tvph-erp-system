@@ -38,6 +38,11 @@ interface TableMeta {
 }
 
 const ALL_TABLES: TableMeta[] = [
+  // ── Client billing (timeline → billing → client POs; child first) ─────────
+  { table: "client_billing_timeline", group: "billing", pkCol: "id" },
+  { table: "client_billing",          group: "billing", pkCol: "id" },
+  { table: "client_purchase_orders",  group: "billing", pkCol: "id" },
+
   // ── CRM (no FK parents here) ─────────────────────────────────────────────
   { table: "crm_activities",        group: "crm",         pkCol: "id" },
   { table: "crm_document_versions", group: "crm",         pkCol: "id" },
@@ -93,6 +98,7 @@ const ALL_TABLES: TableMeta[] = [
 // ─── UI groups ────────────────────────────────────────────────────────────────
 
 const GROUPS = [
+  { value: "billing",     label: "Client Billing",         hint: "client_billing, timeline, client_purchase_orders" },
   { value: "crm",         label: "CRM",                    hint: "accounts, contacts, opportunities, activities, documents" },
   { value: "procurement", label: "Procurement & POs",      hint: "purchase orders, line items, site details, artifacts" },
   { value: "accounting",  label: "Accounting",             hint: "service invoices, payments" },
