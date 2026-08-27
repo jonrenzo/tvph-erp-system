@@ -12,6 +12,7 @@ import {
   BarChart3,
   FileText,
   ReceiptText,
+  HandCoins,
   Lock,
   AlertCircle,
   Settings,
@@ -106,6 +107,13 @@ const MODULE_CONFIG: ModuleItem[] = [
     label: "Invoices",
     icon: ReceiptText,
     href: "/dashboard/invoices",
+    roles: ["superadmin", "admin", "finance"],
+  },
+  {
+    id: "payment-requests",
+    label: "Payment Requests",
+    icon: HandCoins,
+    href: "/dashboard/payment-requests",
     roles: ["superadmin", "admin", "finance"],
   },
   {
