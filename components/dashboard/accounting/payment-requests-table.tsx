@@ -20,7 +20,7 @@ interface PaymentRequest {
   created_at: string;
   rejection_reason: string | null;
   is_downpayment: boolean;
-  purchase_orders: { po_number: string; vendors: { name: string } | null } | null;
+  purchase_orders: { po_number: string; dp_amount?: number | null; dp_percent?: number | null; amount?: number | null; vendors: { name: string } | null } | null;
   projects: { name: string } | null;
 }
 
@@ -65,6 +65,7 @@ export function PaymentRequestsTable({ requests, canApprove }: Props) {
               <th className="pb-2 pr-4 font-semibold">Vendor / PO</th>
               <th className="pb-2 pr-4 font-semibold">Status</th>
               <th className="pb-2 pr-4 font-semibold text-right">Amount</th>
+              <th className="pb-2 pr-4 font-semibold text-right">DP Amount</th>
               <th className="pb-2 pr-4 font-semibold">% Complete</th>
               <th className="pb-2 pr-4 font-semibold">Due In</th>
               <th className="pb-2 font-semibold">Created</th>
@@ -113,6 +114,16 @@ export function PaymentRequestsTable({ requests, canApprove }: Props) {
                     <td className="py-3 pr-4 text-right font-bold text-slate-900 dark:text-white">
                       ₱{Number(r.amount).toLocaleString()}
                     </td>
+                    <td className="py-3 pr-4 text-right text-xs">
+                      {r.purchase_orders?.dp_amount != null && Number(r.purchase_orders.dp_amount) > 0 ? (
+                        <span className={`font-semibold ${r.is_downpayment ? "text-amber-600 dark:text-amber-400" : "text-slate-600 dark:text-slate-400"}`}>
+                          ₱{Number(r.purchase_orders.dp_amount).toLocaleString()}
+                          {r.purchase_orders.dp_percent != null && Number(r.purchase_orders.dp_percent) > 0 ? ` (${Number(r.purchase_orders.dp_percent).toFixed(2).replace(/\.00$/, "")}%)` : ""}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </td>
                     <td className="py-3 pr-4 text-xs text-slate-600 dark:text-slate-400">
                       {r.percent_complete ? `${r.percent_complete}%` : "—"}
                     </td>
@@ -147,7 +158,7 @@ export function PaymentRequestsTable({ requests, canApprove }: Props) {
                   </tr>
                   {isRejecting && (
                     <tr key={`${r.id}-reject`}>
-                      <td colSpan={8} className="pb-3 pt-1 px-2">
+                      <td colSpan={9} className="pb-3 pt-1 px-2">
                         <div className="flex items-center gap-2">
                           <input
                             autoFocus

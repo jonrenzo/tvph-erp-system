@@ -47,7 +47,7 @@ async function AccountingContent() {
       .order("notified_at", { ascending: false }),
     supabase
       .from("payment_requests")
-      .select("id, request_number, po_id, amount, due_in_days, status, percent_complete, created_at, rejection_reason, is_downpayment, purchase_orders(po_number, vendors(name)), projects(name)")
+      .select("id, request_number, po_id, amount, due_in_days, status, percent_complete, created_at, rejection_reason, is_downpayment, purchase_orders(po_number, dp_amount, dp_percent, amount, vendors(name)), projects(name)")
       .in("status", ["pending", "approved", "fully_invoiced"])
       .order("created_at", { ascending: false }),
     getCurrentProfile(supabase),
