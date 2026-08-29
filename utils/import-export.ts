@@ -114,12 +114,6 @@ const HEADER_ALIASES: Record<string, string> = {
   "contract url": "contract_url",
   "contract": "contract_url",
   "contract link": "contract_url",
-  "secondary contact name_raw": "_sc_name_raw",
-  "secondary contact email_raw": "_sc_email_raw",
-  "secondary contact phone_raw": "_sc_phone_raw",
-  "secondary bank name_raw": "_sb_bank_name_raw",
-  "secondary bank account number_raw": "_sb_account_number_raw",
-  "secondary bank account name_raw": "_sb_account_name_raw",
 };
 
 export function normalizeHeader(header: string): string | null {
@@ -131,9 +125,7 @@ export function buildColumnMap(fileHeaders: string[]): Record<string, string> {
   const map: Record<string, string> = {};
   for (const header of fileHeaders) {
     const field = normalizeHeader(header);
-    if (field) {
-      map[header] = field;
-    }
+    if (field) map[header] = field;
   }
   return map;
 }

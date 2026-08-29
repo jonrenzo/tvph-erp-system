@@ -23,6 +23,24 @@ const VALID_CRM_ACCOUNT_FIELDS = new Set([
   "company_type", "primary_site_location", "industry_note", "notes",
 ]);
 
+const VALID_STATUSES = ["pending", "active", "inactive"] as const;
+
+function makeGetVal(columnMap: RichColumnMapping) {
+  return (row: Record<string, string>, field: string) => {
+    const col = Object.keys(columnMap).find((k) => columnMap[k]?.field === field);
+    return col ? String(row[col] ?? "").trim() : "";
+  };
+}
+
+function parseRows(buffer: ArrayBuffer): { rows: Record<string, string>[]; columnMap: RichColumnMapping; unmapped: string[] } | { error: string } {
+  let rows: Record<string, string>[];
+  try { rows = parseFile(buffer); } catch { return { error: "Failed to parse file. Ensure it's valid CSV or Excel." }; }
+  if (rows.length === 0) return { error: "File appears to be empty." };
+  const columnMap = buildRichColumnMap(Object.keys(rows[0]));
+  const unmapped = Object.keys(rows[0]).filter((h) => columnMap[h]?.source === "unmapped");
+  return { rows, columnMap, unmapped };
+}
+
 function extractSecondaryContact(
   row: Record<string, string>,
   columnMap: RichColumnMapping,
@@ -60,28 +78,11 @@ export async function importVendorsFromFile(
   authSupabase: SupabaseClient,
   userId: string,
 ): Promise<ImportResult> {
-  let rows: Record<string, string>[];
-  try {
-    rows = parseFile(buffer);
-  } catch {
-    return { created: 0, updated: 0, errors: [{ row: 0, reason: "Failed to parse file. Ensure it's valid CSV or Excel." }], totalRows: 0, summary: "File parse failed." };
-  }
-
-  if (rows.length === 0) {
-    return { created: 0, updated: 0, errors: [{ row: 0, reason: "File appears to be empty." }], totalRows: 0, summary: "File is empty." };
-  }
-
-  const fileHeaders = Object.keys(rows[0]);
-  const columnMap: RichColumnMapping = buildRichColumnMap(fileHeaders);
-  const unmapped = fileHeaders.filter((h) => columnMap[h]?.source === "unmapped");
-  const validStatuses = ["pending", "active", "inactive"];
-
+  const parsed = parseRows(buffer);
+  if ("error" in parsed) return { created: 0, updated: 0, errors: [{ row: 0, reason: parsed.error }], totalRows: 0, summary: parsed.error === "File appears to be empty." ? "File is empty." : "File parse failed." };
+  const { rows, columnMap, unmapped } = parsed;
   const supabase = createServiceRoleClient();
-
-  const getVal = (row: Record<string, string>, targetField: string): string => {
-    const fc = Object.keys(columnMap).find((k) => columnMap[k]?.field === targetField);
-    return fc ? String(row[fc] ?? "").trim() : "";
-  };
+  const getVal = makeGetVal(columnMap);
 
   const groups = new Map<string, { row: Record<string, string>; rowIndex: number }[]>();
 
@@ -120,7 +121,7 @@ export async function importVendorsFromFile(
       }
       mainFields.name = name;
 
-      if (mainFields.status && !validStatuses.includes(mainFields.status.toLowerCase())) {
+      if (mainFields.status && !(VALID_STATUSES as readonly string[]).includes(mainFields.status.toLowerCase())) {
         mainFields.status = "pending";
       }
 
@@ -202,28 +203,11 @@ export async function importCustomersFromFile(
   authSupabase: SupabaseClient,
   userId: string,
 ): Promise<ImportResult> {
-  let rows: Record<string, string>[];
-  try {
-    rows = parseFile(buffer);
-  } catch {
-    return { created: 0, updated: 0, errors: [{ row: 0, reason: "Failed to parse file. Ensure it's valid CSV or Excel." }], totalRows: 0, summary: "File parse failed." };
-  }
-
-  if (rows.length === 0) {
-    return { created: 0, updated: 0, errors: [{ row: 0, reason: "File appears to be empty." }], totalRows: 0, summary: "File is empty." };
-  }
-
-  const fileHeaders = Object.keys(rows[0]);
-  const columnMap = buildRichColumnMap(fileHeaders);
-  const unmapped = fileHeaders.filter((h) => columnMap[h]?.source === "unmapped");
-  const validStatuses = ["pending", "active", "inactive"];
-
+  const parsed = parseRows(buffer);
+  if ("error" in parsed) return { created: 0, updated: 0, errors: [{ row: 0, reason: parsed.error }], totalRows: 0, summary: parsed.error === "File appears to be empty." ? "File is empty." : "File parse failed." };
+  const { rows, columnMap, unmapped } = parsed;
   const supabase = createServiceRoleClient();
-
-  const getVal = (row: Record<string, string>, targetField: string): string => {
-    const fc = Object.keys(columnMap).find((k) => columnMap[k]?.field === targetField);
-    return fc ? String(row[fc] ?? "").trim() : "";
-  };
+  const getVal = makeGetVal(columnMap);
 
   const accountContactMap = new Map<string, { row: Record<string, string>; rowIndex: number }[]>();
 
@@ -261,7 +245,7 @@ export async function importCustomersFromFile(
         continue;
       }
 
-      if (accountData.status && !validStatuses.includes(accountData.status.toLowerCase())) {
+      if (accountData.status && !(VALID_STATUSES as readonly string[]).includes(accountData.status.toLowerCase())) {
         accountData.status = "pending";
       }
       const effectiveStatus = accountData.status || "pending";

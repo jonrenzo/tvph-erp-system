@@ -3,20 +3,9 @@ import "server-only";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import { sendEmail, type SendEmailResult } from "./send";
 import { PoPendingApprovalEmail } from "./templates/po-pending-approval";
+import { formatAmount } from "./format";
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://erp.telcovantage.com";
-
-function formatAmount(amount: number | null | undefined, currency: string) {
-  if (amount == null) return null;
-  try {
-    return new Intl.NumberFormat("en-PH", {
-      style: "currency",
-      currency: currency === "USD" ? "USD" : "PHP",
-    }).format(amount);
-  } catch {
-    return `${currency} ${amount.toLocaleString()}`;
-  }
-}
 
 /**
  * Emails the admins/superadmins recorded in `approval_requested_from` that a PO
