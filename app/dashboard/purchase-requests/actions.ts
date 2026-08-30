@@ -349,8 +349,12 @@ export async function submitPRForApproval(prId: string, approverIds: string[] = 
       approval_requested_from: uniqueApproverIds,
       finance_approval_requested_from: uniqueFinanceApproverIds,
       rejection_reason: null,
+      admin_approved_by: [],
+      admin_approved_at: [],
+      approved_by_user_id: null,
+      approved_at: null,
       updated_at: new Date().toISOString(),
-    }, { count: 'exact' })
+    } as any, { count: 'exact' })
     .eq('id', prId)
     .eq('status', 'draft');
 
@@ -409,7 +413,7 @@ export async function approvePR(prId: string) {
 
   const { data: pr } = await supabase
     .from('purchase_requests')
-    .select('status, submitted_for_approval_by')
+    .select('status, submitted_for_approval_by, approval_requested_from, admin_approved_by, admin_approved_at')
     .eq('id', prId)
     .single();
 
@@ -421,10 +425,62 @@ export async function approvePR(prId: string) {
     return { error: 'You cannot approve a PR you submitted for approval. Another admin or superadmin must approve it.' };
   }
 
+  const requested: string[] = ((pr as any).approval_requested_from as string[] | null) || [];
+  const already: string[] = ((pr as any).admin_approved_by as string[] | null) || [];
+  const alreadyAt: string[] = ((pr as any).admin_approved_at as string[] | null) || [];
+
+  // AND when >1 approvers chosen: must be in the requested set. Single-approver stays OR (notify-only) for backward compat.
+  if (requested.length > 1 && !requested.includes(user.id)) {
+    return { error: 'You are not one of the requested approvers for this PR.' };
+  }
+  if (already.includes(user.id)) {
+    return { error: 'You have already approved this PR.' };
+  }
+
   const now = new Date().toISOString();
+  const newApprovedBy = [...already, user.id];
+  const newApprovedAt = [...alreadyAt, now];
+  // AND: N-of-N when >1, else single approval suffices
+  const required = requested.length > 1 ? requested.length : 1;
+  const isComplete = requested.length > 1 ? requested.every((id) => newApprovedBy.includes(id)) : newApprovedBy.length >= 1;
+
+  if (!isComplete) {
+    const { error, count } = await supabase
+      .from('purchase_requests')
+      .update({ admin_approved_by: newApprovedBy, admin_approved_at: newApprovedAt, updated_at: now } as any, { count: 'exact' })
+      .eq('id', prId)
+      .eq('status', 'pending_approval');
+    if (error) return { error: error.message };
+    if (count === 0) return { error: 'This PR is not pending the admin approval.' };
+
+    await recordAuditLog({
+      entity_type: 'purchase_request',
+      entity_id: prId,
+      action: 'UPDATE',
+      changes: { after: { admin_approved_by: newApprovedBy, partial: true } },
+      performed_by: user.id,
+    });
+
+    const remaining = requested.filter((id) => !newApprovedBy.includes(id));
+    if (remaining.length > 0) {
+      await createNotification({
+        type: 'pr',
+        title: '⏳ PR Partial Approval',
+        message: `A purchase request received approval (${newApprovedBy.length}/${required}). Awaiting ${remaining.length} more admin approval(s).`,
+        link: `/dashboard/purchase-requests/${prId}`,
+        created_by: user.id,
+        recipientIds: remaining,
+      });
+    }
+
+    revalidatePath(`/dashboard/purchase-requests/${prId}`);
+    revalidatePath('/dashboard/purchase-requests');
+    return { success: true, partial: true } as any;
+  }
+
   const { error, count } = await supabase
     .from('purchase_requests')
-    .update({ status: 'pending_finance', approved_by_user_id: user.id, approved_at: now, updated_at: now }, { count: 'exact' })
+    .update({ status: 'pending_finance', approved_by_user_id: user.id, approved_at: now, admin_approved_by: newApprovedBy, admin_approved_at: newApprovedAt, updated_at: now } as any, { count: 'exact' })
     .eq('id', prId)
     .eq('status', 'pending_approval');
 
@@ -435,7 +491,7 @@ export async function approvePR(prId: string) {
     entity_type: 'purchase_request',
     entity_id: prId,
     action: 'UPDATE',
-    changes: { after: { status: 'pending_finance', admin_approved_by: user.id } },
+    changes: { after: { status: 'pending_finance', admin_approved_by: newApprovedBy } },
     performed_by: user.id,
   });
 
@@ -452,7 +508,6 @@ export async function approvePR(prId: string) {
   revalidatePath('/dashboard/purchase-requests');
   refresh();
 
-  // ponytail: finance email deferred via defer()
   defer(async () => {
     const emailResult = await sendPrPendingFinanceEmail(prId, { actorId: user.id });
     if (emailResult.status === 'failed') {
@@ -609,8 +664,12 @@ export async function rejectPR(prId: string, reason: string) {
     .update({
       status: 'draft',
       rejection_reason: reason.trim(),
+      admin_approved_by: [],
+      admin_approved_at: [],
+      approved_by_user_id: null,
+      approved_at: null,
       updated_at: new Date().toISOString(),
-    }, { count: 'exact' })
+    } as any, { count: 'exact' })
     .eq('id', prId)
     .in('status', ['pending_approval', 'pending_finance']);
 
@@ -721,8 +780,10 @@ export async function revivePurchaseRequest(prId: string) {
       finance_approval_requested_from: null,
       approved_by_user_id: null,
       approved_at: null,
+      admin_approved_by: [],
+      admin_approved_at: [],
       updated_at: new Date().toISOString(),
-    })
+    } as any)
     .eq('id', prId);
 
   if (error) return { error: error.message };

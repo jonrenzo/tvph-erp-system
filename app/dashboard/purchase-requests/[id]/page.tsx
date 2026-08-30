@@ -91,15 +91,20 @@ async function PRDetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
     .maybeSingle();
 
   // Resolve creator/submitter/approver names
-  const profileIds = [pr.created_by, pr.submitted_for_approval_by, pr.approved_by_user_id, pr.finance_approved_by_user_id].filter(Boolean) as string[];
+  const adminApprovedIds = ((pr as any).admin_approved_by as string[] | null) || [];
+  const approvalRequestedFrom = ((pr as any).approval_requested_from as string[] | null) || [];
+  const profileIds = [pr.created_by, pr.submitted_for_approval_by, pr.approved_by_user_id, pr.finance_approved_by_user_id, ...adminApprovedIds, ...approvalRequestedFrom].filter(Boolean) as string[];
   const profiles: Record<string, string> = {};
   if (profileIds.length > 0) {
     const { data: rows } = await supabase
       .from("profiles")
       .select("id, full_name")
-      .in("id", profileIds);
+      .in("id", Array.from(new Set(profileIds)));
     for (const p of rows || []) profiles[p.id] = p.full_name;
   }
+  const adminApprovedLabel = adminApprovedIds.map((id) => profiles[id]).filter(Boolean).join(", ");
+  const adminRemainingIds = approvalRequestedFrom.filter((id) => !adminApprovedIds.includes(id));
+  const adminRemainingLabel = adminRemainingIds.map((id) => profiles[id]).filter(Boolean).join(", ");
 
   // Eligible approvers for the submit picker (4-eyes: exclude current user).
   let eligibleApprovers: { id: string; full_name: string; email: string }[] = [];
@@ -207,12 +212,28 @@ async function PRDetailContent({ paramsPromise }: { paramsPromise: Promise<{ id:
                 Awaiting Admin Approval
               </p>
               <p className="text-xs text-amber-600/80 dark:text-amber-400/60 mt-1">
-                This request has been submitted and <span className="font-semibold">cannot be converted</span> until an admin approves it, then finance runs the budget check.
+                This request has been submitted and <span className="font-semibold">cannot be converted</span> until {approvalRequestedFrom.length > 1 ? `all ${approvalRequestedFrom.length} admins approve` : "an admin approves"} it, then finance runs the budget check.
               </p>
+              {adminApprovedLabel && (
+                <p className="text-xs text-amber-600/80 dark:text-amber-400/60 mt-1">
+                  Approved by: <span className="font-semibold">{adminApprovedLabel}</span> ({adminApprovedIds.length}/{approvalRequestedFrom.length || 1}).
+                </p>
+              )}
+              {adminRemainingLabel && adminApprovedIds.length < approvalRequestedFrom.length && (
+                <p className="text-xs text-amber-600/80 dark:text-amber-400/60 mt-1">
+                  Awaiting: <span className="font-semibold">{adminRemainingLabel}</span>.
+                </p>
+              )}
             </div>
           </div>
           {canApprove && pr.submitted_for_approval_by !== currentUser?.id ? (
-            <PrApprovalActions prId={pr.id} stage="admin" />
+            (() => {
+              const alreadyApproved = currentUser ? adminApprovedIds.includes(currentUser.id) : false;
+              const isRequested = currentUser ? (approvalRequestedFrom.length <= 1 || approvalRequestedFrom.includes(currentUser.id)) : false;
+              if (alreadyApproved) return <p className="text-xs text-amber-600/80 dark:text-amber-400/60">You already approved. Awaiting remaining approval(s).</p>;
+              if (!isRequested) return <p className="text-xs text-amber-600/80 dark:text-amber-400/60">You are not one of the requested approvers.</p>;
+              return <PrApprovalActions prId={pr.id} stage="admin" />;
+            })()
           ) : canApprove ? (
             <p className="text-xs text-amber-600/80 dark:text-amber-400/60">
               You submitted this PR for approval. Another admin or superadmin must approve it.

@@ -766,6 +766,10 @@ export async function submitPOForApproval(poId: string, approverIds: string[] = 
       submitted_for_approval_at: new Date().toISOString(),
       approval_requested_from: uniqueApproverIds,
       finance_approval_requested_from: uniqueFinanceApproverIds,
+      admin_approved_by: [],
+      admin_approved_at: [],
+      approved_by_user_id: null,
+      approved_at: null,
       exec_required_count: execRequired,
       exec_approved_by: [],
       exec_approved_at: [],
@@ -822,7 +826,7 @@ export async function approvePO(poId: string) {
 
   const { data: po } = await supabase
     .from('purchase_orders')
-    .select('status, amount, requirements_waived, waiver_approved, submitted_for_approval_by, exec_required_count, exec_approved_by')
+    .select('status, amount, requirements_waived, waiver_approved, submitted_for_approval_by, approval_requested_from, admin_approved_by, admin_approved_at, exec_required_count, exec_approved_by')
     .eq('id', poId)
     .single();
 
@@ -838,17 +842,62 @@ export async function approvePO(poId: string) {
     return { error: 'Cannot approve: this PO has waived requirements pending executive approval.' };
   }
 
+  const requested: string[] = ((po as any).approval_requested_from as string[] | null) || [];
+  const already: string[] = ((po as any).admin_approved_by as string[] | null) || [];
+  const alreadyAt: string[] = ((po as any).admin_approved_at as string[] | null) || [];
+  if (requested.length > 1 && !requested.includes(user.id)) {
+    return { error: 'You are not one of the requested approvers for this PO.' };
+  }
+  if (already.includes(user.id)) {
+    return { error: 'You have already approved this PO.' };
+  }
+
   const now = new Date().toISOString();
-  // Live amount determines tier; recompute in case line items changed while pending_approval.
+  const newApprovedBy = [...already, user.id];
+  const newApprovedAt = [...alreadyAt, now];
+  const required = requested.length > 1 ? requested.length : 1;
+  const isAdminComplete = requested.length > 1 ? requested.every((id) => newApprovedBy.includes(id)) : newApprovedBy.length >= 1;
+
+  if (!isAdminComplete) {
+    const { error, count } = await supabase
+      .from('purchase_orders')
+      .update({ admin_approved_by: newApprovedBy, admin_approved_at: newApprovedAt, updated_at: now } as any, { count: 'exact' })
+      .eq('id', poId)
+      .eq('status', 'pending_approval');
+    if (error) return { error: error.message };
+    if (count === 0) return { error: 'This PO is not pending the admin approval.' };
+    await recordAuditLog({
+      entity_type: 'purchase_order',
+      entity_id: poId,
+      action: 'UPDATE',
+      changes: { after: { admin_approved_by: newApprovedBy, partial: true } },
+      performed_by: user.id,
+    });
+    const remaining = requested.filter((id) => !newApprovedBy.includes(id));
+    if (remaining.length > 0) {
+      await createNotification({
+        type: 'po',
+        title: '⏳ PO Partial Approval',
+        message: `A purchase order received approval (${newApprovedBy.length}/${required}). Awaiting ${remaining.length} more admin approval(s).`,
+        link: `/dashboard/purchase-orders/${poId}`,
+        created_by: user.id,
+        recipientIds: remaining,
+      });
+    }
+    revalidatePath(`/dashboard/purchase-orders/${poId}`);
+    revalidatePath('/dashboard/purchase-orders');
+    return { success: true, partial: true } as any;
+  }
+
+  // Admin stage complete — proceed to exec or finance
   const liveExecRequired = getExecRequiredCount((po as any).amount);
-  // Keep stored exec_required_count in sync with live amount (amount may have been edited)
   const nextExecRequired = liveExecRequired;
   const needsExec = nextExecRequired > 0;
   const nextStatus = needsExec ? 'pending_exec_approval' : 'pending_finance';
 
   const { error, count } = await supabase
     .from('purchase_orders')
-    .update({ status: nextStatus, approved_by_user_id: user.id, approved_at: now, exec_required_count: nextExecRequired, exec_approved_by: [], exec_approved_at: [], updated_at: now } as any, { count: 'exact' })
+    .update({ status: nextStatus, approved_by_user_id: user.id, approved_at: now, admin_approved_by: newApprovedBy, admin_approved_at: newApprovedAt, exec_required_count: nextExecRequired, exec_approved_by: [], exec_approved_at: [], updated_at: now } as any, { count: 'exact' })
     .eq('id', poId)
     .eq('status', 'pending_approval');
 
@@ -859,7 +908,7 @@ export async function approvePO(poId: string) {
     entity_type: 'purchase_order',
     entity_id: poId,
     action: 'UPDATE',
-    changes: { after: { status: nextStatus, admin_approved_by: user.id, exec_required_count: nextExecRequired } },
+    changes: { after: { status: nextStatus, admin_approved_by: newApprovedBy, exec_required_count: nextExecRequired } },
     performed_by: user.id,
   });
 
@@ -1244,6 +1293,10 @@ export async function rejectPO(poId: string, reason: string) {
     .update({
       status: 'draft',
       rejection_reason: reason.trim(),
+      admin_approved_by: [],
+      admin_approved_at: [],
+      approved_by_user_id: null,
+      approved_at: null,
       exec_approved_by: [],
       exec_approved_at: [],
       updated_at: new Date().toISOString(),

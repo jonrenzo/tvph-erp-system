@@ -199,11 +199,14 @@ async function PODetailContent({ paramsPromise, searchParamsPromise }: { paramsP
   }
 
   // Resolve PO creator and approver names
+  const adminApprovedIds = ((po as any).admin_approved_by as string[] | null) || [];
+  const requestedAdminIds = ((po.approval_requested_from as string[] | null) || []);
   const poProfileIds = [
     po.created_by,
     po.approved_by_user_id,
     po.finance_approved_by_user_id,
-    ...((po.approval_requested_from as string[] | null) || []),
+    ...requestedAdminIds,
+    ...adminApprovedIds,
     ...((po.finance_approval_requested_from as string[] | null) || []),
     ...(((po as any).exec_approved_by as string[] | null) || []),
     ...(((po as any).exec_approval_requested_from as string[] | null) || []),
@@ -237,10 +240,13 @@ async function PODetailContent({ paramsPromise, searchParamsPromise }: { paramsP
 
   // Names of the users selected to approve at submit time — shown on the
   // "awaiting approval" banners so everyone knows who is expected to act.
-  const adminApproversLabel = ((po.approval_requested_from as string[] | null) || [])
+  const adminApproversLabel = requestedAdminIds
     .map((id) => poProfiles[id]?.full_name)
     .filter(Boolean)
     .join(", ");
+  const adminApprovedLabel = adminApprovedIds.map((id) => poProfiles[id]?.full_name).filter(Boolean).join(", ");
+  const adminRemainingIds = requestedAdminIds.filter((id) => !adminApprovedIds.includes(id));
+  const adminRemainingLabel = adminRemainingIds.map((id) => poProfiles[id]?.full_name).filter(Boolean).join(", ");
   const financeApproversLabel = ((po.finance_approval_requested_from as string[] | null) || [])
     .map((id) => poProfiles[id]?.full_name)
     .filter(Boolean)
@@ -584,20 +590,36 @@ async function PODetailContent({ paramsPromise, searchParamsPromise }: { paramsP
             <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
             <div>
               <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
-                Awaiting Executive Approval
+                Awaiting Admin Approval {requestedAdminIds.length > 1 ? `(${adminApprovedIds.length}/${requestedAdminIds.length})` : ""}
               </p>
               <p className="text-xs text-amber-600/80 dark:text-amber-400/60 mt-1">
-                This PO has been submitted for approval and <span className="font-semibold">cannot be sent to the vendor</span> until an admin approves it.
+                This PO has been submitted for approval and <span className="font-semibold">cannot be sent to the vendor</span> until {requestedAdminIds.length > 1 ? `all ${requestedAdminIds.length} admins approve` : "an admin approves"} it.
               </p>
               {adminApproversLabel && (
                 <p className="text-xs text-amber-600/80 dark:text-amber-400/60 mt-1">
-                  Awaiting approval from: <span className="font-semibold">{adminApproversLabel}</span>.
+                  Requested approvers: <span className="font-semibold">{adminApproversLabel}</span>.
+                </p>
+              )}
+              {adminApprovedLabel && (
+                <p className="text-xs text-amber-600/80 dark:text-amber-400/60 mt-1">
+                  Approved by: <span className="font-semibold">{adminApprovedLabel}</span> ({adminApprovedIds.length}/{requestedAdminIds.length || 1}).
+                </p>
+              )}
+              {adminRemainingLabel && adminApprovedIds.length < requestedAdminIds.length && (
+                <p className="text-xs text-amber-600/80 dark:text-amber-400/60 mt-1">
+                  Awaiting: <span className="font-semibold">{adminRemainingLabel}</span>.
                 </p>
               )}
             </div>
           </div>
           {canApprovePO && po.submitted_for_approval_by !== currentUser?.id ? (
-            <PoApprovalActions poId={po.id} />
+            (() => {
+              const already = currentUser ? adminApprovedIds.includes(currentUser.id) : false;
+              const isRequested = currentUser ? (requestedAdminIds.length <= 1 || requestedAdminIds.includes(currentUser.id)) : false;
+              if (already) return <p className="text-xs text-amber-600/80 dark:text-amber-400/60">You already approved. Awaiting remaining approval(s).</p>;
+              if (!isRequested) return <p className="text-xs text-amber-600/80 dark:text-amber-400/60">You are not one of the requested approvers.</p>;
+              return <PoApprovalActions poId={po.id} />;
+            })()
           ) : canApprovePO ? (
             <p className="text-xs text-amber-600/80 dark:text-amber-400/60">
               You submitted this PO for approval. Another admin or superadmin must approve it.
