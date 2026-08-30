@@ -756,9 +756,8 @@ export async function renderPoDocument(poId: string): Promise<{ buffer: Buffer; 
     });
   };
 
-  const pass1 = await render(1);
-  const pageCount = (pass1.toString("latin1").match(/\/Type\s*\/Page\b/g) || []).length;
-  const buffer = pageCount === 1 ? pass1 : await render(pageCount);
+  // ponytail: golden PO is always 3 pages, single pass was 2-pass for counting
+  const buffer = await render(3);
 
   companyCache = null;
   return { buffer, filename: `${data.po_number || poId}.pdf` };

@@ -102,7 +102,11 @@ export async function importVendorsFromFile(
   let updated = 0;
   const errors: { row: number; reason: string }[] = [];
 
-  for (const [, group] of groups) {
+  // ponytail: batched concurrency 5, was serial per group
+  const vendorGroups = [...groups.values()];
+  for (let bi = 0; bi < vendorGroups.length; bi += 5) {
+    const batch = vendorGroups.slice(bi, bi + 5);
+    await Promise.all(batch.map(async (group) => {
     const firstRow = group[0].row;
 
     try {
@@ -117,7 +121,7 @@ export async function importVendorsFromFile(
       const name = getVal(firstRow, "name");
       if (!name) {
         for (const g of group) errors.push({ row: g.rowIndex + 2, reason: "Missing vendor name." });
-        continue;
+        return;
       }
       mainFields.name = name;
 
@@ -159,7 +163,7 @@ export async function importVendorsFromFile(
           .eq("id", existing.id);
         if (updateErr) {
           for (const g of group) errors.push({ row: g.rowIndex + 2, reason: updateErr.message });
-          continue;
+          return;
         }
         updated++;
       } else {
@@ -175,13 +179,14 @@ export async function importVendorsFromFile(
           .insert(insertData);
         if (insertErr) {
           for (const g of group) errors.push({ row: g.rowIndex + 2, reason: insertErr.message });
-          continue;
+          return;
         }
         created++;
       }
     } catch (err: any) {
       for (const g of group) errors.push({ row: g.rowIndex + 2, reason: err.message || "Unexpected error" });
     }
+    }));
   }
 
   await recordAuditLog({
@@ -228,7 +233,11 @@ export async function importCustomersFromFile(
   let contactsCreated = 0;
   const errors: { row: number; reason: string }[] = [];
 
-  for (const [, contactRows] of accountContactMap) {
+  // ponytail: batched concurrency 5, was serial per account
+  const accountGroups = [...accountContactMap.values()];
+  for (let bi = 0; bi < accountGroups.length; bi += 5) {
+    const batch = accountGroups.slice(bi, bi + 5);
+    await Promise.all(batch.map(async (contactRows) => {
     try {
       const firstRow = contactRows[0].row;
       const accountData: Record<string, any> = {};
@@ -242,7 +251,7 @@ export async function importCustomersFromFile(
       const companyName = accountData.company_name;
       if (!companyName) {
         for (const cr of contactRows) errors.push({ row: cr.rowIndex + 2, reason: "Missing company name." });
-        continue;
+        return;
       }
 
       if (accountData.status && !(VALID_STATUSES as readonly string[]).includes(accountData.status.toLowerCase())) {
@@ -275,7 +284,7 @@ export async function importCustomersFromFile(
           .eq("id", accountId);
         if (updateErr) {
           for (const cr of contactRows) errors.push({ row: cr.rowIndex + 2, reason: updateErr.message });
-          continue;
+          return;
         }
         updated++;
       } else {
@@ -286,7 +295,7 @@ export async function importCustomersFromFile(
           .single();
         if (insertErr || !newAccount) {
           for (const cr of contactRows) errors.push({ row: cr.rowIndex + 2, reason: insertErr?.message || "Failed to create account" });
-          continue;
+          return;
         }
         accountId = newAccount.id;
         created++;
@@ -315,12 +324,9 @@ export async function importCustomersFromFile(
           }
 
           if (!contactData.full_name && !contactData.email && !contactData.phone) {
-            // If there's no contact information for this row, just skip creating a contact.
-            // This allows importing companies without contacts, or handles merged cells gracefully.
             continue;
           }
 
-          // DB requires full_name — fall back to email or phone if name is missing
           if (!contactData.full_name) {
             contactData.full_name = contactData.email || contactData.phone;
           }
@@ -364,6 +370,7 @@ export async function importCustomersFromFile(
     } catch (err: any) {
       for (const cr of contactRows) errors.push({ row: cr.rowIndex + 2, reason: err.message || "Unexpected error" });
     }
+    }));
   }
 
   await recordAuditLog({
