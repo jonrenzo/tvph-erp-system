@@ -225,9 +225,12 @@ export async function syncProjectLinkedVendors(
   const { data: pv } = await supabase.from("project_vendors").select("vendor_id");
   const vendorIds = [...new Set((pv ?? []).map((r) => r.vendor_id as string))];
 
+  // ponytail: batched concurrency 5, was serial
   const outcomes: SyncOutcome[] = [];
-  for (const vendorId of vendorIds) {
-    outcomes.push(await syncVendor(vendorId, supabase));
+  for (let i = 0; i < vendorIds.length; i += 5) {
+    const batch = vendorIds.slice(i, i + 5);
+    const res = await Promise.all(batch.map((id) => syncVendor(id, supabase)));
+    outcomes.push(...res);
   }
 
   return {

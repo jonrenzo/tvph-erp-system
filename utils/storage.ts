@@ -8,6 +8,9 @@ import type { createClient } from "@/utils/supabase/server";
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
 const DEFAULT_EXPIRY_SECONDS = 3600;
+// ponytail: in-memory cache 55m of 60m expiry, per server instance. Falls back to re-sign on miss.
+const cache = new Map<string, { url: string; exp: number }>();
+const CACHE_TTL_MS = 55 * 60 * 1000;
 
 /**
  * Replace a record's `file_url` with a signed URL when it points at the given
@@ -37,12 +40,25 @@ export async function signDocUrls<T extends { file_url?: string | null }>(
 
   if (!paths.length) return records;
 
-  const { data } = await supabase.storage.from(bucket).createSignedUrls(paths, expiresIn);
-  const signedByPath = new Map(
-    (data ?? [])
-      .filter((item) => item.path && item.signedUrl)
-      .map((item) => [item.path as string, item.signedUrl as string]),
-  );
+  const now = Date.now();
+  const toFetch: string[] = [];
+  const signedByPath = new Map<string, string>();
+  for (const p of paths) {
+    const key = `${bucket}:${p}`;
+    const hit = cache.get(key);
+    if (hit && hit.exp > now) signedByPath.set(p, hit.url);
+    else toFetch.push(p);
+  }
+
+  if (toFetch.length) {
+    const { data } = await supabase.storage.from(bucket).createSignedUrls(toFetch, expiresIn);
+    for (const item of data ?? []) {
+      if (item.path && item.signedUrl) {
+        signedByPath.set(item.path as string, item.signedUrl as string);
+        cache.set(`${bucket}:${item.path}`, { url: item.signedUrl as string, exp: now + CACHE_TTL_MS });
+      }
+    }
+  }
 
   return records.map((doc) => {
     const path = doc.file_url?.split(marker)[1];
