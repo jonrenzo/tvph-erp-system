@@ -86,7 +86,7 @@ async function Content({ searchParams: searchParamsPromise }: { searchParams?: P
             options={[
               { value: 'all', label: 'All Statuses' },
               { value: 'for_billing', label: 'For Billing' },
-              { value: 'for_approval', label: 'For Approval' },
+              { value: 'for_approval', label: 'Pending Technical' },
               { value: 'for_payment', label: 'For Payment' },
               { value: 'pending_payment', label: 'Pending Payment' },
               { value: 'collected', label: 'Collected' },
