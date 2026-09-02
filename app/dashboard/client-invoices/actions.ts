@@ -20,6 +20,10 @@ function todayISO(): string {
   return new Date().toISOString().split("T")[0]!;
 }
 
+function addDaysISO(dateStr: string, days: number): string {
+  return new Date(new Date(dateStr).getTime() + days * 86400000).toISOString().split("T")[0]!;
+}
+
 function parseExcelDate(v: any): string | null {
   if (v == null || v === "") return null;
   if (typeof v === "number" && v > 20000 && v < 60000) {
@@ -101,17 +105,18 @@ export async function createClientBilling(formData: FormData) {
 
   const account_id = (formData.get("account_id") as string)?.trim();
   const project_id = (formData.get("project_id") as string)?.trim() || null;
-  const invoice_number = (formData.get("invoice_number") as string)?.trim();
+  const project_name_free = (formData.get("project_name_free") as string)?.trim() || null;
+  const resolvedProjectId = project_id || null;
+  const invoice_number = (formData.get("invoice_number") as string)?.trim() || null;
   const invoice_batch = (formData.get("invoice_batch") as string)?.trim() || null;
   const amount_vat_ex = parseNum(formData.get("amount_vat_ex") as string) ?? 0;
   const amount_vat_inc = parseNum(formData.get("amount_vat_inc") as string) ?? 0;
-  const due_date = (formData.get("due_date") as string) || null;
+  const due_date_raw = (formData.get("due_date") as string) || null;
   const est_payment_date = (formData.get("est_payment_date") as string) || null;
   const notes = (formData.get("notes") as string)?.trim() || null;
   const rtd_url = (formData.get("rtd_url") as string)?.trim() || null;
 
   if (!account_id) return { error: "Client is required." };
-  if (!invoice_number) return { error: "Invoice number is required." };
   if (!amount_vat_inc && !amount_vat_ex) return { error: "Amount is required." };
 
   const nodeDetails = parseNodeDetails(formData.get("node_details") as string | null);
@@ -120,11 +125,13 @@ export async function createClientBilling(formData: FormData) {
   const firstRegion = nodeDetails.find((n) => n.region)?.region || null;
 
   const date_issued = todayISO();
+  const due_date = due_date_raw || addDaysISO(date_issued, 30);
   const { data: row, error } = await supabase
     .from("client_billing")
     .insert({
       account_id,
-      project_id,
+      project_id: resolvedProjectId,
+      project_name_free: resolvedProjectId ? null : project_name_free,
       invoice_number,
       invoice_batch,
       num_nodes: totalNodes,
@@ -175,11 +182,24 @@ export async function createClientBilling(formData: FormData) {
     changes: { after: { invoice_number, status: "for_billing" } },
     performed_by: user.id,
   });
+
+  // MRS summary email: to operations, cc finance+admins (fire-and-forget, never blocks creation)
+  try {
+    const { sendBillingMrsSummaryEmail } = await import("@/lib/email/client-billing-mrs-summary");
+    // shallow copy nodes with display-needed fields
+    sendBillingMrsSummaryEmail(row.id, nodeDetails, { actorId: user.id }).catch(() => {});
+  } catch {}
+
   revalidatePath("/dashboard/client-invoices");
   return { success: true, id: row.id };
 }
 
-export async function transitionBillingStatus(billingId: string, toStatus: string, note?: string) {
+export async function transitionBillingStatus(
+  billingId: string,
+  toStatus: string,
+  note?: string,
+  opts?: { invoice_number?: string | null; invoice_batch?: string | null },
+) {
   const supabase = await createClient();
   // Collected is finance-gated; everything else is plain write
   const cap = toStatus === "collected" ? "client_invoice.pay" : "client_invoice.write";
@@ -187,10 +207,24 @@ export async function transitionBillingStatus(billingId: string, toStatus: strin
   if (authError || !user) return { error: authError || "Unauthorized" };
   if (!BILLING_STATUSES.has(toStatus)) return { error: "Invalid status." };
 
-  const { data: cur } = await supabase.from("client_billing").select("status").eq("id", billingId).single();
+  const { data: cur } = await supabase.from("client_billing").select("status, invoice_number").eq("id", billingId).single();
   if (!cur) return { error: "Billing record not found." };
-  const from = cur.status as string;
+  const from = (cur as any).status as string;
   if (from === toStatus) return { success: true };
+
+  // Approval requires invoice number (from existing row or from the approval modal payload)
+  if (from === "pending_sky_technical" && toStatus === "for_payment") {
+    const invNum = (opts?.invoice_number?.trim() || (cur as any).invoice_number || "").trim();
+    if (!invNum) return { error: "Invoice number is required to approve." };
+    // persist invoice fields if supplied via the approval modal
+    const patch: Record<string, any> = { updated_at: new Date().toISOString() };
+    if (opts?.invoice_number != null) patch.invoice_number = opts.invoice_number.trim() || null;
+    if (opts?.invoice_batch != null) patch.invoice_batch = opts.invoice_batch.trim() || null;
+    if (Object.keys(patch).length > 1) {
+      const { error: patchErr } = await supabase.from("client_billing").update(patch).eq("id", billingId);
+      if (patchErr) return { error: patchErr.message };
+    }
+  }
 
   // Direct guard; auto For Payment -> Pending Payment
   if (toStatus === "pending_payment" && from === "pending_sky_technical") {
@@ -247,7 +281,18 @@ export async function updateClientBilling(billingId: string, formData: FormData)
   const est = formData.get("est_payment_date");
   if (est !== null) patch.est_payment_date = String(est).trim() || null;
   const proj = formData.get("project_id");
-  if (proj !== null) patch.project_id = String(proj).trim() || null;
+  if (proj !== null) {
+    const pid = String(proj).trim() || null;
+    patch.project_id = pid;
+    // when a real project is linked, clear free text; otherwise keep whatever was sent
+    if (pid) patch.project_name_free = null;
+  }
+  const pfree = formData.get("project_name_free");
+  if (pfree !== null) {
+    const v = String(pfree).trim() || null;
+    // only store free text when no project_id is being set (or already null)
+    if (!patch.project_id) patch.project_name_free = v;
+  }
   const rtd = formData.get("rtd_url");
   if (rtd !== null) {
     const v = String(rtd).trim() || null;

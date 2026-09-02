@@ -6,6 +6,7 @@ it("exposes expected statuses", () => {
 
 it("labels statuses", () => {
   expect(billingStatusLabel("for_billing")).toBe("For Billing");
+  expect(billingStatusLabel("pending_sky_technical")).toBe("Submitted to Sky Technical");
   expect(billingStatusLabel("collected")).toBe("Collected");
 });
 

@@ -11,7 +11,7 @@ export type BillingStatus = (typeof BILLING_STATUSES)[number];
 
 const LABELS: Record<string, string> = {
   for_billing: 'For Billing',
-  pending_sky_technical: 'Pending Sky Technical',
+  pending_sky_technical: 'Submitted to Sky Technical',
   for_payment: 'For Payment',
   pending_payment: 'Pending Payment',
   collected: 'Collected',

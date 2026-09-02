@@ -5,7 +5,7 @@ import { ArrowLeft, ExternalLink, FileText, Clock3, BadgeCheck, Banknote, Hourgl
 import { Suspense } from 'react';
 import { billingStatusLabel, billingStatusBadgeClasses, agingBand, agingBadgeClasses, agingLabel } from '@/lib/billing/status';
 import { TransitionPanel } from '@/components/dashboard/client-invoices/transition-panel';
-import { BillingNodesEditor } from '@/components/dashboard/client-invoices/billing-nodes-editor';
+import { BillingDetailEditor } from '@/components/dashboard/client-invoices/billing-detail-editor';
 import { Timeline, type TimelineItem } from '@/components/ui/timeline';
 
 export default function BillingDetailPage(props: {
@@ -22,10 +22,11 @@ async function Content({ paramsPromise }: { paramsPromise: Promise<{ id: string 
   const { id } = await paramsPromise;
   const supabase = await createClient();
 
-  const [{ data: row, error }, { data: timeline }, { data: nodes }] = await Promise.all([
+  const [{ data: row, error }, { data: timeline }, { data: nodes }, { data: projects }] = await Promise.all([
     supabase.from('client_billing').select('*, crm_accounts(company_name), projects(id, name)').eq('id', id).is('deleted_at', null).single(),
     supabase.from('client_billing_timeline').select('id, from_status, to_status, changed_at, note, profiles!changed_by(full_name, email)').eq('billing_id', id).order('changed_at', { ascending: true }),
     supabase.from('client_billing_nodes').select('*').eq('billing_id', id).order('sn', { ascending: true }),
+    supabase.from('projects').select('id, name').is('deleted_at', null).order('name').limit(100),
   ]);
 
   if (error || !row) notFound();
@@ -38,12 +39,12 @@ async function Content({ paramsPromise }: { paramsPromise: Promise<{ id: string 
           <Link href="/dashboard/client-invoices" className="p-2 -ml-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 mt-1"><ArrowLeft className="h-5 w-5" /></Link>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-plus-jakarta tracking-tight">{row.invoice_number}</h1>
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-plus-jakarta tracking-tight">{row.invoice_number || `Billing #${String(row.id).slice(0, 8)}`}</h1>
               <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${billingStatusBadgeClasses(row.status)}`}>{billingStatusLabel(row.status).toUpperCase()}</span>
               {ag.band && <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${agingBadgeClasses(ag.band)}`}>{agingLabel(ag.band, ag.daysDelayed).toUpperCase()}</span>}
             </div>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              {(row.crm_accounts as any)?.company_name} · {(row.projects as any)?.name || 'No project'} · {row.invoice_batch ? `Batch ${row.invoice_batch}` : 'No batch'}
+              {(row.crm_accounts as any)?.company_name} · {(row.projects as any)?.name || (row as any).project_name_free || 'No project'} · {row.invoice_batch ? `Batch ${row.invoice_batch}` : 'No batch'}
             </p>
           </div>
         </div>
@@ -69,24 +70,14 @@ async function Content({ paramsPromise }: { paramsPromise: Promise<{ id: string 
         </div>
       </div>
 
-      <TransitionPanel billingId={row.id} status={row.status} />
+      <TransitionPanel billingId={row.id} status={row.status} invoiceNumber={row.invoice_number} invoiceBatch={row.invoice_batch} />
 
-      <div className="glass-card rounded-2xl p-5 space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Details</p>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-          <div><p className="text-xs text-slate-400">Region</p><p className="font-medium text-slate-900 dark:text-white mt-0.5">{row.region || '—'}</p></div>
-          <div><p className="text-xs text-slate-400"># Nodes</p><p className="font-medium text-slate-900 dark:text-white mt-0.5">{row.num_nodes ?? '—'}</p></div>
-          <div><p className="text-xs text-slate-400">Date Issued</p><p className="font-medium text-slate-900 dark:text-white mt-0.5">{row.date_issued ? new Date(row.date_issued).toLocaleDateString() : '—'}</p></div>
-          <div><p className="text-xs text-slate-400">Date Endorsed</p><p className="font-medium text-slate-900 dark:text-white mt-0.5">{row.date_endorsed ? new Date(row.date_endorsed).toLocaleDateString() : '—'}</p></div>
-          <div><p className="text-xs text-slate-400">Due Date</p><p className="font-medium text-slate-900 dark:text-white mt-0.5">{row.due_date ? new Date(row.due_date).toLocaleDateString() : '—'}</p></div>
-          <div><p className="text-xs text-slate-400">Est. Payment</p><p className="font-medium text-slate-900 dark:text-white mt-0.5">{row.est_payment_date ? new Date(row.est_payment_date).toLocaleDateString() : '—'}</p></div>
-          <div><p className="text-xs text-slate-400">Collected At</p><p className="font-medium text-slate-900 dark:text-white mt-0.5">{row.collected_at ? new Date(row.collected_at).toLocaleDateString() : '—'}</p></div>
-          {row.file_url && <div><p className="text-xs text-slate-400">RTD Document</p><a href={row.file_url} target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline mt-0.5 inline-flex items-center gap-1">View RTD <ExternalLink className="h-3 w-3" /></a></div>}
-        </div>
-        {row.notes && <div className="pt-2 border-t border-slate-100 dark:border-white/10"><p className="text-xs text-slate-400 mb-1">Notes</p><p className="text-sm text-slate-700 dark:text-slate-300">{row.notes}</p></div>}
-      </div>
-
-      <BillingNodesEditor billingId={row.id} initialNodes={(nodes as any[]) || []} />
+      <BillingDetailEditor
+        billingId={row.id}
+        row={row as any}
+        initialNodes={(nodes as any[]) || []}
+        projects={(projects as any[]) || []}
+      />
 
       {(() => {
         const tl = (timeline as any[]) ?? [];

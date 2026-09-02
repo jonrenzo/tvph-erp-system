@@ -40,6 +40,7 @@ export function NewClientInvoiceForm({ initialAccountId }: { initialAccountId?: 
   const [selectedAccount, setSelectedAccount] = useState(prefilledAccountId);
   const [accounts, setAccounts] = useState<{ id: string; company_name: string }[]>([]);
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
+  const [projectFree, setProjectFree] = useState("");
   const [nodes, setNodes] = useState<BillingNode[]>([{ ...EMPTY_NODE }]);
 
   useEffect(() => {
@@ -56,6 +57,8 @@ export function NewClientInvoiceForm({ initialAccountId }: { initialAccountId?: 
       }
     }).catch(()=>setProjects([]));
   }, [selectedAccount]);
+
+  const projectNames = projects.map(p => p.name);
 
   const updateNode = useCallback((idx: number, field: keyof BillingNode, value: string | number | boolean) => {
     setNodes(prev => {
@@ -111,6 +114,11 @@ export function NewClientInvoiceForm({ initialAccountId }: { initialAccountId?: 
     const fd = new FormData(e.currentTarget);
     fd.set("account_id", selectedAccount);
     fd.set("node_details", JSON.stringify(nodes));
+    // resolve project: if free text matches a known project, send project_id; else send free text
+    const matched = projects.find(p => p.name.toLowerCase() === projectFree.trim().toLowerCase());
+    if (matched) { fd.set("project_id", matched.id); fd.delete("project_name_free"); }
+    else if (projectFree.trim()) { fd.set("project_name_free", projectFree.trim()); fd.delete("project_id"); }
+    else fd.delete("project_id");
     startTransition(async () => {
       const res = await createClientBilling(fd);
       if ((res as any).error) setError((res as any).error);
@@ -124,12 +132,11 @@ export function NewClientInvoiceForm({ initialAccountId }: { initialAccountId?: 
         <Link href="/dashboard/client-invoices" className="p-2 -ml-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"><ArrowLeft className="h-5 w-5" /></Link>
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-plus-jakarta tracking-tight">New Billing Record</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">One row = one invoice linked to a client and optionally a project.</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">One row = one billing linked to a client and optionally a project.</p>
         </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Client / Project */}
         <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-5">
           <div>
             <label className="block text-xs font-semibold uppercase tracking-widest text-slate-500 mb-1.5">Client <span className="text-rose-500">*</span></label>
@@ -139,17 +146,15 @@ export function NewClientInvoiceForm({ initialAccountId }: { initialAccountId?: 
             </select>
           </div>
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-widest text-slate-500 mb-1.5">Project (optional)</label>
-            <select name="project_id" className="w-full rounded-xl px-4 py-2.5 text-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0a0a0a] text-slate-900 dark:text-white">
-              <option value="">No project</option>
-              {projects.map(p=> <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            <label className="block text-xs font-semibold uppercase tracking-widest text-slate-500 mb-1.5">Project <span className="text-slate-400 font-normal">(optional — type to create)</span></label>
+            <Combobox options={projectNames} value={projectFree} onChange={setProjectFree} placeholder="Select or type a project…" />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="Invoice Number" name="invoice_number" placeholder="e.g. 0092" required />
+            <Field label="Invoice Number" name="invoice_number" placeholder="e.g. 0092 — optional, set at approval" />
             <Field label="Invoice Batch" name="invoice_batch" placeholder="e.g. QC 22" />
           </div>
+          <p className="text-xs text-slate-400 -mt-3">Invoice number is optional at creation; Sky Technical will set it on approval.</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Amount VAT-ex (PHP)" name="amount_vat_ex" type="number" placeholder="23035.71" />
             <Field label="Amount VAT-inc (PHP)" name="amount_vat_inc" type="number" placeholder="25339.29" />
@@ -158,9 +163,10 @@ export function NewClientInvoiceForm({ initialAccountId }: { initialAccountId?: 
             <Field label="Due Date" name="due_date" type="date" />
             <Field label="Est. Payment Date" name="est_payment_date" type="date" />
           </div>
+          <p className="text-xs text-slate-400 -mt-3">Due date defaults to invoice date + 30 days if left blank.</p>
           <div>
             <label className="block text-xs font-semibold uppercase tracking-widest text-slate-500 mb-1.5">RTD Document Link</label>
-            <input type="url" name="rtd_url" placeholder="https://…" className="w-full rounded-xl px-4 py-2.5 text-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0a0a0a] text-slate-900 dark:text-white placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/30" />
+            <input type="url" name="rtd_url" placeholder="https://… (SharePoint)" className="w-full rounded-xl px-4 py-2.5 text-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0a0a0a] text-slate-900 dark:text-white placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/30" />
           </div>
           <div>
             <label className="block text-xs font-semibold uppercase tracking-widest text-slate-500 mb-1.5">Notes</label>
@@ -220,7 +226,7 @@ export function NewClientInvoiceForm({ initialAccountId }: { initialAccountId?: 
               </tfoot>
             </table>
           </div>
-          <p className="px-6 py-3 text-xs text-slate-400 border-t border-slate-100 dark:border-slate-800/50">Paste Node IDs from Excel (tab-separated Node ID + Cable Length). Check MRS if a Material Receipt Slip is available for that node.</p>
+          <p className="px-6 py-3 text-xs text-slate-400 border-t border-slate-100 dark:border-slate-800/50">Paste Node IDs from Excel (tab-separated Node ID + Cable Length). Check MRS if Material Return Slip is available for that node.</p>
         </div>
 
         {error && <p className="text-sm text-red-500 bg-red-50 dark:bg-red-900/20 px-4 py-2.5 rounded-xl">{error}</p>}
@@ -237,11 +243,11 @@ export function NewClientInvoiceForm({ initialAccountId }: { initialAccountId?: 
   );
 }
 
-function Field({ label, name, type="text", placeholder, required }: { label:string; name:string; type?:string; placeholder?:string; required?:boolean }) {
+function Field({ label, name, type="text", placeholder }: { label:string; name:string; type?:string; placeholder?:string }) {
   return (
     <div>
-      <label className="block text-xs font-semibold uppercase tracking-widest text-slate-500 mb-1.5">{label} {required && <span className="text-rose-500">*</span>}</label>
-      <input type={type} name={name} placeholder={placeholder} required={required} className="w-full rounded-xl px-4 py-2.5 text-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0a0a0a] text-slate-900 dark:text-white placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/30" />
+      <label className="block text-xs font-semibold uppercase tracking-widest text-slate-500 mb-1.5">{label}</label>
+      <input type={type} name={name} placeholder={placeholder} className="w-full rounded-xl px-4 py-2.5 text-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0a0a0a] text-slate-900 dark:text-white placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/30" />
     </div>
   );
 }

@@ -44,13 +44,26 @@ async function Content({ searchParams: searchParamsPromise }: { searchParams?: P
 
   let query = supabase
     .from('client_billing')
-    .select('id, invoice_number, invoice_batch, region, num_nodes, date_issued, date_endorsed, due_date, est_payment_date, amount_vat_ex, amount_vat_inc, status, crm_accounts(company_name), projects(name)', { count: 'exact' })
+    .select('id, invoice_number, invoice_batch, region, num_nodes, date_issued, date_endorsed, due_date, est_payment_date, amount_vat_ex, amount_vat_inc, status, project_name_free, crm_accounts(company_name), projects(name)', { count: 'exact' })
     .is('deleted_at', null)
     .order('date_issued', { ascending: false });
 
   query = applyFilters(query);
 
   const { data: rows, error, count } = await query.range(from, to);
+
+  // MRS summary per billing on this page
+  const mrsMap = new Map<string, { total: number; withMrs: number }>();
+  if (rows?.length) {
+    const ids = rows.map((r: any) => r.id);
+    const { data: mrsRows } = await supabase.from('client_billing_nodes').select('billing_id, has_mrs').in('billing_id', ids);
+    for (const n of (mrsRows as any[]) || []) {
+      const cur = mrsMap.get(n.billing_id) || { total: 0, withMrs: 0 };
+      cur.total += 1;
+      if (n.has_mrs) cur.withMrs += 1;
+      mrsMap.set(n.billing_id, cur);
+    }
+  }
 
   // summary for the *filtered* set (not just current page) — ponytail: one extra query, JS sum
   let summaryQuery = supabase.from('client_billing').select('amount_vat_inc, status, due_date').is('deleted_at', null);
@@ -66,7 +79,7 @@ async function Content({ searchParams: searchParamsPromise }: { searchParams?: P
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-plus-jakarta tracking-tight">Client Billing</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Excel billing tracker — For Billing → Pending Sky Technical → For Payment → Pending Payment → Collected.</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Excel billing tracker — For Billing → Submitted to Sky Technical → For Payment → Pending Payment → Collected.</p>
         </div>
         <div className="flex items-center gap-2">
           <Link href="/dashboard/client-invoices/import" className="inline-flex items-center gap-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
@@ -86,7 +99,7 @@ async function Content({ searchParams: searchParamsPromise }: { searchParams?: P
             options={[
               { value: 'all', label: 'All Statuses' },
               { value: 'for_billing', label: 'For Billing' },
-              { value: 'pending_sky_technical', label: 'Pending Sky Technical' },
+              { value: 'pending_sky_technical', label: 'Submitted to Sky Technical' },
               { value: 'for_payment', label: 'For Payment' },
               { value: 'pending_payment', label: 'Pending Payment' },
               { value: 'collected', label: 'Collected' },
@@ -110,6 +123,7 @@ async function Content({ searchParams: searchParamsPromise }: { searchParams?: P
                 <th className="px-6 py-4 font-semibold">Invoice</th>
                 <th className="px-6 py-4 font-semibold">Client / Project</th>
                 <th className="px-6 py-4 font-semibold">Batch · Region</th>
+                <th className="px-6 py-4 font-semibold">MRS</th>
                 <th className="px-6 py-4 font-semibold">Amount (VAT-inc)</th>
                 <th className="px-6 py-4 font-semibold">Due · Aging</th>
                 <th className="px-6 py-4 font-semibold">Status</th>
@@ -118,10 +132,10 @@ async function Content({ searchParams: searchParamsPromise }: { searchParams?: P
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
               {error ? (
-                <tr><td colSpan={7} className="px-6 py-12 text-center text-red-500">Failed to load.</td></tr>
+                <tr><td colSpan={8} className="px-6 py-12 text-center text-red-500">Failed to load.</td></tr>
               ) : rows?.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center">
+                  <td colSpan={8} className="px-6 py-12 text-center">
                     <div className="flex flex-col items-center text-slate-500 dark:text-slate-400">
                       <div className="h-12 w-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-3"><FileText className="h-6 w-6 text-slate-400" /></div>
                       <p className="font-medium text-slate-900 dark:text-white">No billing records</p>
@@ -132,18 +146,26 @@ async function Content({ searchParams: searchParamsPromise }: { searchParams?: P
               ) : (
                 rows?.map((r: any) => {
                   const ag = agingBand(r);
+                  const mrs = mrsMap.get(r.id);
                   return (
                     <tr key={r.id} className="group hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-colors">
                       <td className="px-6 py-4">
-                        <div className="font-bold text-slate-900 dark:text-white">{r.invoice_number}</div>
+                        <div className="font-bold text-slate-900 dark:text-white">{r.invoice_number || '—'}</div>
                         <div className="text-xs text-slate-400 flex items-center gap-1"><Clock className="h-3 w-3" /> {r.date_issued ? new Date(r.date_issued).toLocaleDateString() : '—'}</div>
                       </td>
                       <td className="px-6 py-4">
                         <div className="font-medium text-slate-900 dark:text-white">{r.crm_accounts?.company_name || '—'}</div>
-                        <div className="text-xs text-slate-400">{r.projects?.name || 'No project'}</div>
+                        <div className="text-xs text-slate-400">{r.projects?.name || r.project_name_free || 'No project'}</div>
                       </td>
                       <td className="px-6 py-4 text-slate-600 dark:text-slate-400">
                         <div className="text-xs">{r.invoice_batch || '—'} {r.region ? `· ${r.region}` : ''} {r.num_nodes ? `· ${r.num_nodes} nodes` : ''}</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        {mrs ? (
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${mrs.withMrs === mrs.total ? 'bg-emerald-400 text-white border-none' : mrs.withMrs === 0 ? 'bg-red-400 text-white border-none' : 'bg-amber-400 text-white border-none'}`}>
+                            {mrs.withMrs}/{mrs.total} MRS
+                          </span>
+                        ) : <span className="text-xs text-slate-400">—</span>}
                       </td>
                       <td className="px-6 py-4 font-semibold text-slate-900 dark:text-white">₱ {Number(r.amount_vat_inc || 0).toLocaleString()}</td>
                       <td className="px-6 py-4">
