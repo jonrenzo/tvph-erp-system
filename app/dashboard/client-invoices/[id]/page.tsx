@@ -5,6 +5,7 @@ import { ArrowLeft, ExternalLink, FileText, Clock3, BadgeCheck, Banknote, Hourgl
 import { Suspense } from 'react';
 import { billingStatusLabel, billingStatusBadgeClasses, agingBand, agingBadgeClasses, agingLabel } from '@/lib/billing/status';
 import { TransitionPanel } from '@/components/dashboard/client-invoices/transition-panel';
+import { BillingNodesEditor } from '@/components/dashboard/client-invoices/billing-nodes-editor';
 import { Timeline, type TimelineItem } from '@/components/ui/timeline';
 
 export default function BillingDetailPage(props: {
@@ -21,9 +22,10 @@ async function Content({ paramsPromise }: { paramsPromise: Promise<{ id: string 
   const { id } = await paramsPromise;
   const supabase = await createClient();
 
-  const [{ data: row, error }, { data: timeline }] = await Promise.all([
+  const [{ data: row, error }, { data: timeline }, { data: nodes }] = await Promise.all([
     supabase.from('client_billing').select('*, crm_accounts(company_name), projects(id, name)').eq('id', id).is('deleted_at', null).single(),
     supabase.from('client_billing_timeline').select('id, from_status, to_status, changed_at, note, profiles!changed_by(full_name, email)').eq('billing_id', id).order('changed_at', { ascending: true }),
+    supabase.from('client_billing_nodes').select('*').eq('billing_id', id).order('sn', { ascending: true }),
   ]);
 
   if (error || !row) notFound();
@@ -47,7 +49,7 @@ async function Content({ paramsPromise }: { paramsPromise: Promise<{ id: string 
         </div>
         {row.file_url && (
           <a href={row.file_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50">
-            <ExternalLink className="h-4 w-4" /> View Doc
+            <ExternalLink className="h-4 w-4" /> RTD Document
           </a>
         )}
       </div>
@@ -79,16 +81,19 @@ async function Content({ paramsPromise }: { paramsPromise: Promise<{ id: string 
           <div><p className="text-xs text-slate-400">Due Date</p><p className="font-medium text-slate-900 dark:text-white mt-0.5">{row.due_date ? new Date(row.due_date).toLocaleDateString() : '—'}</p></div>
           <div><p className="text-xs text-slate-400">Est. Payment</p><p className="font-medium text-slate-900 dark:text-white mt-0.5">{row.est_payment_date ? new Date(row.est_payment_date).toLocaleDateString() : '—'}</p></div>
           <div><p className="text-xs text-slate-400">Collected At</p><p className="font-medium text-slate-900 dark:text-white mt-0.5">{row.collected_at ? new Date(row.collected_at).toLocaleDateString() : '—'}</p></div>
+          {row.file_url && <div><p className="text-xs text-slate-400">RTD Document</p><a href={row.file_url} target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline mt-0.5 inline-flex items-center gap-1">View RTD <ExternalLink className="h-3 w-3" /></a></div>}
         </div>
         {row.notes && <div className="pt-2 border-t border-slate-100 dark:border-white/10"><p className="text-xs text-slate-400 mb-1">Notes</p><p className="text-sm text-slate-700 dark:text-slate-300">{row.notes}</p></div>}
       </div>
+
+      <BillingNodesEditor billingId={row.id} initialNodes={(nodes as any[]) || []} />
 
       {(() => {
         const tl = (timeline as any[]) ?? [];
         const iconFor = (status: string) => {
           switch (status) {
             case "for_billing": return <FileText className="h-3 w-3" />;
-            case "for_approval": return <Clock3 className="h-3 w-3" />;
+            case "pending_sky_technical": return <Clock3 className="h-3 w-3" />;
             case "for_payment": return <Banknote className="h-3 w-3" />;
             case "pending_payment": return <Hourglass className="h-3 w-3" />;
             case "collected": return <BadgeCheck className="h-3 w-3" />;

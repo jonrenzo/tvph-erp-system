@@ -10,7 +10,7 @@ import { parseFile } from "@/utils/import-export";
 
 const BILLING_STATUSES = new Set([
   "for_billing",
-  "for_approval",
+  "pending_sky_technical",
   "for_payment",
   "pending_payment",
   "collected",
@@ -77,6 +77,23 @@ async function writeTransition(
   return { success: true };
 }
 
+function parseNodeDetails(raw: string | null): { region: string; area_city: string; node_id: string; phase: string; no_of_nodes: number; cable_length_km: number; has_mrs: boolean }[] {
+  if (!raw) return [];
+  try {
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return [];
+    return arr.map((r: any) => ({
+      region: String(r.region || "").trim() || null as any,
+      area_city: String(r.area_city || "").trim() || null as any,
+      node_id: String(r.node_id || "").trim() || null as any,
+      phase: String(r.phase || "").trim() || null as any,
+      no_of_nodes: Math.max(0, parseInt(String(r.no_of_nodes), 10) || 0) || 1,
+      cable_length_km: Number(r.cable_length_km) || 0,
+      has_mrs: Boolean(r.has_mrs),
+    }));
+  } catch { return []; }
+}
+
 export async function createClientBilling(formData: FormData) {
   const supabase = await createClient();
   const { user, error: authError } = await requireCapability("client_invoice.write", supabase);
@@ -86,30 +103,21 @@ export async function createClientBilling(formData: FormData) {
   const project_id = (formData.get("project_id") as string)?.trim() || null;
   const invoice_number = (formData.get("invoice_number") as string)?.trim();
   const invoice_batch = (formData.get("invoice_batch") as string)?.trim() || null;
-  const region = (formData.get("region") as string)?.trim() || null;
-  const num_nodes = formData.get("num_nodes") ? parseInt(formData.get("num_nodes") as string, 10) : null;
   const amount_vat_ex = parseNum(formData.get("amount_vat_ex") as string) ?? 0;
   const amount_vat_inc = parseNum(formData.get("amount_vat_inc") as string) ?? 0;
   const due_date = (formData.get("due_date") as string) || null;
   const est_payment_date = (formData.get("est_payment_date") as string) || null;
   const notes = (formData.get("notes") as string)?.trim() || null;
-  const file = formData.get("file") as File | null;
+  const rtd_url = (formData.get("rtd_url") as string)?.trim() || null;
 
   if (!account_id) return { error: "Client is required." };
   if (!invoice_number) return { error: "Invoice number is required." };
   if (!amount_vat_inc && !amount_vat_ex) return { error: "Amount is required." };
 
-  let file_url: string | null = null;
-  let file_name: string | null = null;
-  if (file && file.size > 0) {
-    const ext = file.name.split(".").pop();
-    const path = `client-billing/${account_id}/${Date.now()}.${ext}`;
-    const { error: upErr } = await supabase.storage.from("crm-documents").upload(path, file, { contentType: file.type, upsert: false });
-    if (upErr) return { error: upErr.message };
-    const { data: { publicUrl } } = supabase.storage.from("crm-documents").getPublicUrl(path);
-    file_url = publicUrl;
-    file_name = file.name;
-  }
+  const nodeDetails = parseNodeDetails(formData.get("node_details") as string | null);
+  // derive snapshot fields from nodes for backward compat / list view
+  const totalNodes = nodeDetails.reduce((s, n) => s + (Number(n.no_of_nodes) || 0), 0) || null;
+  const firstRegion = nodeDetails.find((n) => n.region)?.region || null;
 
   const date_issued = todayISO();
   const { data: row, error } = await supabase
@@ -119,8 +127,8 @@ export async function createClientBilling(formData: FormData) {
       project_id,
       invoice_number,
       invoice_batch,
-      num_nodes: isNaN(num_nodes as number) ? null : num_nodes,
-      region,
+      num_nodes: totalNodes,
+      region: firstRegion,
       amount_vat_ex,
       amount_vat_inc: amount_vat_inc || amount_vat_ex,
       date_issued,
@@ -128,14 +136,31 @@ export async function createClientBilling(formData: FormData) {
       est_payment_date,
       status: "for_billing",
       notes,
-      file_url,
-      file_name,
+      file_url: rtd_url,
+      file_name: rtd_url ? "RTD" : null,
       created_by: user.id,
     })
     .select("id")
     .single();
 
   if (error || !row) return { error: error?.message || "Failed to create billing record." };
+
+  if (nodeDetails.length) {
+    const svc = createServiceRoleClient();
+    const toInsert = nodeDetails.map((n, i) => ({
+      billing_id: row.id,
+      sn: i + 1,
+      region: n.region,
+      area_city: n.area_city,
+      node_id: n.node_id,
+      phase: n.phase,
+      no_of_nodes: n.no_of_nodes,
+      cable_length_km: n.cable_length_km,
+      has_mrs: n.has_mrs,
+    }));
+    const { error: ndErr } = await svc.from("client_billing_nodes").insert(toInsert);
+    if (ndErr) return { error: ndErr.message };
+  }
 
   await supabase.from("client_billing_timeline").insert({
     billing_id: row.id,
@@ -168,7 +193,7 @@ export async function transitionBillingStatus(billingId: string, toStatus: strin
   if (from === toStatus) return { success: true };
 
   // Direct guard; auto For Payment -> Pending Payment
-  if (toStatus === "pending_payment" && from === "for_approval") {
+  if (toStatus === "pending_payment" && from === "pending_sky_technical") {
     // Approve path: must go via for_payment first (auto). So route through it.
     const r1 = await writeTransition(billingId, from, "for_payment", user.id, supabase, note);
     if ((r1 as any).error) return r1;
@@ -208,13 +233,11 @@ export async function updateClientBilling(billingId: string, formData: FormData)
   if (authError || !user) return { error: authError || "Unauthorized" };
 
   const patch: Record<string, any> = { updated_at: new Date().toISOString() };
-  const fields = ["invoice_number", "invoice_batch", "region", "notes"] as const;
+  const fields = ["invoice_number", "invoice_batch", "notes"] as const;
   for (const f of fields) {
     const v = formData.get(f);
     if (v !== null) patch[f] = String(v).trim() || null;
   }
-  const num_nodes = formData.get("num_nodes");
-  if (num_nodes !== null) patch.num_nodes = String(num_nodes).trim() ? parseInt(String(num_nodes), 10) : null;
   const vatEx = formData.get("amount_vat_ex");
   if (vatEx !== null) patch.amount_vat_ex = parseNum(vatEx as string) ?? 0;
   const vatInc = formData.get("amount_vat_inc");
@@ -225,10 +248,75 @@ export async function updateClientBilling(billingId: string, formData: FormData)
   if (est !== null) patch.est_payment_date = String(est).trim() || null;
   const proj = formData.get("project_id");
   if (proj !== null) patch.project_id = String(proj).trim() || null;
+  const rtd = formData.get("rtd_url");
+  if (rtd !== null) {
+    const v = String(rtd).trim() || null;
+    patch.file_url = v;
+    patch.file_name = v ? "RTD" : null;
+  }
+
+  // handle node_details if present
+  const rawNodes = formData.get("node_details");
+  if (rawNodes !== null) {
+    const nodes = parseNodeDetails(rawNodes as string);
+    patch.num_nodes = nodes.reduce((s: number, n: any) => s + (Number(n.no_of_nodes) || 0), 0) || null;
+    patch.region = nodes.find((n: any) => n.region)?.region || null;
+    // replace nodes
+    const svc = createServiceRoleClient();
+    await svc.from("client_billing_nodes").delete().eq("billing_id", billingId);
+    if (nodes.length) {
+      const toInsert = nodes.map((n: any, i: number) => ({
+        billing_id: billingId,
+        sn: i + 1,
+        region: n.region,
+        area_city: n.area_city,
+        node_id: n.node_id,
+        phase: n.phase,
+        no_of_nodes: n.no_of_nodes,
+        cable_length_km: n.cable_length_km,
+        has_mrs: n.has_mrs,
+      }));
+      const { error: ndErr } = await svc.from("client_billing_nodes").insert(toInsert);
+      if (ndErr) return { error: ndErr.message };
+    }
+  }
 
   const { error } = await supabase.from("client_billing").update(patch).eq("id", billingId);
   if (error) return { error: error.message };
   await recordAuditLog({ entity_type: "client_billing", entity_id: billingId, action: "UPDATE", changes: { after: patch }, performed_by: user.id });
+  revalidatePath("/dashboard/client-invoices");
+  revalidatePath(`/dashboard/client-invoices/${billingId}`);
+  return { success: true };
+}
+
+export async function updateClientBillingNodes(billingId: string, formData: FormData) {
+  const supabase = await createClient();
+  const { user, error: authError } = await requireCapability("client_invoice.write", supabase);
+  if (authError || !user) return { error: authError || "Unauthorized" };
+  const nodes = parseNodeDetails(formData.get("node_details") as string | null);
+  const svc = createServiceRoleClient();
+  await svc.from("client_billing_nodes").delete().eq("billing_id", billingId);
+  if (nodes.length) {
+    const toInsert = nodes.map((n: any, i: number) => ({
+      billing_id: billingId,
+      sn: i + 1,
+      region: n.region,
+      area_city: n.area_city,
+      node_id: n.node_id,
+      phase: n.phase,
+      no_of_nodes: n.no_of_nodes,
+      cable_length_km: n.cable_length_km,
+      has_mrs: n.has_mrs,
+    }));
+    const { error } = await svc.from("client_billing_nodes").insert(toInsert);
+    if (error) return { error: error.message };
+  }
+  const patch: Record<string, any> = {
+    num_nodes: nodes.reduce((s, n: any) => s + (Number(n.no_of_nodes) || 0), 0) || null,
+    region: nodes.find((n: any) => n.region)?.region || null,
+    updated_at: new Date().toISOString(),
+  };
+  await supabase.from("client_billing").update(patch).eq("id", billingId);
   revalidatePath("/dashboard/client-invoices");
   revalidatePath(`/dashboard/client-invoices/${billingId}`);
   return { success: true };

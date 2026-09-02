@@ -46,7 +46,7 @@ type Spec = {
   region: string;
   num_nodes: number;
   amount_vat_ex: number;
-  status: "for_billing" | "for_approval" | "pending_payment" | "collected";
+  status: "for_billing" | "pending_sky_technical" | "pending_payment" | "collected";
   dueOffset: number; // days from today
   issuedOffset: number;
   endorsedOffset: number | null;
@@ -77,13 +77,13 @@ function buildTimeline(spec: Spec, dates: { issued: string; endorsed: string | n
     const apprD = new Date(issuedD.getTime() + 4 * 86400000);
     approvalAt = atTime(apprD.toISOString().split("T")[0]!, 10);
   }
-  chain.push({ from: "for_billing", to: "for_approval", at: approvalAt, note: "Approved — ready for endorsement" });
+  chain.push({ from: "for_billing", to: "pending_sky_technical", at: approvalAt, note: "Pending Sky Technical review" });
 
-  if (spec.status === "for_approval") return chain;
+  if (spec.status === "pending_sky_technical") return chain;
 
   // endorsed = for_payment then auto pending_payment (same endorsed day, +1h)
   if (dates.endorsed) {
-    chain.push({ from: "for_approval", to: "for_payment", at: atTime(dates.endorsed, 11), note: "Endorsed to client finance" });
+    chain.push({ from: "pending_sky_technical", to: "for_payment", at: atTime(dates.endorsed, 11), note: "Sky Technical approved — endorsed to client finance" });
     chain.push({ from: "for_payment", to: "pending_payment", at: new Date(new Date(atTime(dates.endorsed, 11)).getTime() + 3600000).toISOString(), note: "Pending payment — finance received" });
   }
   if (spec.status === "pending_payment") return chain;
@@ -97,12 +97,12 @@ function buildTimeline(spec: Spec, dates: { issued: string; endorsed: string | n
 
 const specs: Spec[] = [
   // for_billing — untouched, ready to test For Billing → For Approval
-  { invoice_number: "TEST-2026-001", invoice_batch: "BATCH-2026-08-A", region: "NCR", num_nodes: 42, amount_vat_ex: 185000, status: "for_billing", dueOffset: 30, issuedOffset: -2, endorsedOffset: null, collectedOffset: null, notes: "Seed: for_billing — move to for_approval to test" },
+  { invoice_number: "TEST-2026-001", invoice_batch: "BATCH-2026-08-A", region: "NCR", num_nodes: 42, amount_vat_ex: 185000, status: "for_billing", dueOffset: 30, issuedOffset: -2, endorsedOffset: null, collectedOffset: null, notes: "Seed: for_billing — move to pending_sky_technical to test" },
   { invoice_number: "TEST-2026-002", invoice_batch: "BATCH-2026-08-A", region: "Luzon", num_nodes: 28, amount_vat_ex: 240000, status: "for_billing", dueOffset: 25, issuedOffset: -5, endorsedOffset: null, collectedOffset: null, notes: "Seed: for_billing" },
   { invoice_number: "TEST-2026-003", invoice_batch: "BATCH-2026-08-B", region: "Visayas", num_nodes: 15, amount_vat_ex: 95000, status: "for_billing", dueOffset: 18, issuedOffset: -10, endorsedOffset: null, collectedOffset: null, notes: "Seed: for_billing" },
-  // for_approval — test For Approval → For Payment (auto Pending)
-  { invoice_number: "TEST-2026-004", invoice_batch: "BATCH-2026-07-A", region: "Mindanao", num_nodes: 60, amount_vat_ex: 420000, status: "for_approval", dueOffset: 14, issuedOffset: -20, endorsedOffset: null, collectedOffset: null, notes: "Seed: for_approval — approve to for_payment/pending" },
-  { invoice_number: "TEST-2026-005", invoice_batch: "BATCH-2026-07-A", region: "NCR", num_nodes: 33, amount_vat_ex: 310000, status: "for_approval", dueOffset: 10, issuedOffset: -25, endorsedOffset: null, collectedOffset: null, notes: "Seed: for_approval" },
+  // pending_sky_technical — test Pending Sky Technical → For Payment (auto Pending)
+  { invoice_number: "TEST-2026-004", invoice_batch: "BATCH-2026-07-A", region: "Mindanao", num_nodes: 60, amount_vat_ex: 420000, status: "pending_sky_technical", dueOffset: 14, issuedOffset: -20, endorsedOffset: null, collectedOffset: null, notes: "Seed: pending_sky_technical — approve to for_payment/pending" },
+  { invoice_number: "TEST-2026-005", invoice_batch: "BATCH-2026-07-A", region: "NCR", num_nodes: 33, amount_vat_ex: 310000, status: "pending_sky_technical", dueOffset: 10, issuedOffset: -25, endorsedOffset: null, collectedOffset: null, notes: "Seed: pending_sky_technical" },
   // pending_payment — aging bands: healthy, close_due, overdue x2, overdue long
   { invoice_number: "TEST-2026-006", invoice_batch: "BATCH-2026-07-B", region: "NCR", num_nodes: 50, amount_vat_ex: 380000, status: "pending_payment", dueOffset: 20, issuedOffset: -30, endorsedOffset: -5, collectedOffset: null, notes: "Seed: pending healthy (>7d to due)" },
   { invoice_number: "TEST-2026-007", invoice_batch: "BATCH-2026-06-A", region: "Luzon", num_nodes: 22, amount_vat_ex: 175000, status: "pending_payment", dueOffset: 5, issuedOffset: -35, endorsedOffset: -8, collectedOffset: null, notes: "Seed: pending close_due (≤7d)" },

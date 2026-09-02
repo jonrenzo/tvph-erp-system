@@ -66,7 +66,7 @@ async function Content({ searchParams: searchParamsPromise }: { searchParams?: P
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-plus-jakarta tracking-tight">Client Billing</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Excel billing tracker — For Billing → For Approval → Pending Payment → Collected.</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Excel billing tracker — For Billing → Pending Sky Technical → For Payment → Pending Payment → Collected.</p>
         </div>
         <div className="flex items-center gap-2">
           <Link href="/dashboard/client-invoices/import" className="inline-flex items-center gap-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
@@ -86,7 +86,7 @@ async function Content({ searchParams: searchParamsPromise }: { searchParams?: P
             options={[
               { value: 'all', label: 'All Statuses' },
               { value: 'for_billing', label: 'For Billing' },
-              { value: 'for_approval', label: 'Pending Technical' },
+              { value: 'pending_sky_technical', label: 'Pending Sky Technical' },
               { value: 'for_payment', label: 'For Payment' },
               { value: 'pending_payment', label: 'Pending Payment' },
               { value: 'collected', label: 'Collected' },

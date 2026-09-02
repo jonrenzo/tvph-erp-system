@@ -2,7 +2,7 @@ import { statusBadgeClasses } from '@/lib/ui/status-badge';
 
 export const BILLING_STATUSES = [
   'for_billing',
-  'for_approval',
+  'pending_sky_technical',
   'for_payment',
   'pending_payment',
   'collected',
@@ -11,15 +11,15 @@ export type BillingStatus = (typeof BILLING_STATUSES)[number];
 
 const LABELS: Record<string, string> = {
   for_billing: 'For Billing',
-  for_approval: 'For Approval',
+  pending_sky_technical: 'Pending Sky Technical',
   for_payment: 'For Payment',
   pending_payment: 'Pending Payment',
   collected: 'Collected',
 };
 
 const ALLOWED: Record<string, string[]> = {
-  for_billing: ['for_approval'],
-  for_approval: ['for_billing', 'for_payment'],
+  for_billing: ['pending_sky_technical'],
+  pending_sky_technical: ['for_billing', 'for_payment'],
   for_payment: ['pending_payment', 'collected'],
   pending_payment: ['collected'],
   collected: [],
@@ -41,7 +41,9 @@ export function normalizeBillingStatus(raw: string): BillingStatus | null {
   const s = raw.trim().toLowerCase().replace(/[\s-]+/g, '_');
   const map: Record<string, BillingStatus> = {
     for_billing: 'for_billing',
-    for_approval: 'for_approval',
+    pending_sky_technical: 'pending_sky_technical',
+    // legacy alias
+    for_approval: 'pending_sky_technical',
     for_payment: 'for_payment',
     pending_payment: 'pending_payment',
     pending_payments: 'pending_payment',

@@ -5,10 +5,10 @@ import { transitionBillingStatus } from "@/app/dashboard/client-invoices/actions
 import { Loader2 } from "lucide-react";
 
 const NEXT: Record<string, { label: string; to: string; variant: string }[]> = {
-  for_billing: [{ label: "Send for Approval", to: "for_approval", variant: "bg-amber-500 hover:bg-amber-600" }],
-  for_approval: [
+  for_billing: [{ label: "Send to Sky Technical", to: "pending_sky_technical", variant: "bg-amber-500 hover:bg-amber-600" }],
+  pending_sky_technical: [
     { label: "Back to For Billing (Rejected)", to: "for_billing", variant: "bg-slate-600 hover:bg-slate-700" },
-    { label: "Mark Approved → Endorse", to: "for_payment", variant: "bg-blue-600 hover:bg-blue-700" },
+    { label: "Approve → For Payment", to: "for_payment", variant: "bg-blue-600 hover:bg-blue-700" },
   ],
   pending_payment: [{ label: "Mark Collected", to: "collected", variant: "bg-emerald-600 hover:bg-emerald-700" }],
 };

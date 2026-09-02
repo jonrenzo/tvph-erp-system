@@ -1,7 +1,7 @@
 import { BILLING_STATUSES, billingStatusLabel, canTransition, normalizeBillingStatus, agingBand } from "@/lib/billing/status";
 
 it("exposes expected statuses", () => {
-  expect(BILLING_STATUSES).toEqual(["for_billing","for_approval","for_payment","pending_payment","collected"]);
+  expect(BILLING_STATUSES).toEqual(["for_billing","pending_sky_technical","for_payment","pending_payment","collected"]);
 });
 
 it("labels statuses", () => {
@@ -10,9 +10,9 @@ it("labels statuses", () => {
 });
 
 it("enforces transition rules (including rejection loop)", () => {
-  expect(canTransition("for_billing","for_approval")).toBe(true);
-  expect(canTransition("for_approval","for_billing")).toBe(true); // rejected -> resubmit
-  expect(canTransition("for_approval","for_payment")).toBe(true);
+  expect(canTransition("for_billing","pending_sky_technical")).toBe(true);
+  expect(canTransition("pending_sky_technical","for_billing")).toBe(true); // rejected -> resubmit
+  expect(canTransition("pending_sky_technical","for_payment")).toBe(true);
   expect(canTransition("for_payment","pending_payment")).toBe(true);
   expect(canTransition("pending_payment","collected")).toBe(true);
   expect(canTransition("for_billing","collected")).toBe(false);
@@ -21,7 +21,10 @@ it("enforces transition rules (including rejection loop)", () => {
 
 it("normalizes Excel STATUS casing", () => {
   expect(normalizeBillingStatus("FOR PAYMENT")).toBe("for_payment");
-  expect(normalizeBillingStatus("For Approval")).toBe("for_approval");
+  expect(normalizeBillingStatus("For Approval")).toBe("pending_sky_technical");
+  expect(normalizeBillingStatus("Pending Sky Technical")).toBe("pending_sky_technical");
+  // legacy alias
+  expect(normalizeBillingStatus("for_approval")).toBe("pending_sky_technical");
   expect(normalizeBillingStatus("Collected")).toBe("collected");
   expect(normalizeBillingStatus("Pending Payment")).toBe("pending_payment");
   expect(normalizeBillingStatus("paid")).toBe("collected");
