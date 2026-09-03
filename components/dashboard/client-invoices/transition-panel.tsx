@@ -77,7 +77,7 @@ export function TransitionPanel({ billingId, status, invoiceNumber, invoiceBatch
 
       {confirm && (
         <div className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-md" onClick={() => setConfirm(null)} />
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-md" onClick={() => setConfirm(null)} />
           <div className="relative bg-white dark:bg-[#0a0a0a] rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-semibold text-slate-900 dark:text-white">Confirm action</h3>
