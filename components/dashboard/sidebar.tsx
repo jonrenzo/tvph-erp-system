@@ -182,11 +182,15 @@ function SidebarItem({
   pathname,
   isCollapsed,
   userRole,
+  isOpen,
+  onToggle,
 }: {
   config: ModuleItem;
   pathname: string;
   isCollapsed: boolean;
   userRole: string;
+  isOpen: boolean;
+  onToggle: () => void;
 }) {
   const filteredSubs = config.subModules
     ? visibleSubModules(config.subModules, userRole)
@@ -195,12 +199,6 @@ function SidebarItem({
   const hasSubModules = !!filteredSubs && filteredSubs.length > 0;
   const isSubActive = hasSubModules && filteredSubs!.some((sub) => pathname.startsWith(sub.href));
   const isActive = !config.subModules && pathname === config.href;
-
-  const [isOpen, setIsOpen] = useState(isSubActive);
-
-  useEffect(() => {
-    if (isSubActive && !isCollapsed) setIsOpen(true);
-  }, [isSubActive, isCollapsed]);
 
   const Icon = config.icon!;
 
@@ -228,7 +226,7 @@ function SidebarItem({
   return (
     <div className="space-y-1">
       <button
-        onClick={() => { if (!isCollapsed) setIsOpen(!isOpen); }}
+        onClick={() => { if (!isCollapsed) onToggle(); }}
         title={isCollapsed ? config.label : undefined}
         className={`flex w-full items-center rounded-lg py-2 text-sm font-medium transition-colors ${
           isCollapsed ? "justify-center px-0" : "justify-between gap-3 px-3"
@@ -279,6 +277,30 @@ export function Sidebar({ userEmail, userRole, isOpen, onClose, isCollapsed, scr
   const navRef = useRef<HTMLDivElement>(null);
 
   const visibleModules = MODULE_CONFIG.filter((m) => canSee(m.roles, userRole));
+
+  const getActiveId = () => {
+    for (const m of visibleModules) {
+      if (m.subModules && visibleSubModules(m.subModules, userRole).some((s) => pathname.startsWith(s.href))) return m.id;
+    }
+    return null;
+  };
+
+  const [openId, setOpenId] = useState<string | null>(getActiveId());
+
+  useEffect(() => {
+    const active = getActiveId();
+    if (active) setOpenId(active);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
+  useEffect(() => {
+    if (isCollapsed) setOpenId(null);
+    else {
+      const active = getActiveId();
+      if (active) setOpenId(active);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCollapsed]);
 
   useEffect(() => {
     const aside = asideRef.current;
@@ -343,6 +365,8 @@ export function Sidebar({ userEmail, userRole, isOpen, onClose, isCollapsed, scr
               pathname={pathname}
               isCollapsed={isCollapsed}
               userRole={userRole}
+              isOpen={openId === config.id}
+              onToggle={() => setOpenId((prev) => (prev === config.id ? null : config.id))}
             />
           ))}
         </div>
