@@ -3,7 +3,7 @@ import { createClient } from '@/utils/supabase/server';
 import { notFound } from 'next/navigation';
 import { ArrowLeft, ExternalLink, FileText, Clock3, BadgeCheck, Banknote, Hourglass, CheckCircle2, User } from 'lucide-react';
 import { Suspense } from 'react';
-import { billingStatusLabel, billingStatusBadgeClasses, agingBand, agingBadgeClasses, agingLabel } from '@/lib/billing/status';
+import { billingStatusLabel, billingStatusBadgeClasses, billingStatusShortLabel, agingBand, agingBadgeClasses, agingLabel } from '@/lib/billing/status';
 import { TransitionPanel } from '@/components/dashboard/client-invoices/transition-panel';
 import { BillingDetailEditor } from '@/components/dashboard/client-invoices/billing-detail-editor';
 import { Timeline, type TimelineItem } from '@/components/ui/timeline';
@@ -40,7 +40,7 @@ async function Content({ paramsPromise }: { paramsPromise: Promise<{ id: string 
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-plus-jakarta tracking-tight">{row.invoice_number || `Billing #${String(row.id).slice(0, 8)}`}</h1>
-              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${billingStatusBadgeClasses(row.status)}`}>{billingStatusLabel(row.status).toUpperCase()}</span>
+              <span title={row.status === "pending_sky_technical" ? "Submitted to Sky Technical" : undefined} className={`inline-flex items-center rounded-full font-bold border whitespace-nowrap ${row.status === "pending_sky_technical" ? "text-[10px] px-2 py-0.5" : "text-xs px-2.5 py-1"} ${billingStatusBadgeClasses(row.status)}`}>{billingStatusShortLabel(row.status).toUpperCase()}</span>
               {ag.band && <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${agingBadgeClasses(ag.band)}`}>{agingLabel(ag.band, ag.daysDelayed).toUpperCase()}</span>}
             </div>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">

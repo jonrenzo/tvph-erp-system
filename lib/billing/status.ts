@@ -33,6 +33,11 @@ export function billingStatusBadgeClasses(status: string): string {
   return statusBadgeClasses(status);
 }
 
+export function billingStatusShortLabel(status: string): string {
+  if (status === "pending_sky_technical") return "Sky Tech";
+  return billingStatusLabel(status);
+}
+
 export function canTransition(from: string, to: string): boolean {
   return (ALLOWED[from] ?? []).includes(to);
 }

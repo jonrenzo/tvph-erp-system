@@ -6,7 +6,7 @@ import { SearchInput } from '@/components/ui/search-input';
 import { StatusSelect } from '@/components/ui/status-select';
 import { Pagination } from '@/components/ui/pagination';
 import { LIST_PAGE_SIZE, parsePage, pageRange } from '@/components/ui/pagination-utils';
-import { billingStatusBadgeClasses, agingBand, agingBadgeClasses, agingLabel } from '@/lib/billing/status';
+import { billingStatusBadgeClasses, billingStatusShortLabel, agingBand, agingBadgeClasses, agingLabel } from '@/lib/billing/status';
 
 export default function ClientInvoicesPage(props: {
   searchParams?: Promise<{ q?: string; status?: string; aging?: string; page?: string }>;
@@ -160,7 +160,7 @@ async function Content({ searchParams: searchParamsPromise }: { searchParams?: P
                       <td className="px-6 py-4 text-slate-600 dark:text-slate-400">
                         <div className="text-xs">{r.invoice_batch || '—'} {r.region ? `· ${r.region}` : ''} {r.num_nodes ? `· ${r.num_nodes} nodes` : ''}</div>
                       </td>
-                      <td className="px-6 py-4 text-xs text-slate-600 dark:text-slate-400">
+                      <td className={`px-6 py-4 text-xs ${!mrs ? "text-slate-400" : mrs.withMrs / mrs.total > 0.5 ? "text-emerald-600 dark:text-emerald-400 font-medium" : "text-amber-600 dark:text-amber-400 font-medium"}`}>
                         {mrs ? `${mrs.withMrs}/${mrs.total} MRS` : "—"}
                       </td>
                       <td className="px-6 py-4 font-semibold text-slate-900 dark:text-white">₱ {Number(r.amount_vat_inc || 0).toLocaleString()}</td>
@@ -170,7 +170,7 @@ async function Content({ searchParams: searchParamsPromise }: { searchParams?: P
                           <span className={`mt-1 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${agingBadgeClasses(ag.band)}`}>{agingLabel(ag.band, ag.daysDelayed)}</span>
                         )}
                       </td>
-                      <td className="px-6 py-4"><span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold border ${billingStatusBadgeClasses(r.status)}`}>{r.status.replace(/_/g,' ').toUpperCase()}</span></td>
+                      <td className="px-6 py-4"><span title={r.status === "pending_sky_technical" ? "Submitted to Sky Technical" : undefined} className={`inline-flex items-center rounded-full font-bold border whitespace-nowrap ${r.status === "pending_sky_technical" ? "text-[9px] px-2 py-0.5" : "text-[10px] px-2.5 py-1"} ${billingStatusBadgeClasses(r.status)}`}>{billingStatusShortLabel(r.status).toUpperCase()}</span></td>
                       <td className="px-6 py-4 text-right">
                         <Link href={`/dashboard/client-invoices/${r.id}`} className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-slate-400 group-hover:text-primary group-hover:bg-primary/10 transition-colors"><ChevronRight className="h-5 w-5" /></Link>
                       </td>
