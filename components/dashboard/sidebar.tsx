@@ -215,7 +215,7 @@ function SidebarItem({
           isActive
             ? "bg-primary/10 dark:bg-primary/20 text-primary dark:text-primary-light"
             : "text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white"
-        }`}
+        }}`}
       >
         <Icon className="h-5 w-5 shrink-0" />
         {!isCollapsed && <span className="truncate">{config.label}</span>}
@@ -234,7 +234,7 @@ function SidebarItem({
           isSubActive
             ? "bg-primary/10 dark:bg-primary/20 text-primary dark:text-primary-light"
             : "text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white"
-        }`}
+        }}`}
       >
         <div className={`flex items-center ${isCollapsed ? "justify-center" : "gap-3"}`}>
           <Icon className="h-5 w-5 shrink-0" />
@@ -242,31 +242,36 @@ function SidebarItem({
         </div>
         {!isCollapsed && (
           <ChevronDown
-            className={`h-4 w-4 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}
+            className={`h-4 w-4 shrink-0 transition-transform duration-300 ease-[cubic-bezier(0.33,1,0.68,1)] ${isOpen ? "rotate-180" : ""}`}
           />
         )}
       </button>
 
-      {isOpen && !isCollapsed && (
-        <div className="ml-9 space-y-1 pt-1">
-          {filteredSubs!.map((sub) => {
-            const isSubItemActive = pathname === sub.href;
-            return (
-              <Link
-                key={sub.id}
-                href={sub.href}
-                className={`block rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                  isSubItemActive
-                    ? "bg-primary/10 dark:bg-primary/20 text-primary dark:text-primary-light"
-                    : "text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white"
-                }`}
-              >
-                {sub.label}
-              </Link>
-            );
-          })}
+      <div
+        className={`grid transition-all duration-300 ease-[cubic-bezier(0.33,1,0.68,1)] ${isOpen && !isCollapsed ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}
+      >
+        <div className="overflow-hidden">
+          <div className="ml-9 space-y-1 pt-1">
+            {filteredSubs!.map((sub, idx) => {
+              const isSubItemActive = pathname === sub.href;
+              return (
+                <Link
+                  key={sub.id}
+                  href={sub.href}
+                  style={{ transitionDelay: isOpen ? `${idx * 35}ms` : "0ms" }}
+                  className={`block rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ease-out ${isOpen ? "translate-y-0 opacity-100" : "-translate-y-1 opacity-0"} ${
+                    isSubItemActive
+                      ? "bg-primary/10 dark:bg-primary/20 text-primary dark:text-primary-light"
+                      : "text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white"
+                  }`}
+                >
+                  {sub.label}
+                </Link>
+              );
+            })}
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
