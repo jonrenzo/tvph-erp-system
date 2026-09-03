@@ -160,12 +160,8 @@ async function Content({ searchParams: searchParamsPromise }: { searchParams?: P
                       <td className="px-6 py-4 text-slate-600 dark:text-slate-400">
                         <div className="text-xs">{r.invoice_batch || '—'} {r.region ? `· ${r.region}` : ''} {r.num_nodes ? `· ${r.num_nodes} nodes` : ''}</div>
                       </td>
-                      <td className="px-6 py-4">
-                        {mrs ? (
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${mrs.withMrs === mrs.total ? 'bg-emerald-400 text-white border-none' : mrs.withMrs === 0 ? 'bg-red-400 text-white border-none' : 'bg-amber-400 text-white border-none'}`}>
-                            {mrs.withMrs}/{mrs.total} MRS
-                          </span>
-                        ) : <span className="text-xs text-slate-400">—</span>}
+                      <td className="px-6 py-4 text-xs text-slate-600 dark:text-slate-400">
+                        {mrs ? `${mrs.withMrs}/${mrs.total} MRS` : "—"}
                       </td>
                       <td className="px-6 py-4 font-semibold text-slate-900 dark:text-white">₱ {Number(r.amount_vat_inc || 0).toLocaleString()}</td>
                       <td className="px-6 py-4">
