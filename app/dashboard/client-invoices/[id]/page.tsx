@@ -41,7 +41,7 @@ async function Content({ paramsPromise }: { paramsPromise: Promise<{ id: string 
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-plus-jakarta tracking-tight">{row.invoice_number || `Billing #${String(row.id).slice(0, 8)}`}</h1>
               <span title={row.status === "pending_sky_technical" ? "Submitted to Sky Technical" : undefined} className={`inline-flex items-center rounded-full font-bold border whitespace-nowrap ${row.status === "pending_sky_technical" ? "text-[10px] px-2 py-0.5" : "text-xs px-2.5 py-1"} ${billingStatusBadgeClasses(row.status)}`}>{billingStatusShortLabel(row.status).toUpperCase()}</span>
-              {ag.band && <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${agingBadgeClasses(ag.band)}`}>{agingLabel(ag.band, ag.daysDelayed).toUpperCase()}</span>}
+              {ag.band && <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border whitespace-nowrap ${agingBadgeClasses(ag.band)}`}>{agingLabel(ag.band, ag.daysDelayed).toUpperCase()}</span>}
             </div>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
               {(row.crm_accounts as any)?.company_name} · {(row.projects as any)?.name || (row as any).project_name_free || 'No project'} · {row.invoice_batch ? `Batch ${row.invoice_batch}` : 'No batch'}

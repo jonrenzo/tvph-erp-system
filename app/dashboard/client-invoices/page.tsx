@@ -167,7 +167,7 @@ async function Content({ searchParams: searchParamsPromise }: { searchParams?: P
                       <td className="px-6 py-4">
                         <div className="text-xs text-slate-600 dark:text-slate-400">{r.due_date ? new Date(r.due_date).toLocaleDateString() : '—'}</div>
                         {ag.band && (
-                          <span className={`mt-1 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${agingBadgeClasses(ag.band)}`}>{agingLabel(ag.band, ag.daysDelayed)}</span>
+                          <span className={`mt-1 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap ${agingBadgeClasses(ag.band)}`}>{agingLabel(ag.band, ag.daysDelayed)}</span>
                         )}
                       </td>
                       <td className="px-6 py-4"><span title={r.status === "pending_sky_technical" ? "Submitted to Sky Technical" : undefined} className={`inline-flex items-center rounded-full font-bold border whitespace-nowrap ${r.status === "pending_sky_technical" ? "text-[9px] px-2 py-0.5" : "text-[10px] px-2.5 py-1"} ${billingStatusBadgeClasses(r.status)}`}>{billingStatusShortLabel(r.status).toUpperCase()}</span></td>
