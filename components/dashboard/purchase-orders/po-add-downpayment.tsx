@@ -10,14 +10,18 @@ export function AddDownpayment({
   poId,
   poAmount,
   currencySymbol,
+  initialAmount = 0,
 }: {
   poId: string;
   poAmount: number;
   currencySymbol: string;
+  initialAmount?: number;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [percent, setPercent] = useState(30);
+  const isEditing = initialAmount > 0;
+  const initialPercent = isEditing && poAmount > 0 ? Math.round((initialAmount / poAmount) * 100 * 100) / 100 : 30;
+  const [percent, setPercent] = useState(initialPercent);
   const [error, setError] = useState<string | null>(null);
   const [successAmount, setSuccessAmount] = useState<number | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -46,12 +50,16 @@ export function AddDownpayment({
         onClick={() => {
           setOpen(true);
           setError(null);
+          if (isEditing && poAmount > 0) setPercent(initialPercent);
         }}
         className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400 hover:text-amber-800 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/30 border border-amber-200 dark:border-amber-800/50 px-3 py-1.5 rounded-lg transition-all"
       >
         <Plus className="h-3.5 w-3.5" />
-        Add Downpayment
+        {isEditing ? 'Edit Downpayment' : 'Add Downpayment'}
       </button>
+      {isEditing && (
+        <span className="text-xs text-slate-500">Current: {currencySymbol}{initialAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} ({initialPercent}%)</span>
+      )}
 
       {open && (
         <div className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
@@ -62,7 +70,7 @@ export function AddDownpayment({
             <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-[#0a0a0a]/50">
               <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <Wallet className="h-5 w-5 text-amber-500" />
-                Add Downpayment
+                {isEditing ? 'Edit Downpayment' : 'Add Downpayment'}
               </h3>
               <button
                 type="button"
@@ -74,7 +82,7 @@ export function AddDownpayment({
             </div>
             <div className="p-6 space-y-4">
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                Record a downpayment against this PO. Enter a percent or pick a preset — the amount is computed automatically.
+                {isEditing ? 'Update the downpayment for this legacy PO. The new amount replaces the current one.' : 'Record a downpayment against this PO. Enter a percent or pick a preset — the amount is computed automatically.'}
               </p>
               <div>
                 <label htmlFor="dp-percent" className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
@@ -153,7 +161,7 @@ export function AddDownpayment({
                   ) : (
                     <CheckCircle2 className="h-4 w-4" />
                   )}
-                  Save Downpayment
+                  {isEditing ? 'Update Downpayment' : 'Save Downpayment'}
                 </button>
               </div>
             </div>
@@ -169,9 +177,9 @@ export function AddDownpayment({
                 <CheckCircle2 className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
               </span>
               <div>
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Downpayment Added</h3>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">{isEditing ? 'Downpayment Updated' : 'Downpayment Added'}</h3>
                 <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                  The downpayment has been recorded against this PO.
+                  {isEditing ? 'The downpayment has been updated.' : 'The downpayment has been recorded against this PO.'}
                 </p>
               </div>
               <div className="w-full p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 text-center">

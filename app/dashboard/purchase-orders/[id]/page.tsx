@@ -168,9 +168,10 @@ async function PODetailContent({ paramsPromise, searchParamsPromise }: { paramsP
   // (amount 0, no scan) remain editable after issued so stubs can be completed.
   const isOriginator = !!currentUser && currentUser.id === po.created_by;
   const isPlaceholderLegacy = isLegacy && Number(po.amount) === 0;
+  const canEditLegacy = isLegacy && (isOriginator || canEditTerms);
   const canEditLegacyPlaceholder = isPlaceholderLegacy && (isOriginator || canEditTerms);
-  const canEditDraft = (isOriginator && ["draft", "pending_approval"].includes(po.status)) || canEditLegacyPlaceholder;
-  const canEditAny = canEditDraft || (canEditTerms && po.status === "draft") || canEditLegacyPlaceholder;
+  const canEditDraft = (isOriginator && ["draft", "pending_approval"].includes(po.status)) || canEditLegacy;
+  const canEditAny = canEditDraft || (canEditTerms && po.status === "draft") || canEditLegacy;
   const currencySymbol = po.currency === "USD" ? "$" : "₱";
 
   const invoiceIds = invoices?.map((i) => i.id) || [];

@@ -58,10 +58,12 @@ async function POEditorContent({
   // (issued, legacy, amount 0) stay editable so stubs can be completed.
   const isOriginator = !!currentUser && currentUser.id === po?.created_by;
   const isPlaceholderLegacy = po?.source === 'legacy' && Number(po?.amount ?? 0) === 0;
+  const isLegacy = po?.source === 'legacy';
+  const canEditLegacy = !!isLegacy && (isOriginator || hasCapability(currentRole, 'po.write'));
   const canEditLegacyPlaceholder = !!isPlaceholderLegacy && (isOriginator || hasCapability(currentRole, 'po.write'));
-  const canEditDraft = (isOriginator && ["draft", "pending_approval"].includes(po?.status ?? "")) || canEditLegacyPlaceholder;
+  const canEditDraft = (isOriginator && ["draft", "pending_approval"].includes(po?.status ?? "")) || canEditLegacy;
   const canEditTerms = hasCapability(currentRole, "po.write");
-  const editable = canEditDraft || (canEditTerms && po?.status === "draft") || canEditLegacyPlaceholder;
+  const editable = canEditDraft || (canEditTerms && po?.status === "draft") || canEditLegacy;
   if (!po || !editable) redirect(`/dashboard/purchase-orders/${params.id}`);
 
   const currencySymbol = po.currency === "USD" ? "$" : "₱";
@@ -188,9 +190,9 @@ async function POEditorContent({
                 canOverride={["finance", "admin", "superadmin"].includes(currentRole || "")}
                 section="payment"
               />
-              {canEditDraft && Number(po.dp_amount || 0) === 0 && (
-                <AddDownpayment poId={po.id} poAmount={Number(po.amount)} currencySymbol={currencySymbol} />
-              )}
+              {(canEditDraft && Number(po.dp_amount || 0) === 0) || (isLegacy && canEditLegacy) ? (
+                <AddDownpayment poId={po.id} poAmount={Number(po.amount)} currencySymbol={currencySymbol} initialAmount={Number(po.dp_amount || 0)} />
+              ) : null}
             </div>
           )}
 

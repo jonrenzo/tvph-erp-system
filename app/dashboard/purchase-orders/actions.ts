@@ -481,10 +481,11 @@ async function assertOriginatorCanEdit(poId: string) {
     .single();
 
   if (!po) return { error: 'Purchase order not found.' };
-  const isLegacyPlaceholder = (po as any).source === 'legacy' && Number((po as any).amount) === 0;
-  if (isLegacyPlaceholder) {
+  const isLegacy = (po as any).source === 'legacy';
+  if (isLegacy) {
+    if ((po as any).status === 'cancelled') return { error: 'Cannot edit a cancelled legacy PO.' };
     const canEditLegacy = po.created_by === user.id || hasCapability(role, 'po.write');
-    if (!canEditLegacy) return { error: 'Only the creator or a user with PO write access can edit this placeholder legacy PO.' };
+    if (!canEditLegacy) return { error: 'Only the creator or a user with PO write access can edit this legacy PO.' };
     return { user, po, supabase };
   }
   if (po.created_by !== user.id) return { error: 'Only the originator who drafted this PO can edit it.' };
@@ -647,14 +648,18 @@ export async function addDownPayment(poId: string, amount: number) {
   if ('error' in context) return context;
   const { user, po, supabase } = context;
 
-  if (Number(po.dp_amount || 0) !== 0) return { error: 'This PO already has a downpayment set.' };
+  const isLegacy = (po as any).source === 'legacy';
+  const existing = Number(po.dp_amount || 0);
+  if (existing !== 0 && !isLegacy) return { error: 'This PO already has a downpayment set.' };
   if (!Number.isFinite(amount) || amount <= 0) return { error: 'Downpayment must be greater than zero.' };
   const dp_amount = Math.round(amount * 100) / 100;
-  if (dp_amount > Number(po.amount)) return { error: 'Downpayment cannot exceed the PO total.' };
+  const poAmount = Number(po.amount);
+  if (poAmount > 0 && dp_amount > poAmount) return { error: 'Downpayment cannot exceed the PO total.' };
+  const dp_percent = poAmount > 0 ? Math.round((dp_amount / poAmount) * 100 * 100) / 100 : 0;
 
   const { error } = await supabase
     .from('purchase_orders')
-    .update({ dp_amount, updated_at: new Date().toISOString() })
+    .update({ dp_amount, dp_percent, updated_at: new Date().toISOString() })
     .eq('id', poId);
   if (error) return { error: error.message };
 
@@ -662,7 +667,7 @@ export async function addDownPayment(poId: string, amount: number) {
     entity_type: 'purchase_order',
     entity_id: poId,
     action: 'UPDATE',
-    changes: { before: { dp_amount: 0 }, after: { dp_amount } },
+    changes: { before: { dp_amount: existing }, after: { dp_amount, dp_percent } },
     performed_by: user.id,
   });
   revalidatePath(`/dashboard/purchase-orders/${poId}`);
