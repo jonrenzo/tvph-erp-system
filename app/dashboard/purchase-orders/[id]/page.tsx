@@ -307,10 +307,17 @@ async function PODetailContent({ paramsPromise, searchParamsPromise }: { paramsP
   // Sign file URLs for certs
   const signedCerts = await signDocUrls(supabase, 'vendor-documents', certs || []);
 
-  // Max approved completion % drives the billing ceiling
-  const maxApprovedPercent = (certs || [])
-    .filter(c => c.status === 'approved')
-    .reduce((max, c) => Math.max(max, Number(c.percent_complete)), 0) || null;
+  // Incremental model: overall = sum of percents (not max). Overall display = approved+submitted, ceiling = approved only.
+  const approvedCertsForSum = (certs || []).filter(c => c.status === 'approved');
+  const pendingCertsForSum = (certs || []).filter(c => c.status === 'submitted');
+  const sumApproved = approvedCertsForSum.reduce((s, c) => s + Number(c.percent_complete), 0);
+  const sumPending = pendingCertsForSum.reduce((s, c) => s + Number(c.percent_complete), 0);
+  const sumOverall = sumApproved + sumPending;
+  const overallCount = approvedCertsForSum.length + pendingCertsForSum.length;
+  // keep legacy name for compat but now sum-based
+  const maxApprovedPercent = sumApproved > 0 ? Math.round(sumApproved * 100) / 100 : null;
+  const overallDisplayPercent = sumOverall > 0 ? Math.round(sumOverall * 100) / 100 : null;
+  const isOverHundred = sumOverall > 100;
 
   const totalPaid =
     payments?.reduce((sum, p) => sum + Number(p.amount_paid), 0) || 0;
@@ -322,8 +329,9 @@ async function PODetailContent({ paramsPromise, searchParamsPromise }: { paramsP
   const billingPct = poAmount > 0 ? Math.round((effectiveBilled / poAmount) * 100) : 0;
   const dpPct = poAmount > 0 ? Math.min(100, (dpAmount / poAmount) * 100) : 0;
   const invPct = poAmount > 0 ? Math.min(100, (totalInvoiced / poAmount) * 100) : 0;
-  const compPct = maxApprovedPercent || 0;
-  const billingVariance = compPct - billingPct;
+  const compPct = Math.round(sumOverall * 100) / 100;
+  const approvedPct = Math.round(sumApproved * 100) / 100;
+  const billingVariance = approvedPct - billingPct;
 
   const remainingBalance = Math.max(0, poAmount - dpAmount - totalPaid);
   const overpaidAmount = Math.max(0, totalPaid - poAmount);
@@ -333,8 +341,8 @@ async function PODetailContent({ paramsPromise, searchParamsPromise }: { paramsP
   const dpTarget = Number(po.dp_amount || 0);
   const balanceAfterDp = Math.max(0, poAmount - dpTarget);
 
-  // Billing ceiling from approved cert (null = no cap beyond poAmount)
-  const billingCeiling = maxApprovedPercent !== null ? (maxApprovedPercent / 100) * poAmount : null;
+  // Billing ceiling from approved sum (null = no cap beyond poAmount)
+  const billingCeiling = sumApproved > 0 ? (sumApproved / 100) * poAmount : null;
   const availableToBill = billingCeiling !== null ? Math.max(0, billingCeiling - totalInvoiced) : Math.max(0, poAmount - totalInvoiced);
 
   // Fetch project completion_pct and active payment reservation in parallel
@@ -847,15 +855,31 @@ async function PODetailContent({ paramsPromise, searchParamsPromise }: { paramsP
               </div>
               <div>
                 <div className="flex justify-between text-xs font-bold mb-1.5">
-                  <span className="text-slate-500 uppercase">Completion %</span>
-                  <span className="text-emerald-600 dark:text-emerald-400">{compPct}%</span>
+                  <span className="text-slate-500 uppercase">Overall Completion</span>
+                  <span className={isOverHundred ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}>
+                    {overallDisplayPercent !== null ? `${overallDisplayPercent}% (${overallCount} ${overallCount === 1 ? 'certificate' : 'certificates'})` : '0%'}
+                    {sumPending > 0 && <span className="text-amber-600 dark:text-amber-400 font-normal"> · {approvedPct}% approved + {Math.round(sumPending*100)/100}% pending</span>}
+                  </span>
                 </div>
-                <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-emerald-500 rounded-full"
-                    style={{ width: `${Math.min(100, compPct)}%` }}
-                  />
+                <div className="h-2.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex">
+                  {overallDisplayPercent === null ? (
+                    <div className="h-full bg-slate-200 dark:bg-slate-700 flex-1" />
+                  ) : isOverHundred ? (
+                    <div className="h-full bg-red-500 flex-1" title={`${overallDisplayPercent}% — exceeds 100%`} />
+                  ) : (
+                    <>
+                      {approvedPct > 0 && (
+                        <div className="h-full bg-emerald-500" style={{ width: `${Math.min(100, approvedPct)}%` }} title={`${approvedPct}% approved`} />
+                      )}
+                      {sumPending > 0 && (
+                        <div className="h-full bg-amber-400 border-l border-white/60 dark:border-slate-800" style={{ width: `${Math.min(100 - Math.min(100, approvedPct), Math.round(sumPending*100)/100)}%` }} title={`${Math.round(sumPending*100)/100}% pending`} />
+                      )}
+                    </>
+                  )}
                 </div>
+                {isOverHundred && (
+                  <p className="text-[10px] font-bold text-red-600 dark:text-red-400 mt-1">Exceeds 100% — review certificates ({overallDisplayPercent}%)</p>
+                )}
               </div>
               <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold ${
                 isOverpaid
@@ -917,7 +941,7 @@ async function PODetailContent({ paramsPromise, searchParamsPromise }: { paramsP
               </label>
               <div className={`text-sm font-bold ${billingCeiling !== null ? "text-emerald-700 dark:text-emerald-400" : "text-slate-900 dark:text-white"}`}>
                 ₱{(billingCeiling !== null ? billingCeiling : Math.max(0, poAmount - effectiveBilled)).toLocaleString()}
-                {billingCeiling !== null && ` (${maxApprovedPercent}%)`}
+                {billingCeiling !== null && ` (${approvedPct}%)`}
               </div>
             </div>
             <div>
@@ -926,7 +950,7 @@ async function PODetailContent({ paramsPromise, searchParamsPromise }: { paramsP
               </label>
               <div className="text-sm font-bold text-slate-900 dark:text-white">
                 {billingCeiling !== null
-                  ? `₱${availableToBill.toLocaleString()} (${Math.max(0, compPct - billingPct)}%)`
+                  ? `₱${availableToBill.toLocaleString()} (${Math.max(0, approvedPct - billingPct)}%)`
                   : "Full PO amount"}
               </div>
             </div>
@@ -982,13 +1006,32 @@ async function PODetailContent({ paramsPromise, searchParamsPromise }: { paramsP
             <h2 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
               <ClipboardCheck className="h-5 w-5 text-primary" /> Completion Certificates
             </h2>
-            {maxApprovedPercent !== null && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800/50">
-                <TrendingUp className="h-3 w-3" /> {maxApprovedPercent}% Approved
+            {overallDisplayPercent !== null && (
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${isOverHundred ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800/50' : 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800/50'}`}>
+                <TrendingUp className="h-3 w-3" /> {overallDisplayPercent}% Overall ({overallCount} {overallCount === 1 ? 'certificate' : 'certificates'}){sumPending > 0 ? ` · ${approvedPct}% approved` : ''}
               </span>
             )}
           </div>
           <div className="p-6 space-y-4">
+            {overallDisplayPercent !== null && (
+              <div className={`p-4 rounded-xl border ${isOverHundred ? 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800/50' : 'bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800/50'}`}>
+                <div className="flex justify-between text-xs font-bold mb-2">
+                  <span className={isOverHundred ? "text-red-700 dark:text-red-400" : "text-emerald-700 dark:text-emerald-400"}>Overall Completion</span>
+                  <span className={isOverHundred ? "text-red-700 dark:text-red-400" : "text-emerald-700 dark:text-emerald-400"}>{overallDisplayPercent}% ({overallCount} {overallCount === 1 ? 'certificate' : 'certificates'})</span>
+                </div>
+                <div className="h-3 w-full bg-white dark:bg-slate-800 rounded-full overflow-hidden flex border border-slate-100 dark:border-slate-700">
+                  {isOverHundred ? (
+                    <div className="h-full bg-red-500 flex-1" />
+                  ) : (
+                    <>
+                      {approvedPct > 0 && <div className="h-full bg-emerald-500" style={{ width: `${(approvedPct/overallDisplayPercent)*100}%` }} />}
+                      {sumPending > 0 && <div className="h-full bg-amber-400" style={{ width: `${(Math.round(sumPending*100)/100/overallDisplayPercent)*100}%` }} />}
+                    </>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1.5">{approvedPct}% approved{sumPending > 0 ? ` · ${Math.round(sumPending*100)/100}% pending` : ''} · {Math.max(0, 100 - overallDisplayPercent).toFixed(1)}% remaining</p>
+              </div>
+            )}
             {signedCerts.length > 0 ? (
               <div className="space-y-3">
                 {signedCerts.map((cert) => {

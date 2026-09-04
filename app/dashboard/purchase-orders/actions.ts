@@ -1699,15 +1699,14 @@ async function checkProjectCompletionLimit(supabase: Awaited<ReturnType<typeof c
     .eq('status', 'approved')
     .in('po_id', projectPoIds);
 
-  // Max approved % per PO, then straight sum
-  const maxPerPO = new Map<string, number>();
+  // Incremental model: sum per PO then sum across project (ponytail: was max per PO)
+  const sumPerPO = new Map<string, number>();
   for (const c of approvedCerts ?? []) {
-    const curr = maxPerPO.get(c.po_id) ?? 0;
-    maxPerPO.set(c.po_id, Math.max(curr, Number(c.percent_complete)));
+    sumPerPO.set(c.po_id, (sumPerPO.get(c.po_id) ?? 0) + Number(c.percent_complete));
   }
 
   let currentSum = 0;
-  for (const pct of maxPerPO.values()) currentSum += pct;
+  for (const pct of sumPerPO.values()) currentSum += pct;
 
   const projected = currentSum + newPercent;
   if (projected > 100) {
