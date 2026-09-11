@@ -1,14 +1,8 @@
 import Link from 'next/link';
 import { createClient } from '@/utils/supabase/server';
-import { Plus, FileText, ChevronRight, Clock, Upload } from 'lucide-react';
+import { Plus, Upload } from 'lucide-react';
 import { Suspense } from 'react';
-import { SearchInput } from '@/components/ui/search-input';
-import { StatusSelect } from '@/components/ui/status-select';
-import { Pagination } from '@/components/ui/pagination';
-import { LIST_PAGE_SIZE, parsePage, pageRange } from '@/components/ui/pagination-utils';
-import { billingStatusBadgeClasses, billingStatusShortLabel, agingBand, agingBadgeClasses, agingLabel } from '@/lib/billing/status';
-import { MoreFilters } from '@/components/dashboard/client-invoices/more-filters';
-import { TableTransition } from '@/components/dashboard/client-invoices/table-transition';
+import { ClientBillingClient } from '@/components/dashboard/client-invoices/client-billing-client';
 
 export default function ClientInvoicesPage(props: {
   searchParams?: Promise<{ q?: string; status?: string; aging?: string; page?: string }>;
@@ -21,102 +15,27 @@ export default function ClientInvoicesPage(props: {
 }
 
 async function Content({ searchParams: searchParamsPromise }: { searchParams?: Promise<any> }) {
-  const searchParams = await searchParamsPromise;
   const supabase = await createClient();
-  const q = searchParams?.q || '';
-  const statusFilter = searchParams?.status || 'all';
-  const agingFilter = searchParams?.aging || 'all';
-  const clientFilter = searchParams?.client || '';
-  const projectFilter = searchParams?.project || '';
-  const regionFilter = searchParams?.region || '';
-  const batchFilter = searchParams?.batch || '';
-  const amountMin = searchParams?.amountMin ? Number(searchParams.amountMin) : null;
-  const amountMax = searchParams?.amountMax ? Number(searchParams.amountMax) : null;
-  const issuedFrom = searchParams?.issuedFrom || '';
-  const issuedTo = searchParams?.issuedTo || '';
-  const dueFrom = searchParams?.dueFrom || '';
-  const dueTo = searchParams?.dueTo || '';
-  const estFrom = searchParams?.estFrom || '';
-  const estTo = searchParams?.estTo || '';
-  const collectedFrom = searchParams?.collectedFrom || '';
-  const collectedTo = searchParams?.collectedTo || '';
-  const endorsedFrom = searchParams?.endorsedFrom || '';
-  const endorsedTo = searchParams?.endorsedTo || '';
-  const page = parsePage(searchParams?.page);
-  const [from, to] = pageRange(page, LIST_PAGE_SIZE);
-  const todayStr = new Date().toISOString().split("T")[0]!;
-  const plusDays = (d: string, n: number) => new Date(new Date(d).getTime() + n * 86400000).toISOString().split("T")[0]!;
 
-  function applyFilters<T>(qb: T): T {
-    let q_ = qb as any;
-    if (q) q_ = q_.or(`invoice_number.ilike.%${q}%,invoice_batch.ilike.%${q}%`);
-    if (statusFilter !== 'all') q_ = q_.eq('status', statusFilter);
-    if (agingFilter !== 'all') {
-      if (agingFilter === 'overdue') q_ = q_.in('status', ['for_payment', 'pending_payment']).lt('due_date', todayStr);
-      else if (agingFilter === 'close_due') q_ = q_.in('status', ['for_payment', 'pending_payment']).gte('due_date', todayStr).lte('due_date', plusDays(todayStr, 7));
-      else if (agingFilter === 'healthy') q_ = q_.in('status', ['for_payment', 'pending_payment']).gt('due_date', plusDays(todayStr, 7));
-    }
-    if (clientFilter) q_ = q_.eq('account_id', clientFilter);
-    if (projectFilter) q_ = q_.eq('project_id', projectFilter);
-    if (regionFilter) q_ = q_.eq('region', regionFilter);
-    if (batchFilter) q_ = q_.eq('invoice_batch', batchFilter);
-    if (amountMin != null && !isNaN(amountMin)) q_ = q_.gte('amount_vat_inc', amountMin);
-    if (amountMax != null && !isNaN(amountMax)) q_ = q_.lte('amount_vat_inc', amountMax);
-    if (issuedFrom) q_ = q_.gte('date_issued', issuedFrom);
-    if (issuedTo) q_ = q_.lte('date_issued', issuedTo);
-    if (dueFrom) q_ = q_.gte('due_date', dueFrom);
-    if (dueTo) q_ = q_.lte('due_date', dueTo);
-    if (estFrom) q_ = q_.gte('est_payment_date', estFrom);
-    if (estTo) q_ = q_.lte('est_payment_date', estTo);
-    if (endorsedFrom) q_ = q_.gte('date_endorsed', endorsedFrom);
-    if (endorsedTo) q_ = q_.lte('date_endorsed', endorsedTo);
-    if (collectedFrom) q_ = q_.gte('collected_at', `${collectedFrom}T00:00:00+08:00`);
-    if (collectedTo) q_ = q_.lt('collected_at', `${plusDays(collectedTo, 1)}T00:00:00+08:00`);
-    return q_ as T;
-  }
-
-  let query = supabase
-    .from('client_billing')
-    .select('id, invoice_number, invoice_batch, region, num_nodes, date_issued, date_endorsed, due_date, est_payment_date, collected_at, amount_vat_ex, amount_vat_inc, status, project_name_free, crm_accounts(company_name), projects(name)', { count: 'exact' })
-    .is('deleted_at', null)
-    .order('date_issued', { ascending: false });
-
-  query = applyFilters(query);
-
-  // kick off independent queries in parallel to cut 5-6s sequential time down to ~1 roundtrip
-  const rowsPromise = query.range(from, to);
-  const filterOptsPromise = Promise.all([
+  // blazing fast: load all rows once (89 now, 10k later still <1MB) and filter client side, no per keystroke roundtrip
+  const [{ data: allRows }, { data: accountOpts }, { data: projectOpts }, { data: batchRows }, { data: regionRows }, { data: allNodes }] = await Promise.all([
+    supabase.from('client_billing').select('id, invoice_number, invoice_batch, region, num_nodes, date_issued, date_endorsed, due_date, est_payment_date, collected_at, amount_vat_ex, amount_vat_inc, status, project_name_free, account_id, project_id, crm_accounts(company_name), projects(name)').is('deleted_at', null).order('date_issued', { ascending: false }).limit(10000),
     supabase.from('crm_accounts').select('id, company_name').is('deleted_at', null).order('company_name').limit(100),
     supabase.from('projects').select('id, name').is('deleted_at', null).order('name').limit(100),
     supabase.from('client_billing').select('invoice_batch').is('deleted_at', null).not('invoice_batch', 'is', null).limit(200),
     supabase.from('client_billing').select('region').is('deleted_at', null).not('region', 'is', null).limit(200),
+    supabase.from('client_billing_nodes').select('billing_id, has_mrs').limit(5000),
   ]);
-  let summaryQuery = supabase.from('client_billing').select('amount_vat_inc, status, due_date').is('deleted_at', null);
-  summaryQuery = applyFilters(summaryQuery);
-  const summaryPromise = summaryQuery.limit(2000);
-
-  const [{ data: rows, error, count }, filterOpts, summaryRes] = await Promise.all([rowsPromise, filterOptsPromise, summaryPromise]);
-  const [{ data: accountOpts }, { data: projectOpts }, { data: batchRows }, { data: regionRows }] = filterOpts as any;
+  const rows = (allRows as any[]) || [];
   const batches = Array.from(new Set((batchRows as any[] || []).map(r=>r.invoice_batch).filter(Boolean))).sort();
   const regions = Array.from(new Set((regionRows as any[] || []).map(r=>r.region).filter(Boolean))).sort();
-  const summaryRows = (summaryRes as any).data as any[] | null;
-
-  // MRS summary per billing on this page (depends on rows, so after)
   const mrsMap = new Map<string, { total: number; withMrs: number }>();
-  if (rows?.length) {
-    const ids = rows.map((r: any) => r.id);
-    const { data: mrsRows } = await supabase.from('client_billing_nodes').select('billing_id, has_mrs').in('billing_id', ids);
-    for (const n of (mrsRows as any[]) || []) {
-      const cur = mrsMap.get(n.billing_id) || { total: 0, withMrs: 0 };
-      cur.total += 1;
-      if (n.has_mrs) cur.withMrs += 1;
-      mrsMap.set(n.billing_id, cur);
-    }
+  for (const n of (allNodes as any[]) || []) {
+    const cur = mrsMap.get(n.billing_id) || { total: 0, withMrs: 0 };
+    cur.total += 1;
+    if (n.has_mrs) cur.withMrs += 1;
+    mrsMap.set(n.billing_id, cur);
   }
-  const filteredCount = summaryRows?.length ?? count ?? 0;
-  const filteredSum = (summaryRows ?? []).reduce((a: number, r: any) => a + Number(r.amount_vat_inc || 0), 0);
-  const overdueSum = (summaryRows ?? []).filter((r: any) => r.due_date && ['for_payment', 'pending_payment'].includes(r.status) && r.due_date < todayStr).reduce((a: number, r: any) => a + Number(r.amount_vat_inc || 0), 0);
-  const collectedSum = (summaryRows ?? []).filter((r: any) => r.status === 'collected').reduce((a: number, r: any) => a + Number(r.amount_vat_inc || 0), 0);
 
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -135,136 +54,14 @@ async function Content({ searchParams: searchParamsPromise }: { searchParams?: P
         </div>
       </div>
 
-      <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-        <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col gap-4 bg-slate-50/50 dark:bg-[#0a0a0a]/50">
-          <div className="flex flex-col sm:flex-row gap-4 flex-wrap">
-            <SearchInput placeholder="Search invoice no. or batch..." paramName="q" />
-            <StatusSelect
-              paramName="status"
-              options={[
-                { value: 'all', label: 'All Statuses' },
-                { value: 'for_billing', label: 'For Billing' },
-                { value: 'pending_sky_technical', label: 'Submitted to Sky Technical' },
-                { value: 'for_payment', label: 'For Payment' },
-                { value: 'pending_payment', label: 'Pending Payment' },
-                { value: 'collected', label: 'Collected' },
-              ]}
-            />
-            <StatusSelect
-              paramName="aging"
-              options={[
-                { value: 'all', label: 'All Aging' },
-                { value: 'overdue', label: 'Overdue' },
-                { value: 'close_due', label: 'Close Due (≤7d)' },
-                { value: 'healthy', label: 'Healthy (>7d)' },
-              ]}
-            />
-            <MoreFilters
-              accounts={(accountOpts as any[] || []).map(a=>({ id: a.id, name: a.company_name }))}
-              projects={(projectOpts as any[] || []).map(p=>({ id: p.id, name: p.name }))}
-              regions={regions}
-              batches={batches}
-            />
-          </div>
-        </div>
-
-        <TableTransition>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800/20 border-b border-slate-200 dark:border-slate-800">
-              <tr>
-                <th className="px-6 py-4 font-semibold">Invoice</th>
-                <th className="px-6 py-4 font-semibold">Client / Project</th>
-                <th className="px-6 py-4 font-semibold">Batch · Region</th>
-                <th className="px-6 py-4 font-semibold">MRS</th>
-                <th className="px-6 py-4 font-semibold">Amount (VAT-inc)</th>
-                <th className="px-6 py-4 font-semibold">Due · Aging</th>
-                <th className="px-6 py-4 font-semibold">Est. Payment</th>
-                <th className="px-6 py-4 font-semibold">Status</th>
-                <th className="px-6 py-4 font-semibold text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {error ? (
-                <tr><td colSpan={9} className="px-6 py-12 text-center text-red-500">Failed to load.</td></tr>
-              ) : rows?.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="px-6 py-12 text-center">
-                    <div className="flex flex-col items-center text-slate-500 dark:text-slate-400">
-                      <div className="h-12 w-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-3"><FileText className="h-6 w-6 text-slate-400" /></div>
-                      <p className="font-medium text-slate-900 dark:text-white">No billing records</p>
-                      <p className="text-sm mt-1">Create the first invoice or import the spreadsheet.</p>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                rows?.map((r: any) => {
-                  const ag = agingBand(r);
-                  const mrs = mrsMap.get(r.id);
-                  return (
-                    <tr key={r.id} className="group hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-colors animate-in fade-in duration-200">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="font-bold text-slate-900 dark:text-white">{r.invoice_number || '—'}</div>
-                        <div className="text-xs text-slate-400 flex items-center gap-1 whitespace-nowrap"><Clock className="h-3 w-3" /> {r.date_issued ? new Date(r.date_issued).toLocaleDateString("en-US", { timeZone: "Asia/Manila", month: "short", day: "numeric", year: "numeric" }) : '—'}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="font-medium text-slate-900 dark:text-white">{r.crm_accounts?.company_name || '—'}</div>
-                        <div className="text-xs text-slate-400">{r.projects?.name || r.project_name_free || 'No project'}</div>
-                      </td>
-                      <td className="px-6 py-4 text-slate-600 dark:text-slate-400">
-                        <div className="text-xs">{r.invoice_batch || '—'} {r.region ? `· ${r.region}` : ''} {r.num_nodes ? `· ${r.num_nodes} nodes` : ''}</div>
-                      </td>
-                      <td className={`px-6 py-4 text-xs ${!mrs ? "text-slate-400" : mrs.withMrs / mrs.total > 0.5 ? "text-emerald-600 dark:text-emerald-400 font-medium" : "text-amber-600 dark:text-amber-400 font-medium"}`}>
-                        {mrs ? `${mrs.withMrs}/${mrs.total} MRS` : "—"}
-                      </td>
-                      <td className="px-6 py-4 font-semibold text-slate-900 dark:text-white">₱ {Number(r.amount_vat_inc || 0).toLocaleString()}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-xs text-slate-600 dark:text-slate-400 whitespace-nowrap">{r.due_date ? new Date(r.due_date).toLocaleDateString("en-US", { timeZone: "Asia/Manila", month: "short", day: "numeric", year: "numeric" }) : '—'}</div>
-                        {ag.band && (
-                          <span className={`mt-1 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap ${agingBadgeClasses(ag.band)}`}>{agingLabel(ag.band, ag.daysDelayed)}</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-xs text-slate-600 dark:text-slate-400">{r.est_payment_date ? new Date(r.est_payment_date).toLocaleDateString("en-US", { timeZone: "Asia/Manila", month: "short", day: "numeric", year: "numeric" }) : '—'}</td>
-                      <td className="px-6 py-4"><span title={r.status === "pending_sky_technical" ? "Submitted to Sky Technical" : undefined} className={`inline-flex items-center rounded-full font-bold border whitespace-nowrap ${r.status === "pending_sky_technical" ? "text-[9px] px-2 py-0.5" : "text-[10px] px-2.5 py-1"} ${billingStatusBadgeClasses(r.status)}`}>{billingStatusShortLabel(r.status).toUpperCase()}</span>{r.status === "collected" && r.collected_at ? <div className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1">{new Date(r.collected_at).toLocaleDateString("en-US", { timeZone: "Asia/Manila", month: "short", day: "numeric", year: "numeric" })}</div> : null}</td>
-                      <td className="px-6 py-4 text-right">
-                        <Link href={`/dashboard/client-invoices/${r.id}`} className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-slate-400 group-hover:text-primary group-hover:bg-primary/10 transition-colors"><ChevronRight className="h-5 w-5" /></Link>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-        {/* filtered sum — shows total for whatever filters are active */}
-        <div className="px-6 py-4 bg-slate-50 dark:bg-[#0a0a0a]/50 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-4 text-sm">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-medium">
-              <span className="h-2 w-2 rounded-full bg-slate-400" />
-              {filteredCount} invoice{filteredCount !== 1 ? 's' : ''} (filtered)
-            </span>
-            <span className="inline-flex items-center px-3 py-1.5 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold">
-              ₱ {filteredSum.toLocaleString()} VAT-inc
-            </span>
-            {agingFilter === 'overdue' || statusFilter !== 'collected' ? (
-              <span className="inline-flex items-center px-3 py-1.5 rounded-full bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-xs font-bold text-red-600 dark:text-red-400">
-                Overdue ₱ {overdueSum.toLocaleString()}
-              </span>
-            ) : null}
-            {collectedSum > 0 ? (
-              <span className="inline-flex items-center px-3 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                Collected ₱ {collectedSum.toLocaleString()}
-              </span>
-            ) : null}
-          </div>
-          <span className="text-xs text-slate-400">
-            {statusFilter !== 'all' || agingFilter !== 'all' || q ? 'Filtered total — not page total' : 'All invoices'}
-            {count != null && count !== filteredCount ? ` · ${count} total` : ''}
-          </span>
-        </div>
-        <Pagination page={page} totalCount={count ?? 0} pageSize={LIST_PAGE_SIZE} />
-        </TableTransition>
-      </div>
+      <ClientBillingClient
+        initialRows={rows as any}
+        mrsMap={mrsMap}
+        accounts={(accountOpts as any[] || []).map(a=>({ id: a.id, name: a.company_name }))}
+        projects={(projectOpts as any[] || []).map(p=>({ id: p.id, name: p.name }))}
+        regions={regions}
+        batches={batches}
+      />
     </div>
   );
 }
