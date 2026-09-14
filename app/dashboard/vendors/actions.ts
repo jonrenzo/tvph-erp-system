@@ -1184,3 +1184,52 @@ export async function requestVendorDocuments(
   }
   return { success: true };
 }
+
+// ponytail: direct browser->storage for 10MB AFS 2025 (4).pdf, avoids server double-hop
+export async function createVendorSignedUploadUrl(vendorId: string, docType: string, fileName: string, contentType: string) {
+  const supabase = await createClient();
+  const { user, error: authError } = await requireCapability("vendor.write", supabase);
+  if (authError || !user) return { error: authError || "Unauthorized" };
+  if (!fileName) return { error: "No file name" };
+  const svc = createServiceRoleClient();
+  const bucket = "vendor-documents";
+  const ext = (fileName.split(".").pop() || "bin").replace(/[^a-zA-Z0-9]/g, "").slice(0, 10) || "bin";
+  const safeDoc = docType.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40);
+  const path = `vendors/${vendorId}/${safeDoc}/${safeDoc}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const { data, error } = await svc.storage.from(bucket).createSignedUploadUrl(path);
+  if (error || !data) return { error: error?.message || "Failed to create upload URL" };
+  const { data: { publicUrl } } = svc.storage.from(bucket).getPublicUrl(path);
+  return { success: true, path, signedUrl: (data as any).signedUrl, token: (data as any).token, publicUrl, bucket };
+}
+
+export async function confirmVendorDirectUpload(
+  vendorId: string,
+  docType: string,
+  filePath: string,
+  fileName: string,
+  contentType: string,
+  expiryDate: string | null,
+  notes: string | null,
+) {
+  const supabase = await createClient();
+  const { user, error: authError } = await requireCapability("vendor.write", supabase);
+  if (authError || !user) return { error: authError || "Unauthorized" };
+  const svc = createServiceRoleClient();
+  const bucket = "vendor-documents";
+  const { data: { publicUrl } } = svc.storage.from(bucket).getPublicUrl(filePath);
+
+  const { data: existingDocument } = await supabase.from("vendor_documents").select("id").eq("vendor_id", vendorId).eq("doc_type", docType).is("archived_at", null).maybeSingle();
+  let docId = existingDocument?.id || "";
+  if (!docId) {
+    const { data: newDoc, error: insertError } = await supabase.from("vendor_documents").insert({ vendor_id: vendorId, doc_type: docType, status: "submitted", submitted_at: new Date().toISOString(), uploaded_by: user.id, updated_at: new Date().toISOString() }).select("id").single();
+    if (insertError || !newDoc) return { error: insertError?.message || "Failed to create document" };
+    docId = newDoc.id;
+  }
+  const { data: fileRow, error: fileInsertError } = await supabase.from("vendor_document_files").insert({ document_id: docId, file_url: publicUrl, file_name: fileName, uploaded_by: user.id, notes: notes || null }).select("id").single();
+  if (fileInsertError || !fileRow) return { error: fileInsertError?.message || "Failed to save file" };
+  await supabase.from("vendor_document_file_versions").insert({ file_id: fileRow.id, version_number: 1, file_url: publicUrl, file_name: fileName, uploaded_by: user.id, notes: notes || null });
+  await supabase.from("vendor_documents").update({ file_url: publicUrl, file_name: fileName, status: "submitted", expiry_date: expiryDate || null, notes: notes || null, submitted_at: new Date().toISOString(), uploaded_by: user.id, updated_at: new Date().toISOString() }).eq("id", docId);
+  await recordAuditLog({ entity_type: "vendor_document", entity_id: vendorId, action: "UPDATE", changes: { after: { doc_type: docType, status: "submitted", file: fileName } }, performed_by: user.id });
+  revalidatePath(`/dashboard/vendors/${vendorId}`);
+  return { success: true };
+}

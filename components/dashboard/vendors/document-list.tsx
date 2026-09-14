@@ -33,9 +33,12 @@ import {
   getVendorDocumentFileVersions,
   getVendorFileVersionSignedUrl,
   rollbackVendorDocumentFile,
+  createVendorSignedUploadUrl,
+  confirmVendorDirectUpload,
 } from "@/app/dashboard/vendors/actions";
 import { RequestDocumentsButton } from "./request-documents-button";
 import { hasCapability } from "@/lib/auth/roles";
+import { createClient } from "@/utils/supabase/client";
 
 const DOCUMENT_TYPES = [
   { id: 'signed_nda', label: 'Signed NDA' },
@@ -127,14 +130,37 @@ export function DocumentList({ vendorId, documents, userRole, optionalDocTypes =
     const files = Array.from(e.target.files || []).filter((f) => f.size > 0);
     if (files.length === 0) return;
     setBusy(`add:${doc ? doc.id : docType}`);
-    const formData = new FormData();
-    files.forEach((f) => formData.append('file', f));
-    const result = doc
-      ? await uploadDocumentFiles(doc.id, formData)
-      : await uploadDocument(vendorId, docType, formData);
-    if (result.error) alert(result.error);
-    else router.refresh();
-    setBusy(null);
+    // reset file input so same file can be retried
+    const input = e.target;
+    try {
+      // ponytail: direct browser->storage for 10MB files (fixes AFS 2025 (4).pdf hanging via server double-hop)
+      const supabase = createClient();
+      for (const f of files) {
+        if (f.size > 50 * 1024 * 1024) { alert(`${f.name} exceeds 50MB`); continue; }
+        const urlRes: any = await createVendorSignedUploadUrl(vendorId, docType, f.name, f.type || "application/octet-stream");
+        if (urlRes?.error || !urlRes?.success) {
+          // fallback to legacy server upload
+          const formData = new FormData();
+          formData.append('file', f);
+          const r = doc ? await uploadDocumentFiles(doc.id, formData) : await uploadDocument(vendorId, docType, formData);
+          if (r.error) { alert(r.error); break; }
+          continue;
+        }
+        const { error: upErr } = await supabase.storage.from(urlRes.bucket).uploadToSignedUrl(urlRes.path, urlRes.token, f);
+        if (upErr) {
+          const resp = await fetch(urlRes.signedUrl, { method: "PUT", body: f, headers: { "Content-Type": f.type || "application/octet-stream" } });
+          if (!resp.ok) { alert(`Upload failed: ${resp.status} ${await resp.text()}`); break; }
+        }
+        const conf: any = await confirmVendorDirectUpload(vendorId, docType, urlRes.path, f.name, f.type || "application/octet-stream", null, null);
+        if (conf?.error) { alert(conf.error); break; }
+      }
+      router.refresh();
+    } catch (err: any) {
+      alert(err.message || "Upload failed");
+    } finally {
+      setBusy(null);
+      input.value = "";
+    }
   };
 
   const handleUpdateFile = async (fileId: string, e: React.ChangeEvent<HTMLInputElement>) => {
