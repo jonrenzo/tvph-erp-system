@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { uploadPortalDocument } from "@/app/portal/actions";
+import { uploadPortalDocument, createPortalSignedUploadUrl, confirmPortalUpload } from "@/app/portal/actions";
+import { createClient } from "@/utils/supabase/client";
 import { 
   FileText, CheckCircle2, AlertCircle, Upload, PenTool, X, ShieldAlert,
   Loader2, Sparkles, FileCheck, RefreshCw, Calendar, FileQuestion
@@ -165,28 +166,39 @@ export default function PortalClient({
     const newFiles: { id: string; file_name: string; file_url?: string | null }[] = [];
     let uploadError: string | null = null;
 
+    const supabase = createClient();
     for (let i = 0; i < files.length; i++) {
       const f = files[i];
       if (f.size > 50 * 1024 * 1024) {
         uploadError = `${f.name} exceeds the 50MB limit.`;
         break;
       }
-      const formData = new FormData();
-      formData.append("file", f);
-      if (expiryDate) formData.append("expiryDate", expiryDate);
-      if (notes) formData.append("notes", notes);
-      if (["signed_nda", "specimen_signature"].includes(selectedDocType) && hasSigned && canvasRef.current) {
-        const signatureImage = canvasRef.current.toDataURL("image/png");
-        formData.append("signatureImage", signatureImage);
-      }
+      const signatureImage = (["signed_nda", "specimen_signature"].includes(selectedDocType) && hasSigned && canvasRef.current) ? canvasRef.current.toDataURL("image/png") : null;
       try {
-        const result = await uploadPortalDocument(token, selectedDocType, formData);
-        if ((result as any).error) {
-          uploadError = (result as any).error;
-          break;
+        // ponytail: direct browser -> Supabase for 10MB files (fixes AFS 2025 (4).pdf hanging)
+        const urlRes: any = await createPortalSignedUploadUrl(token, selectedDocType, f.name, f.type || "application/octet-stream");
+        if (urlRes?.error) {
+          // fallback to legacy server upload
+          const formData = new FormData();
+          formData.append("file", f);
+          if (expiryDate) formData.append("expiryDate", expiryDate);
+          if (notes) formData.append("notes", notes);
+          if (signatureImage) formData.append("signatureImage", signatureImage);
+          const result = await uploadPortalDocument(token, selectedDocType, formData);
+          if ((result as any).error) { uploadError = (result as any).error; break; }
+          if ((result as any).uploadedFile) newFiles.push((result as any).uploadedFile);
+          continue;
         }
-        if ((result as any).ocrData) lastOcr = (result as any).ocrData;
-        if ((result as any).uploadedFile) newFiles.push((result as any).uploadedFile);
+        // upload directly to storage (bypasses Next.js server double-hop)
+        const { error: upErr } = await supabase.storage.from(urlRes.bucket).uploadToSignedUrl(urlRes.path, urlRes.token, f);
+        if (upErr) {
+          // fetch fallback if uploadToSignedUrl fails (e.g. CORS)
+          const resp = await fetch(urlRes.signedUrl, { method: "PUT", body: f, headers: { "Content-Type": f.type || "application/octet-stream" } });
+          if (!resp.ok) throw new Error(`Storage upload failed: ${resp.status} ${await resp.text()}`);
+        }
+        const confirm: any = await confirmPortalUpload(token, selectedDocType, urlRes.path, f.name, f.type || "application/octet-stream", expiryDate || null, notes || null, signatureImage);
+        if (confirm?.error) { uploadError = confirm.error; break; }
+        if (confirm?.uploadedFile) newFiles.push(confirm.uploadedFile);
       } catch (err: any) {
         uploadError = err.message || "An unexpected error occurred.";
         break;

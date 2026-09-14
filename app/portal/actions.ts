@@ -610,3 +610,106 @@ export async function uploadPortalDocument(
 
   return { success: true, ocrData, uploadedFile };
 }
+
+// ponytail: direct browser -> storage for 10MB+ files, avoids server double-hop + Gemini block
+export async function createPortalSignedUploadUrl(
+  token: string,
+  docType: string,
+  fileName: string,
+  contentType: string,
+) {
+  const supabase = createServiceRoleClient();
+  const { data: magicLink, error } = await supabase.from("magic_links").select("*").eq("token", token).gt("expires_at", new Date().toISOString()).maybeSingle();
+  if (error || !magicLink) return { error: "Access token expired or invalid" };
+  const bucket = magicLink.entity_type === "vendor" ? "vendor-documents" : "crm-documents";
+  const ext = (fileName.split(".").pop() || "bin").replace(/[^a-zA-Z0-9]/g, "").slice(0, 10) || "bin";
+  const safeDoc = docType.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40);
+  const path = `${magicLink.entity_type === "vendor" ? "vendors" : "customers"}/${magicLink.entity_id}/${safeDoc}/${safeDoc}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const { data, error: urlErr } = await supabase.storage.from(bucket).createSignedUploadUrl(path);
+  if (urlErr || !data) return { error: urlErr?.message || "Failed to create upload URL" };
+  const { data: { publicUrl } } = supabase.storage.from(bucket).getPublicUrl(path);
+  return { success: true, path, signedUrl: (data as any).signedUrl, token: (data as any).token, publicUrl, bucket };
+}
+
+export async function confirmPortalUpload(
+  token: string,
+  docType: string,
+  filePath: string,
+  fileName: string,
+  contentType: string,
+  expiryDate: string | null,
+  notes: string | null,
+  signatureData: string | null,
+  ipAddress = "Unknown",
+) {
+  const supabase = createServiceRoleClient();
+  const { data: magicLink, error } = await supabase.from("magic_links").select("*").eq("token", token).gt("expires_at", new Date().toISOString()).maybeSingle();
+  if (error || !magicLink) return { error: "Access token expired or invalid" };
+
+  // Optional server-side PDF stamping if signature provided (kept server-side to avoid exposing pdf-lib to client)
+  if (signatureData && contentType === "application/pdf") {
+    try {
+      const { data: fileBlob } = await supabase.storage.from(magicLink.entity_type === "vendor" ? "vendor-documents" : "crm-documents").download(filePath);
+      if (fileBlob) {
+        const buf = await fileBlob.arrayBuffer();
+        let entityName = "Unknown Entity";
+        if (magicLink.entity_type === "vendor") {
+          const { data: v } = await supabase.from("vendors").select("name").eq("id", magicLink.entity_id).single();
+          if (v) entityName = v.name;
+        } else {
+          const { data: c } = await supabase.from("crm_accounts").select("company_name").eq("id", magicLink.entity_id).single();
+          if (c) entityName = c.company_name;
+        }
+        const stamped = await stampPdfWithSignature(buf, signatureData, ipAddress, new Date().toISOString(), entityName, docType);
+        await supabase.storage.from(magicLink.entity_type === "vendor" ? "vendor-documents" : "crm-documents").update(filePath, stamped, { contentType: "application/pdf", upsert: true } as any);
+      }
+    } catch (e) { console.error("stamp failed", e); }
+  }
+
+  const bucket = magicLink.entity_type === "vendor" ? "vendor-documents" : "crm-documents";
+  const { data: { publicUrl } } = supabase.storage.from(bucket).getPublicUrl(filePath);
+
+  let uploadedFile: { id: string; file_name: string; file_url?: string } | null = null;
+  if (magicLink.entity_type === "vendor") {
+    const { data: existingDoc } = await supabase.from("vendor_documents").select("id").eq("vendor_id", magicLink.entity_id).eq("doc_type", docType).is("archived_at", null).maybeSingle();
+    let docId = existingDoc?.id || "";
+    if (!docId) {
+      const { data: newDoc, error: dbError } = await supabase.from("vendor_documents").insert({ vendor_id: magicLink.entity_id, doc_type: docType, status: "submitted", submitted_at: new Date().toISOString(), updated_at: new Date().toISOString() }).select("id").single();
+      if (dbError || !newDoc) return { error: dbError?.message || "Failed to create document" };
+      docId = newDoc.id;
+    }
+    const { data: fileRow, error: fileError } = await supabase.from("vendor_document_files").insert({ document_id: docId, file_url: publicUrl, file_name: fileName, notes: notes || "Uploaded via Portal" }).select("id").single();
+    if (fileError || !fileRow) return { error: fileError?.message || "Failed to save file" };
+    let signedForReturn = publicUrl;
+    try { const { data: s } = await supabase.storage.from(bucket).createSignedUrl(filePath, 3600); if (s?.signedUrl) signedForReturn = s.signedUrl; } catch {}
+    uploadedFile = { id: fileRow.id, file_name: fileName, file_url: signedForReturn };
+    await supabase.from("vendor_document_file_versions").insert({ file_id: fileRow.id, version_number: 1, file_url: publicUrl, file_name: fileName, notes: notes || "Uploaded via Portal" });
+    await supabase.from("vendor_documents").update({ file_url: publicUrl, file_name: fileName, status: "submitted", expiry_date: expiryDate || null, notes: notes || null, submitted_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", docId);
+    let entityName = "Unknown Vendor";
+    const { data: v } = await supabase.from("vendors").select("name").eq("id", magicLink.entity_id).single();
+    if (v) entityName = v.name;
+    await createNotificationForRoles({ type: "vendor", title: "📁 Portal Upload: Vendor Compliance", message: `${entityName} uploaded a file for ${docType.toUpperCase().replace(/_/g, " ")}.`, link: `/dashboard/vendors/${magicLink.entity_id}`, created_by: null, roles: ["operations"] });
+  } else {
+    const { data: existingDoc } = await supabase.from("crm_documents").select("id, version_number").eq("account_id", magicLink.entity_id).eq("doc_type", docType).is("archived_at", null).maybeSingle();
+    const versionNumber = existingDoc ? existingDoc.version_number + 1 : 1;
+    let docId = "";
+    const payload = { account_id: magicLink.entity_id, doc_type: docType, file_url: publicUrl, file_name: fileName, status: "submitted", expiry_date: expiryDate || null, notes: notes || null, submitted_at: new Date().toISOString(), updated_at: new Date().toISOString(), version_number: versionNumber } as any;
+    if (existingDoc) {
+      const { error: dbError } = await supabase.from("crm_documents").update(payload).eq("id", existingDoc.id);
+      if (dbError) return { error: dbError.message };
+      docId = existingDoc.id;
+    } else {
+      const { data: newDoc, error: dbError } = await supabase.from("crm_documents").insert(payload).select("id").single();
+      if (dbError || !newDoc) return { error: dbError?.message || "Failed to insert document" };
+      docId = newDoc.id;
+    }
+    const { data: versionEntry } = await supabase.from("crm_document_versions").insert({ document_id: docId, version_number: versionNumber, file_url: publicUrl, file_name: fileName, notes: notes || "Uploaded via Portal" }).select("id").single();
+    if (versionEntry) await supabase.from("crm_documents").update({ current_version_id: versionEntry.id }).eq("id", docId);
+    let entityName = "Unknown Customer";
+    const { data: c } = await supabase.from("crm_accounts").select("company_name").eq("id", magicLink.entity_id).single();
+    if (c) entityName = c.company_name;
+    await createNotificationForRoles({ type: "crm", title: "📁 Portal Upload: Customer File", message: `${entityName} uploaded a new ${docType.toUpperCase().replace(/_/g, " ")} (v${versionNumber}).`, link: `/dashboard/crm/${magicLink.entity_id}`, created_by: null, roles: ["operations"] });
+    uploadedFile = { id: docId, file_name: fileName, file_url: publicUrl };
+  }
+  return { success: true, uploadedFile };
+}
