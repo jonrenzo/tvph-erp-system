@@ -10,6 +10,7 @@ import TabbedNav from '@/components/dashboard/tabbed-nav';
 import VendorDetailHeader from '@/components/dashboard/vendors/vendor-detail-header';
 import { invoiceStatusLabel, invoiceStatusBadgeClasses } from '@/lib/invoices/status';
 import { hasCapability } from '@/lib/auth/permissions';
+import { OPTIONAL_DOCUMENT_TYPES } from '@/lib/vendors/document-types';
 
 export default function VendorDetailPage(props: { 
   params: Promise<{ id: string }>,
@@ -128,7 +129,7 @@ supabase
         sections={{
           profile: <VendorProfileDetails vendor={vendor} documents={documentsWithUrls} />,
           projects: <VendorProjectsTab vendorId={vendor.id} projects={projects || []} pos={pos || []} allProjects={allProjects || []} />,
-          documents: <DocumentList vendorId={vendor.id} documents={documentsWithUrls || []} userRole={userRole} />,
+          documents: <DocumentList vendorId={vendor.id} documents={documentsWithUrls || []} userRole={userRole} optionalDocTypes={[...OPTIONAL_DOCUMENT_TYPES]} />,
           "email-history": <VendorEmailHistory vendorId={vendor.id} />,
           "purchase-orders": (
           <div className="bg-white dark:bg-[#071F15] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm animate-in fade-in duration-300">

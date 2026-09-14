@@ -28,7 +28,7 @@ export default function AddAssetPage() {
 
   useEffect(() => {
     supabase.from('asset_categories').select('id, name').order('name')
-      .then(({ data }) => {
+      .then(({ data }: any) => {
         if (data) {
           setCategories(data);
           if (data.length > 0) {

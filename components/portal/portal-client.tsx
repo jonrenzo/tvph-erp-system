@@ -7,6 +7,7 @@ import {
   Loader2, Sparkles, FileCheck, RefreshCw, Calendar, FileQuestion
 } from "lucide-react";
 import { toast } from "sonner";
+import { OPTIONAL_DOCUMENT_TYPES } from "@/lib/vendors/document-types";
 
 interface Document {
   id?: string;
@@ -103,9 +104,11 @@ export default function PortalClient({
   const documentMap = new Map<string, Document>();
   documents.forEach(d => documentMap.set(d.doc_type, d));
 
-  const completeCount = documents.filter(d => d.status === "approved" || d.status === "submitted").length;
-  const totalCount = requiredTypes.length;
-  const progressPercent = Math.round((completeCount / totalCount) * 100);
+  const optionalSet = new Set<string>(entityType === "vendor" ? (OPTIONAL_DOCUMENT_TYPES as readonly string[]) : []);
+  const requiredForProgress = requiredTypes.filter(t => !optionalSet.has(t));
+  const completeCount = documents.filter(d => (d.status === "approved" || d.status === "submitted") && !optionalSet.has(d.doc_type)).length;
+  const totalCount = requiredForProgress.length;
+  const progressPercent = totalCount ? Math.round((completeCount / totalCount) * 100) : 100;
 
   // Signature canvas handlers
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
@@ -359,8 +362,9 @@ export default function PortalClient({
                     </span>
                   </div>
                   
-                  <h3 className="font-semibold text-slate-900 dark:text-white mt-4 line-clamp-1">
+                  <h3 className="font-semibold text-slate-900 dark:text-white mt-4 line-clamp-1 flex items-center gap-2">
                     {label}
+                    {optionalSet.has(type) && <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-500">Optional</span>}
                   </h3>
                   
                   <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 space-y-0.5">
