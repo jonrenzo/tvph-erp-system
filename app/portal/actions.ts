@@ -618,17 +618,22 @@ export async function createPortalSignedUploadUrl(
   fileName: string,
   contentType: string,
 ) {
-  const supabase = createServiceRoleClient();
-  const { data: magicLink, error } = await supabase.from("magic_links").select("*").eq("token", token).gt("expires_at", new Date().toISOString()).maybeSingle();
-  if (error || !magicLink) return { error: "Access token expired or invalid" };
-  const bucket = magicLink.entity_type === "vendor" ? "vendor-documents" : "crm-documents";
-  const ext = (fileName.split(".").pop() || "bin").replace(/[^a-zA-Z0-9]/g, "").slice(0, 10) || "bin";
-  const safeDoc = docType.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40);
-  const path = `${magicLink.entity_type === "vendor" ? "vendors" : "customers"}/${magicLink.entity_id}/${safeDoc}/${safeDoc}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
-  const { data, error: urlErr } = await supabase.storage.from(bucket).createSignedUploadUrl(path);
-  if (urlErr || !data) return { error: urlErr?.message || "Failed to create upload URL" };
-  const { data: { publicUrl } } = supabase.storage.from(bucket).getPublicUrl(path);
-  return { success: true, path, signedUrl: (data as any).signedUrl, token: (data as any).token, publicUrl, bucket };
+  try {
+    const supabase = createServiceRoleClient();
+    const { data: magicLink, error } = await supabase.from("magic_links").select("*").eq("token", token).gt("expires_at", new Date().toISOString()).maybeSingle();
+    if (error || !magicLink) return { error: "Access token expired or invalid" };
+    const bucket = magicLink.entity_type === "vendor" ? "vendor-documents" : "crm-documents";
+    const ext = (fileName.split(".").pop() || "bin").replace(/[^a-zA-Z0-9]/g, "").slice(0, 10) || "bin";
+    const safeDoc = docType.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40);
+    const path = `${magicLink.entity_type === "vendor" ? "vendors" : "customers"}/${magicLink.entity_id}/${safeDoc}/${safeDoc}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const { data, error: urlErr } = await supabase.storage.from(bucket).createSignedUploadUrl(path);
+    if (urlErr || !data) return { error: urlErr?.message || "Failed to create upload URL" };
+    const { data: { publicUrl } } = supabase.storage.from(bucket).getPublicUrl(path);
+    return { success: true, path, signedUrl: (data as any).signedUrl, token: (data as any).token, publicUrl, bucket };
+  } catch (e: any) {
+    console.error("createPortalSignedUploadUrl failed", e);
+    return { error: e?.message || "Failed to create upload URL" };
+  }
 }
 
 export async function confirmPortalUpload(
@@ -642,6 +647,7 @@ export async function confirmPortalUpload(
   signatureData: string | null,
   ipAddress = "Unknown",
 ) {
+  try {
   const supabase = createServiceRoleClient();
   const { data: magicLink, error } = await supabase.from("magic_links").select("*").eq("token", token).gt("expires_at", new Date().toISOString()).maybeSingle();
   if (error || !magicLink) return { error: "Access token expired or invalid" };
@@ -712,4 +718,8 @@ export async function confirmPortalUpload(
     uploadedFile = { id: docId, file_name: fileName, file_url: publicUrl };
   }
   return { success: true, uploadedFile };
+  } catch (e: any) {
+    console.error("confirmPortalUpload failed", e);
+    return { error: e?.message || "Failed to confirm upload" };
+  }
 }

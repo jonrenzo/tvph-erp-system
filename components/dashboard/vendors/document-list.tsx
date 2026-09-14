@@ -38,7 +38,6 @@ import {
 } from "@/app/dashboard/vendors/actions";
 import { RequestDocumentsButton } from "./request-documents-button";
 import { hasCapability } from "@/lib/auth/roles";
-import { createClient } from "@/utils/supabase/client";
 
 const DOCUMENT_TYPES = [
   { id: 'signed_nda', label: 'Signed NDA' },
@@ -158,15 +157,7 @@ export function DocumentList({ vendorId, documents, userRole, optionalDocTypes =
           if (r.error) { alert(r.error); break; }
           continue;
         }
-        // ponytail: XHR PUT with progress so AFS 2025 (4).pdf 10MB shows % (fixes "still not uploading" blind spot)
-        try {
-          await putWithProgress(urlRes.signedUrl, f);
-        } catch (xhrErr: any) {
-          // fallback to supabase helper if XHR fails
-          const supabase = createClient();
-          const { error: upErr } = await supabase.storage.from(urlRes.bucket).uploadToSignedUrl(urlRes.path, urlRes.token, f);
-          if (upErr) throw xhrErr;
-        }
+        await putWithProgress(urlRes.signedUrl, f);
         setUploadPct(100);
         const conf: any = await confirmVendorDirectUpload(vendorId, docType, urlRes.path, f.name, f.type || "application/octet-stream", null, null);
         if (conf?.error) { alert(conf.error); break; }

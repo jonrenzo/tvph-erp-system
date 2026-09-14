@@ -2,7 +2,6 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { uploadPortalDocument, createPortalSignedUploadUrl, confirmPortalUpload } from "@/app/portal/actions";
-import { createClient } from "@/utils/supabase/client";
 import { 
   FileText, CheckCircle2, AlertCircle, Upload, PenTool, X, ShieldAlert,
   Loader2, Sparkles, FileCheck, RefreshCw, Calendar, FileQuestion
@@ -202,15 +201,7 @@ export default function PortalClient({
           setUploadPct(100);
           continue;
         }
-        // ponytail: XHR with progress so AFS 2025 (4).pdf 10MB shows %
-        try {
-          await putWithProgress(urlRes.signedUrl, f);
-        } catch (xhrErr: any) {
-          const supabase = createClient();
-          const { error: upErr } = await supabase.storage.from(urlRes.bucket).uploadToSignedUrl(urlRes.path, urlRes.token, f);
-          if (upErr) throw xhrErr;
-          setUploadPct(100);
-        }
+        await putWithProgress(urlRes.signedUrl, f);
         const confirm: any = await confirmPortalUpload(token, selectedDocType, urlRes.path, f.name, f.type || "application/octet-stream", expiryDate || null, notes || null, signatureImage);
         if (confirm?.error) { uploadError = confirm.error; break; }
         if (confirm?.uploadedFile) newFiles.push(confirm.uploadedFile);
