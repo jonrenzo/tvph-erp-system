@@ -404,8 +404,7 @@ export async function uploadPortalDocument(
     fileBuffer = signedBuffer.buffer;
   }
 
-  // 4. Upload to Supabase Storage first — ocr is deferred so 10MB files don't hang
-  // ponytail: upload before Gemini OCR; ocr updates row in background via after()
+  // 4. Upload to Supabase Storage — ocr removed for vendor accreditation (was blocking 10MB)
   const ocrData: Record<string, unknown> = {};
   const bucketName = magicLink.entity_type === "vendor" ? "vendor-documents" : "crm-documents";
   const fileExt = fileName.split(".").pop();
@@ -445,7 +444,6 @@ export async function uploadPortalDocument(
           status: "submitted",
           submitted_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-          ocr_data: ocrData,
         })
         .select("id")
         .single();
@@ -499,11 +497,10 @@ export async function uploadPortalDocument(
         file_url: publicUrl,
         file_name: fileName,
         status: "submitted",
-        expiry_date: expiryDate || (ocrData as any).expiry_date || null,
+        expiry_date: expiryDate || null,
         notes: notes || null,
         submitted_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        ocr_data: ocrData,
       })
       .eq("id", docId);
     if (dbError) return { error: dbError.message };
@@ -516,26 +513,6 @@ export async function uploadPortalDocument(
       link: `/dashboard/vendors/${magicLink.entity_id}`,
       created_by: null,
       roles: ["operations"],
-    });
-
-    // Background OCR — does not block upload response
-    const ocrBuf = fileBuffer.slice(0);
-    const ocrMime = finalMimeType;
-    const ocrDocType = docType;
-    const ocrDocId = docId;
-    const ocrExpiry = expiryDate;
-    defer(async () => {
-      try {
-        const b64 = Buffer.from(ocrBuf).toString("base64");
-        const r = await extractDocumentMetadata(b64, ocrMime, ocrDocType);
-        if (r.success && r.metadata && Object.keys(r.metadata).length) {
-          const s = createServiceRoleClient();
-          const patch: Record<string, unknown> = { ocr_data: r.metadata };
-          const exp = (r.metadata as any).expiry_date;
-          if (exp && !ocrExpiry) patch.expiry_date = exp;
-          await s.from("vendor_documents").update(patch).eq("id", ocrDocId);
-        }
-      } catch (e) { console.error("deferred OCR failed", e); }
     });
 
   } else {
