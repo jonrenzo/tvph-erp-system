@@ -79,7 +79,7 @@ export function NotificationBell() {
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "notifications" },
-        (payload) => {
+        (payload: any) => {
           const newNotif = payload.new as Notification;
           setNotifications((prev) => [newNotif, ...prev].slice(0, 50));
         },
@@ -87,7 +87,7 @@ export function NotificationBell() {
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "notifications" },
-        (payload) => {
+        (payload: any) => {
           // Handle mark as read
           const updatedNotif = payload.new as Notification;
           setNotifications((prev) =>
@@ -98,7 +98,7 @@ export function NotificationBell() {
       .on(
         "postgres_changes",
         { event: "DELETE", schema: "public", table: "notifications" },
-        (payload) => {
+        (payload: any) => {
           setNotifications((prev) => prev.filter(n => n.id !== payload.old.id));
         },
       )
