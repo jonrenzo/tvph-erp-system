@@ -391,7 +391,7 @@ export async function uploadPortalDocument(
     if (c) entityName = c.company_name;
   }
 
-  // 3. E-Signature Stamping
+  // 3. E-Signature Stamping (fast, must happen before upload)
   if (signatureData && finalMimeType === "application/pdf") {
     const signedBuffer = await stampPdfWithSignature(
       fileBuffer,
@@ -404,21 +404,9 @@ export async function uploadPortalDocument(
     fileBuffer = signedBuffer.buffer;
   }
 
-  // Convert buffer to base64 for Gemini OCR
-  const fileBase64 = Buffer.from(fileBuffer).toString("base64");
-
-  // 4. Perform Gemini AI OCR
-  let ocrData = {};
-  try {
-    const ocrResult = await extractDocumentMetadata(fileBase64, finalMimeType, docType);
-    if (ocrResult.success) {
-      ocrData = ocrResult.metadata;
-    }
-  } catch (err) {
-    console.error("AI OCR failed in background:", err);
-  }
-
-  // 5. Upload to Supabase Storage
+  // 4. Upload to Supabase Storage first — ocr is deferred so 10MB files don't hang
+  // ponytail: upload before Gemini OCR; ocr updates row in background via after()
+  const ocrData: Record<string, unknown> = {};
   const bucketName = magicLink.entity_type === "vendor" ? "vendor-documents" : "crm-documents";
   const fileExt = fileName.split(".").pop();
   const storageName = `${docType}_${Date.now()}.${fileExt}`;
@@ -530,6 +518,26 @@ export async function uploadPortalDocument(
       roles: ["operations"],
     });
 
+    // Background OCR — does not block upload response
+    const ocrBuf = fileBuffer.slice(0);
+    const ocrMime = finalMimeType;
+    const ocrDocType = docType;
+    const ocrDocId = docId;
+    const ocrExpiry = expiryDate;
+    defer(async () => {
+      try {
+        const b64 = Buffer.from(ocrBuf).toString("base64");
+        const r = await extractDocumentMetadata(b64, ocrMime, ocrDocType);
+        if (r.success && r.metadata && Object.keys(r.metadata).length) {
+          const s = createServiceRoleClient();
+          const patch: Record<string, unknown> = { ocr_data: r.metadata };
+          const exp = (r.metadata as any).expiry_date;
+          if (exp && !ocrExpiry) patch.expiry_date = exp;
+          await s.from("vendor_documents").update(patch).eq("id", ocrDocId);
+        }
+      } catch (e) { console.error("deferred OCR failed", e); }
+    });
+
   } else {
     // Customer documents
     const { data: existingDoc } = await supabase
@@ -601,6 +609,25 @@ export async function uploadPortalDocument(
       link: `/dashboard/crm/${magicLink.entity_id}`,
       created_by: null,
       roles: ["operations"],
+    });
+
+    const ocrBuf2 = fileBuffer.slice(0);
+    const ocrMime2 = finalMimeType;
+    const ocrDocType2 = docType;
+    const ocrDocId2 = docId;
+    const ocrExpiry2 = expiryDate;
+    defer(async () => {
+      try {
+        const b64 = Buffer.from(ocrBuf2).toString("base64");
+        const r = await extractDocumentMetadata(b64, ocrMime2, ocrDocType2);
+        if (r.success && r.metadata && Object.keys(r.metadata).length) {
+          const s = createServiceRoleClient();
+          const patch: Record<string, unknown> = { ocr_data: r.metadata };
+          const exp = (r.metadata as any).expiry_date;
+          if (exp && !ocrExpiry2) patch.expiry_date = exp;
+          await s.from("crm_documents").update(patch).eq("id", ocrDocId2);
+        }
+      } catch (e) { console.error("deferred OCR failed", e); }
     });
   }
 
