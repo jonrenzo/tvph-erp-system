@@ -127,12 +127,12 @@ export function ApprovalToastListener() {
         .on(
           "postgres_changes",
           { event: "UPDATE", schema: "public", table: "purchase_orders" },
-          (payload) => enqueue(payload, "purchase_orders"),
+          (payload: any) => enqueue(payload, "purchase_orders"),
         )
         .on(
           "postgres_changes",
           { event: "UPDATE", schema: "public", table: "purchase_requests" },
-          (payload) => enqueue(payload, "purchase_requests"),
+          (payload: any) => enqueue(payload, "purchase_requests"),
         )
         .subscribe();
 
