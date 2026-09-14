@@ -7,7 +7,7 @@ export const DOCUMENT_TYPES = [
   { id: "products_services_list", label: "List of Products or Services" },
   { id: "vendor_information_summary", label: "Vendor Information Summary" },
   { id: "general_information_sheet", label: "Latest General Information Sheet" },
-  { id: "audited_financial_statements", label: "Audited Financial Statements (3yrs)" },
+  { id: "audited_financial_statements", label: "AFS 2025" },
   { id: "sec_registration", label: "SEC Registration / DTI" },
   { id: "secretary_certificate", label: "Secretary Certificate" },
   { id: "safety_drug_policy", label: "Safety & Drug Free Policy" },

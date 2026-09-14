@@ -41,7 +41,7 @@ const DOCUMENT_LABELS: Record<string, string> = {
   products_services_list: "Products & Services List",
   vendor_information_summary: "Vendor Information Summary",
   general_information_sheet: "General Information Sheet",
-  audited_financial_statements: "Audited Financial Statements",
+  audited_financial_statements: "AFS 2025",
   sec_registration: "SEC Registration",
   secretary_certificate: "Secretary Certificate",
   safety_drug_policy: "Safety & Drug Policy",
