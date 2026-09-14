@@ -158,7 +158,7 @@ export function ApprovalToastListener() {
 
       async function notify(table: ApprovalTable, id: string) {
         if (disposed) return;
-        const { data: row } = await supabase
+        const { data } = await supabase
           .from(table)
           .select(
             table === "purchase_orders"
@@ -166,7 +166,8 @@ export function ApprovalToastListener() {
               : "pr_number, status, projects(name), submitted_for_approval_by, approval_requested_from, finance_approval_requested_from, approved_by_user_id, finance_approved_by_user_id, rejected_by, rejection_reason",
           )
           .eq("id", id)
-          .maybeSingle<DetailRow>();
+          .maybeSingle();
+        const row = data as unknown as DetailRow | null;
 
         const status = row?.status ?? "";
         // A withdrawal back to draft has no rejection_reason; skip the noise.
@@ -189,9 +190,9 @@ export function ApprovalToastListener() {
           const { data } = await supabase
             .from("profiles")
             .select("full_name, avatar_url")
-            .eq("id", actorId)
-            .maybeSingle<{ full_name: string; avatar_url: string | null }>();
-          actorProfile = data ?? null;
+            .eq("id", actorId as string)
+            .maybeSingle();
+          actorProfile = (data as any) ?? null;
         }
 
         const verb = meta.verb.replace("{code}", code);

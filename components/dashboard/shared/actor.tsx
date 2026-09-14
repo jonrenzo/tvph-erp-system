@@ -23,8 +23,8 @@ export async function getActorProfile(): Promise<Actor | null> {
     .select("full_name, avatar_url")
     .eq("id", user.id)
     .maybeSingle();
-  cached = data ?? null;
-  return cached;
+  cached = (data as Actor | null) ?? null;
+  return cached as Actor | null;
 }
 
 export function useActor(): Actor | null {
