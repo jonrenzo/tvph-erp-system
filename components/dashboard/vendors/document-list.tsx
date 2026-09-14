@@ -93,6 +93,8 @@ interface VersionInfo {
 
 export function DocumentList({ vendorId, documents, userRole, optionalDocTypes = [] }: { vendorId: string; documents: Document[]; userRole?: string; optionalDocTypes?: string[] }) {
   const [busy, setBusy] = useState<string | null>(null);
+  const [uploadPct, setUploadPct] = useState<number | null>(null);
+  const [uploadName, setUploadName] = useState<string>("");
   const [approvingDoc, setApprovingDoc] = useState<string | null>(null);
   const [approveExpiryDate, setApproveExpiryDate] = useState("");
   const [approveError, setApproveError] = useState<string | null>(null);
@@ -108,6 +110,16 @@ export function DocumentList({ vendorId, documents, userRole, optionalDocTypes =
   const [loadingVersions, setLoadingVersions] = useState(false);
   const [rollbacking, setRollbacking] = useState<string | null>(null);
   const router = useRouter();
+
+  const putWithProgress = (url: string, file: File) => new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url);
+    xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+    xhr.upload.onprogress = (ev) => { if (ev.lengthComputable) setUploadPct(Math.round((ev.loaded / ev.total) * 100)); };
+    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Upload failed ${xhr.status}: ${xhr.responseText.slice(0,200)}`)));
+    xhr.onerror = () => reject(new Error("Network error during upload"));
+    xhr.send(file);
+  });
 
   const fixedDocs = documents.filter((d) => d.doc_type !== 'custom');
   const customDocs = [...documents.filter((d) => d.doc_type === 'custom')]
@@ -133,24 +145,29 @@ export function DocumentList({ vendorId, documents, userRole, optionalDocTypes =
     // reset file input so same file can be retried
     const input = e.target;
     try {
-      // ponytail: direct browser->storage for 10MB files (fixes AFS 2025 (4).pdf hanging via server double-hop)
-      const supabase = createClient();
       for (const f of files) {
         if (f.size > 50 * 1024 * 1024) { alert(`${f.name} exceeds 50MB`); continue; }
+        setUploadName(f.name);
+        setUploadPct(0);
         const urlRes: any = await createVendorSignedUploadUrl(vendorId, docType, f.name, f.type || "application/octet-stream");
         if (urlRes?.error || !urlRes?.success) {
-          // fallback to legacy server upload
+          setUploadPct(null);
           const formData = new FormData();
           formData.append('file', f);
           const r = doc ? await uploadDocumentFiles(doc.id, formData) : await uploadDocument(vendorId, docType, formData);
           if (r.error) { alert(r.error); break; }
           continue;
         }
-        const { error: upErr } = await supabase.storage.from(urlRes.bucket).uploadToSignedUrl(urlRes.path, urlRes.token, f);
-        if (upErr) {
-          const resp = await fetch(urlRes.signedUrl, { method: "PUT", body: f, headers: { "Content-Type": f.type || "application/octet-stream" } });
-          if (!resp.ok) { alert(`Upload failed: ${resp.status} ${await resp.text()}`); break; }
+        // ponytail: XHR PUT with progress so AFS 2025 (4).pdf 10MB shows % (fixes "still not uploading" blind spot)
+        try {
+          await putWithProgress(urlRes.signedUrl, f);
+        } catch (xhrErr: any) {
+          // fallback to supabase helper if XHR fails
+          const supabase = createClient();
+          const { error: upErr } = await supabase.storage.from(urlRes.bucket).uploadToSignedUrl(urlRes.path, urlRes.token, f);
+          if (upErr) throw xhrErr;
         }
+        setUploadPct(100);
         const conf: any = await confirmVendorDirectUpload(vendorId, docType, urlRes.path, f.name, f.type || "application/octet-stream", null, null);
         if (conf?.error) { alert(conf.error); break; }
       }
@@ -159,6 +176,8 @@ export function DocumentList({ vendorId, documents, userRole, optionalDocTypes =
       alert(err.message || "Upload failed");
     } finally {
       setBusy(null);
+      setUploadPct(null);
+      setUploadName("");
       input.value = "";
     }
   };
@@ -436,6 +455,17 @@ export function DocumentList({ vendorId, documents, userRole, optionalDocTypes =
         <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5">
           <div className="bg-primary h-2.5 rounded-full transition-all duration-1000" style={{ width: `${progressPercent}%` }} />
         </div>
+        {uploadPct !== null && (
+          <div className="mt-4 p-3 rounded-xl bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800/50">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs font-semibold text-blue-700 dark:text-blue-300 flex items-center gap-1.5"><Loader2 className="h-3 w-3 animate-spin" /> Uploading {uploadName || "file"} — {uploadPct}%</span>
+              <span className="text-xs font-mono text-blue-600 dark:text-blue-400">{uploadPct}%</span>
+            </div>
+            <div className="w-full bg-blue-100 dark:bg-blue-900/30 rounded-full h-2 overflow-hidden">
+              <div className="bg-blue-600 h-2 rounded-full transition-all duration-200" style={{ width: `${uploadPct}%` }} />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Documents */}

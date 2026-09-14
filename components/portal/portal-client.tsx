@@ -69,6 +69,18 @@ export default function PortalClient({
   const [expiryDate, setExpiryDate] = useState("");
   const [notes, setNotes] = useState("");
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadPct, setUploadPct] = useState<number | null>(null);
+  const [uploadName, setUploadName] = useState<string>("");
+
+  const putWithProgress = (url: string, file: File) => new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url);
+    xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+    xhr.upload.onprogress = (ev) => { if (ev.lengthComputable) setUploadPct(Math.round((ev.loaded / ev.total) * 100)); };
+    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Upload failed ${xhr.status}: ${xhr.responseText.slice(0,200)}`)));
+    xhr.onerror = () => reject(new Error("Network error during upload"));
+    xhr.send(file);
+  });
   
   // Signature pad state
   const [hasSigned, setHasSigned] = useState(false);
@@ -166,19 +178,19 @@ export default function PortalClient({
     const newFiles: { id: string; file_name: string; file_url?: string | null }[] = [];
     let uploadError: string | null = null;
 
-    const supabase = createClient();
+    setUploadPct(0);
     for (let i = 0; i < files.length; i++) {
       const f = files[i];
       if (f.size > 50 * 1024 * 1024) {
         uploadError = `${f.name} exceeds the 50MB limit.`;
         break;
       }
+      setUploadName(f.name);
+      setUploadPct(0);
       const signatureImage = (["signed_nda", "specimen_signature"].includes(selectedDocType) && hasSigned && canvasRef.current) ? canvasRef.current.toDataURL("image/png") : null;
       try {
-        // ponytail: direct browser -> Supabase for 10MB files (fixes AFS 2025 (4).pdf hanging)
         const urlRes: any = await createPortalSignedUploadUrl(token, selectedDocType, f.name, f.type || "application/octet-stream");
         if (urlRes?.error) {
-          // fallback to legacy server upload
           const formData = new FormData();
           formData.append("file", f);
           if (expiryDate) formData.append("expiryDate", expiryDate);
@@ -187,14 +199,17 @@ export default function PortalClient({
           const result = await uploadPortalDocument(token, selectedDocType, formData);
           if ((result as any).error) { uploadError = (result as any).error; break; }
           if ((result as any).uploadedFile) newFiles.push((result as any).uploadedFile);
+          setUploadPct(100);
           continue;
         }
-        // upload directly to storage (bypasses Next.js server double-hop)
-        const { error: upErr } = await supabase.storage.from(urlRes.bucket).uploadToSignedUrl(urlRes.path, urlRes.token, f);
-        if (upErr) {
-          // fetch fallback if uploadToSignedUrl fails (e.g. CORS)
-          const resp = await fetch(urlRes.signedUrl, { method: "PUT", body: f, headers: { "Content-Type": f.type || "application/octet-stream" } });
-          if (!resp.ok) throw new Error(`Storage upload failed: ${resp.status} ${await resp.text()}`);
+        // ponytail: XHR with progress so AFS 2025 (4).pdf 10MB shows %
+        try {
+          await putWithProgress(urlRes.signedUrl, f);
+        } catch (xhrErr: any) {
+          const supabase = createClient();
+          const { error: upErr } = await supabase.storage.from(urlRes.bucket).uploadToSignedUrl(urlRes.path, urlRes.token, f);
+          if (upErr) throw xhrErr;
+          setUploadPct(100);
         }
         const confirm: any = await confirmPortalUpload(token, selectedDocType, urlRes.path, f.name, f.type || "application/octet-stream", expiryDate || null, notes || null, signatureImage);
         if (confirm?.error) { uploadError = confirm.error; break; }
@@ -208,6 +223,8 @@ export default function PortalClient({
     if (uploadError) {
       toast.error(`Upload failed: ${uploadError}`);
       setIsUploading(false);
+      setUploadPct(null);
+      setUploadName("");
       return;
     }
 
@@ -252,6 +269,8 @@ export default function PortalClient({
     setNotes("");
     setHasSigned(false);
     setIsUploading(false);
+    setUploadPct(null);
+    setUploadName("");
   };
 
   return (
@@ -502,6 +521,20 @@ export default function PortalClient({
                   />
                 </div>
 
+                {/* Upload progress */}
+                {isUploading && uploadPct !== null && (
+                  <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800/50">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-semibold text-blue-700 dark:text-blue-300 flex items-center gap-1.5"><Loader2 className="h-3 w-3 animate-spin" /> {uploadName ? `${uploadName} — ${uploadPct}%` : `${uploadPct}%`}</span>
+                      <span className="text-xs font-mono text-blue-600 dark:text-blue-400">{uploadPct}%</span>
+                    </div>
+                    <div className="w-full bg-blue-100 dark:bg-blue-900/30 rounded-full h-2 overflow-hidden">
+                      <div className="bg-blue-600 h-2 rounded-full transition-all duration-200" style={{ width: `${uploadPct}%` }} />
+                    </div>
+                    <p className="text-[10px] text-blue-600/70 dark:text-blue-400/60 mt-1">Uploading {uploadName || "file"} directly to storage — {uploadPct < 100 ? "please keep this tab open" : "finalizing..."}</p>
+                  </div>
+                )}
+
                 {/* Submit button */}
                 <button
                   type="submit"
@@ -511,7 +544,7 @@ export default function PortalClient({
                   {isUploading ? (
                     <>
                       <Loader2 className="h-5 w-5 animate-spin" />
-                      Uploading & Extracting with AI...
+                      {uploadPct !== null ? `Uploading ${uploadPct}%...` : "Uploading..."}
                     </>
                   ) : (
                     <>
