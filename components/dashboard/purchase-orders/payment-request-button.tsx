@@ -71,12 +71,20 @@ export function PaymentRequestButton({ poId, paymentRequest, paymentRequests, ca
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Upload an invoice linked to this PO to auto-create a pending Payment Request.</p>
             </div>
             {canCreate && (
-              <Link
-                href={`/dashboard/invoices/new?poId=${poId}`}
-                className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all active:scale-95 shadow-sm"
-              >
-                Record Vendor Invoice
-              </Link>
+              <div className="flex items-center gap-2">
+                <Link
+                  href={`/dashboard/purchase-orders/${poId}/payment-request`}
+                  className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all active:scale-95 shadow-sm"
+                >
+                  Create Payment Request
+                </Link>
+                <Link
+                  href={`/dashboard/invoices/new?poId=${poId}`}
+                  className="inline-flex items-center gap-2 bg-white border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-4 py-2 rounded-xl text-sm font-medium transition-all active:scale-95"
+                >
+                  Record Invoice
+                </Link>
+              </div>
             )}
           </div>
         ) : (
@@ -118,9 +126,15 @@ export function PaymentRequestButton({ poId, paymentRequest, paymentRequests, ca
               </div>
             ))}
             {canCreate && (
-              <Link href={`/dashboard/invoices/new?poId=${poId}`} className="inline-flex items-center gap-2 text-sm text-primary hover:underline mt-2">
-                <AlertCircle className="h-4 w-4" /> Record another invoice for this PO
-              </Link>
+              <div className="flex items-center gap-2 mt-2">
+                <Link href={`/dashboard/purchase-orders/${poId}/payment-request`} className="inline-flex items-center gap-2 text-sm text-emerald-600 hover:underline">
+                  <AlertCircle className="h-4 w-4" /> Create Payment Request
+                </Link>
+                <span className="text-slate-300">·</span>
+                <Link href={`/dashboard/invoices/new?poId=${poId}`} className="inline-flex items-center gap-2 text-sm text-primary hover:underline">
+                  Record Invoice
+                </Link>
+              </div>
             )}
           </div>
         )}

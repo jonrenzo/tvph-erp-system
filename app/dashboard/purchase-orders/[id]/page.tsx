@@ -473,6 +473,15 @@ async function PODetailContent({ paramsPromise, searchParamsPromise }: { paramsP
             </a>
           )}
           <PODownloadDropdown poId={po.id} />
+          {canCreatePR && ISSUED_OR_LATER.includes(po.status) && (!paymentRequest || paymentRequest.status === "rejected" || paymentRequest.status === "fully_invoiced") && (
+            <Link
+              href={`/dashboard/purchase-orders/${po.id}/payment-request`}
+              className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-xl text-sm font-medium transition-all shadow-sm active:scale-95 shrink-0 whitespace-nowrap"
+            >
+              <Send className="h-4 w-4" />
+              Payment Request
+            </Link>
+          )}
           {(canEditAny ||
             (!isLegacy && ISSUED_OR_LATER.includes(po.status) && canSendEmail) ||
             (canCreatePR &&
@@ -505,13 +514,22 @@ async function PODetailContent({ paramsPromise, searchParamsPromise }: { paramsP
                 <PoResendButton poId={po.id} menu />
               )}
               {canCreatePR && (
-                <Link
-                  href={`/dashboard/invoices/new?poId=${po.id}`}
-                  className={menuItemClass}
-                >
-                  <FileText className="h-4 w-4" />
-                  Record Invoice
-                </Link>
+                <>
+                  <Link
+                    href={`/dashboard/purchase-orders/${po.id}/payment-request`}
+                    className={menuItemClass}
+                  >
+                    <Send className="h-4 w-4" />
+                    Create Payment Request
+                  </Link>
+                  <Link
+                    href={`/dashboard/invoices/new?poId=${po.id}`}
+                    className={menuItemClass}
+                  >
+                    <FileText className="h-4 w-4" />
+                    Record Invoice
+                  </Link>
+                </>
               )}
             </PoMoreDropdown>
           )}
