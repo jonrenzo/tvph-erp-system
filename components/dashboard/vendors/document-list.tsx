@@ -102,6 +102,9 @@ export function DocumentList({ vendorId, documents, userRole, optionalDocTypes =
   const [customLabel, setCustomLabel] = useState("");
   const [customFiles, setCustomFiles] = useState<File[]>([]);
   const [customUploading, setCustomUploading] = useState(false);
+  const [customUploadPct, setCustomUploadPct] = useState<number | null>(null);
+  const [customUploadName, setCustomUploadName] = useState("");
+  const [customUploadError, setCustomUploadError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [historyFile, setHistoryFile] = useState<DocumentFile | null>(null);
   const [historyDocName, setHistoryDocName] = useState("");
@@ -110,11 +113,11 @@ export function DocumentList({ vendorId, documents, userRole, optionalDocTypes =
   const [rollbacking, setRollbacking] = useState<string | null>(null);
   const router = useRouter();
 
-  const putWithProgress = (url: string, file: File) => new Promise<void>((resolve, reject) => {
+  const putWithProgress = (url: string, file: File, onProgress?: (pct: number) => void) => new Promise<void>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", url);
     xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
-    xhr.upload.onprogress = (ev) => { if (ev.lengthComputable) setUploadPct(Math.round((ev.loaded / ev.total) * 100)); };
+    xhr.upload.onprogress = (ev) => { if (ev.lengthComputable) { const pct = Math.round((ev.loaded / ev.total) * 100); if (onProgress) onProgress(pct); else setUploadPct(pct); } };
     xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Upload failed ${xhr.status}: ${xhr.responseText.slice(0,200)}`)));
     xhr.onerror = () => reject(new Error("Network error during upload"));
     xhr.send(file);
@@ -217,15 +220,40 @@ export function DocumentList({ vendorId, documents, userRole, optionalDocTypes =
   const handleCustomUpload = async () => {
     if (customFiles.length === 0 || !customLabel.trim()) return;
     setCustomUploading(true);
-    const formData = new FormData();
-    customFiles.forEach((f) => formData.append('file', f));
-    const result = await uploadCustomVendorDocument(vendorId, customLabel.trim(), formData);
-    if (result.error) { alert(result.error); }
-    else { router.refresh(); }
+    setCustomUploadError(null);
+    let failed: string | null = null;
+    try {
+      for (const f of customFiles) {
+        if (f.size > 50 * 1024 * 1024) { alert(`${f.name} exceeds 50MB`); continue; }
+        setCustomUploadName(f.name);
+        setCustomUploadPct(0);
+        const urlRes: any = await createVendorSignedUploadUrl(vendorId, 'custom', f.name, f.type || "application/octet-stream");
+        if (urlRes?.error || !urlRes?.success) {
+          setCustomUploadPct(null);
+          const formData = new FormData();
+          formData.append('file', f);
+          const result = await uploadCustomVendorDocument(vendorId, customLabel.trim(), formData);
+          if (result.error) { failed = result.error; break; }
+          continue;
+        }
+        await putWithProgress(urlRes.signedUrl, f, setCustomUploadPct);
+        setCustomUploadPct(100);
+        const conf: any = await confirmVendorDirectUpload(vendorId, 'custom', urlRes.path, f.name, f.type || "application/octet-stream", null, null, customLabel.trim());
+        if (conf?.error) { failed = conf.error; break; }
+      }
+      router.refresh();
+    } catch (err: any) {
+      failed = err.message || "Upload failed";
+    }
+    setCustomUploadError(failed);
     setCustomUploading(false);
-    setShowAddForm(false);
-    setCustomLabel('');
-    setCustomFiles([]);
+    setCustomUploadPct(null);
+    setCustomUploadName("");
+    if (!failed) {
+      setShowAddForm(false);
+      setCustomLabel('');
+      setCustomFiles([]);
+    }
   };
 
   const openHistory = async (file: DocumentFile, docName: string) => {
@@ -516,6 +544,27 @@ export function DocumentList({ vendorId, documents, userRole, optionalDocTypes =
                 </button>
               </div>
             </div>
+            {customUploading && customUploadPct !== null && (
+              <div className="mt-3 p-3 rounded-xl bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800/50">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-semibold text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
+                    <Loader2 className="h-3 w-3 animate-spin" /> {customUploadName ? `${customUploadName} — ${customUploadPct}%` : `${customUploadPct}%`}
+                  </span>
+                  <span className="text-xs font-mono text-blue-600 dark:text-blue-400">{customUploadPct}%</span>
+                </div>
+                <div className="w-full bg-blue-100 dark:bg-blue-900/30 rounded-full h-2 overflow-hidden">
+                  <div className="bg-blue-600 h-2 rounded-full transition-all duration-200" style={{ width: `${customUploadPct}%` }} />
+                </div>
+                <p className="text-[10px] text-blue-600/70 dark:text-blue-400/60 mt-1">
+                  Uploading {customUploadName || "file"} directly to storage — {customUploadPct < 100 ? "please keep this tab open" : "finalizing..."}
+                </p>
+              </div>
+            )}
+            {customUploadError && (
+              <p className="mt-3 text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5">
+                <AlertCircle className="h-3.5 w-3.5" /> {customUploadError}
+              </p>
+            )}
           </div>
         )}
 

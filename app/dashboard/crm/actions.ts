@@ -1100,6 +1100,114 @@ export async function uploadCustomCustomerDocument(customerId: string, label: st
   return { success: true };
 }
 
+export async function createCrmSignedUploadUrl(customerId: string, docType: string, fileName: string, contentType: string) {
+  const { supabase, user, error: roleError } = await requireCommercialRole();
+  if (roleError || !user) return { error: roleError || 'Unauthorized' };
+  if (!fileName) return { error: 'No file name' };
+  const svc = createServiceRoleClient();
+  const bucket = 'crm-documents';
+  const ext = (fileName.split('.').pop() || 'bin').replace(/[^a-zA-Z0-9]/g, '').slice(0, 10) || 'bin';
+  const safeDoc = docType.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40);
+  const path = `customers/${customerId}/${safeDoc}/${safeDoc}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const { data, error } = await svc.storage.from(bucket).createSignedUploadUrl(path);
+  if (error || !data) return { error: error?.message || 'Failed to create upload URL' };
+  const { data: { publicUrl } } = svc.storage.from(bucket).getPublicUrl(path);
+  return { success: true, path, signedUrl: (data as any).signedUrl, token: (data as any).token, publicUrl, bucket };
+}
+
+export async function confirmCrmDirectUpload(
+  customerId: string,
+  docType: string,
+  filePath: string,
+  fileName: string,
+  contentType: string,
+  label: string | null = null,
+) {
+  const { supabase, user, error: roleError } = await requireCommercialRole();
+  if (roleError || !user) return { error: roleError || 'Unauthorized' };
+
+  const bucket = 'crm-documents';
+  const { data: { publicUrl } } = supabase.storage.from(bucket).getPublicUrl(filePath);
+
+  const logicalDocQuery = supabase
+    .from('crm_documents')
+    .select('id')
+    .eq('account_id', customerId)
+    .eq('doc_type', docType)
+    .is('archived_at', null)
+    .order('created_at', { ascending: false })
+    .limit(1);
+  if (label !== null) logicalDocQuery.eq('label', label);
+  const { data: existingDocs } = await logicalDocQuery;
+  const existingDoc = existingDocs?.[0];
+
+  let docId = existingDoc?.id || '';
+  if (!docId) {
+    const { data: newDoc, error: insertError } = await supabase
+      .from('crm_documents')
+      .insert({
+        account_id: customerId,
+        doc_type: docType,
+        label: label || undefined,
+        status: 'submitted',
+        submitted_at: new Date().toISOString(),
+        uploaded_by: user.id,
+        updated_at: new Date().toISOString()
+      })
+      .select('id')
+      .single();
+    if (insertError || !newDoc) return { error: insertError?.message || 'Failed to create document' };
+    docId = newDoc.id;
+  }
+
+  const { data: version, error: versionError } = await supabase
+    .from('crm_document_versions')
+    .insert({
+      document_id: docId,
+      version_number: 1,
+      file_url: publicUrl,
+      file_name: fileName,
+      file_type: contentType,
+      uploaded_by: user.id
+    })
+    .select('id')
+    .single();
+  if (versionError) return { error: versionError.message };
+
+  await supabase
+    .from('crm_documents')
+    .update({
+      current_version_id: version.id,
+      file_url: publicUrl,
+      file_name: fileName,
+      version_number: 1,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', docId);
+
+  await recordAuditLog({
+    entity_type: 'crm_document',
+    entity_id: customerId,
+    action: 'UPDATE',
+    changes: { after: { doc_type: docType, label: label || undefined, status: 'submitted' } },
+    performed_by: user.id
+  });
+
+  if (docType === 'custom') {
+    await createNotificationForRoles({
+      type: 'crm',
+      title: 'Customer Document Added',
+      message: `A custom document "${label || ''}" was uploaded for a customer.`,
+      link: `/dashboard/crm/${customerId}`,
+      created_by: user.id,
+      roles: ['operations'],
+    });
+  }
+
+  revalidatePath(`/dashboard/crm/${customerId}`);
+  return { success: true };
+}
+
 export async function approveCustomerDocument(customerId: string, docType: string, expiryDate: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

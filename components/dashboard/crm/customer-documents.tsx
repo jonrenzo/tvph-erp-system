@@ -22,13 +22,15 @@ import { useRouter } from "next/navigation";
 import { isAdminOrAbove } from "@/lib/auth/roles";
 import {
   uploadCustomerDocument,
-  uploadCustomCustomerDocument,
   uploadDocumentVersion,
   approveCustomerDocument,
   approveCustomerDocumentById,
   getDocumentVersions,
   getVersionSignedUrl,
   rollbackDocumentVersion,
+  createCrmSignedUploadUrl,
+  confirmCrmDirectUpload,
+  uploadCustomCustomerDocument,
 } from "@/app/dashboard/crm/actions";
 
 const DOCUMENT_TYPES = [
@@ -73,6 +75,8 @@ export function CustomerDocuments({ customerId, documents, userRole }: { custome
   const [customLabel, setCustomLabel] = useState("");
   const [customFile, setCustomFile] = useState<File | null>(null);
   const [customUploading, setCustomUploading] = useState(false);
+  const [customUploadPct, setCustomUploadPct] = useState<number | null>(null);
+  const [customUploadError, setCustomUploadError] = useState<string | null>(null);
   const router = useRouter();
 
   const [historyDoc, setHistoryDoc] = useState<Document | null>(null);
@@ -106,22 +110,51 @@ export function CustomerDocuments({ customerId, documents, userRole }: { custome
     setUploading(null);
   };
 
+  const putWithProgress = (url: string, file: File) => new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url);
+    xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+    xhr.upload.onprogress = (ev) => { if (ev.lengthComputable) setCustomUploadPct(Math.round((ev.loaded / ev.total) * 100)); };
+    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Upload failed ${xhr.status}: ${xhr.responseText.slice(0,200)}`)));
+    xhr.onerror = () => reject(new Error("Network error during upload"));
+    xhr.send(file);
+  });
+
   const handleCustomUpload = async () => {
     if (!customFile || !customLabel.trim()) return;
     setCustomUploading(true);
-    const formData = new FormData();
-    formData.append('file', customFile);
-    const result = await uploadCustomCustomerDocument(customerId, customLabel.trim(), formData);
-    if (result.error) {
-      alert(result.error);
-    } else {
-      router.refresh();
-      router.refresh();
+    setCustomUploadError(null);
+    let failed: string | null = null;
+    try {
+      const f = customFile;
+      if (f.size > 50 * 1024 * 1024) {
+        failed = `${f.name} exceeds 50MB`;
+      } else {
+        const urlRes: any = await createCrmSignedUploadUrl(customerId, 'custom', f.name, f.type || "application/octet-stream");
+        if (urlRes?.error || !urlRes?.success) {
+          const formData = new FormData();
+          formData.append('file', f);
+          const result = await uploadCustomCustomerDocument(customerId, customLabel.trim(), formData);
+          if (result.error) { failed = result.error; }
+          else { router.refresh(); }
+        } else {
+          await putWithProgress(urlRes.signedUrl, f);
+          const conf: any = await confirmCrmDirectUpload(customerId, 'custom', urlRes.path, f.name, f.type || "application/octet-stream", customLabel.trim());
+          if (conf?.error) { failed = conf.error; }
+          else { router.refresh(); }
+        }
+      }
+    } catch (err: any) {
+      failed = err.message || "Upload failed";
     }
+    setCustomUploadError(failed);
     setCustomUploading(false);
-    setShowAddForm(false);
-    setCustomLabel('');
-    setCustomFile(null);
+    setCustomUploadPct(null);
+    if (!failed) {
+      setShowAddForm(false);
+      setCustomLabel('');
+      setCustomFile(null);
+    }
   };
 
   const handleUpdateVersion = async (docId: string, e: React.ChangeEvent<HTMLInputElement>) => {
@@ -315,6 +348,24 @@ export function CustomerDocuments({ customerId, documents, userRole }: { custome
                 </button>
               </div>
             </div>
+            {customUploading && customUploadPct !== null && (
+              <div className="mt-3 p-3 rounded-xl bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800/50">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-semibold text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
+                    <Loader2 className="h-3 w-3 animate-spin" /> {customFile?.name || "file"}
+                  </span>
+                  <span className="text-xs font-mono text-blue-600 dark:text-blue-400">{customUploadPct}%</span>
+                </div>
+                <div className="w-full bg-blue-100 dark:bg-blue-900/30 rounded-full h-2 overflow-hidden">
+                  <div className="bg-blue-600 h-2 rounded-full transition-all duration-200" style={{ width: `${customUploadPct}%` }} />
+                </div>
+              </div>
+            )}
+            {customUploadError && (
+              <p className="mt-3 text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5">
+                <AlertCircle className="h-3.5 w-3.5" /> {customUploadError}
+              </p>
+            )}
           </div>
         )}
 

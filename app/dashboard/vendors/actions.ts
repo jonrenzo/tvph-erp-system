@@ -1215,6 +1215,7 @@ export async function confirmVendorDirectUpload(
   contentType: string,
   expiryDate: string | null,
   notes: string | null,
+  label: string | null = null,
 ) {
   try {
     const supabase = await createClient();
@@ -1224,10 +1225,17 @@ export async function confirmVendorDirectUpload(
     const bucket = "vendor-documents";
     const { data: { publicUrl } } = svc.storage.from(bucket).getPublicUrl(filePath);
 
-    const { data: existingDocument } = await supabase.from("vendor_documents").select("id").eq("vendor_id", vendorId).eq("doc_type", docType).is("archived_at", null).maybeSingle();
+    const existingQuery = supabase.from("vendor_documents").select("id").eq("vendor_id", vendorId)
+      .is("archived_at", null)
+      .eq("doc_type", docType)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    if (label !== null) existingQuery.eq("label", label);
+    const { data: existingDocuments } = await existingQuery;
+    const existingDocument = existingDocuments?.[0];
     let docId = existingDocument?.id || "";
     if (!docId) {
-      const { data: newDoc, error: insertError } = await supabase.from("vendor_documents").insert({ vendor_id: vendorId, doc_type: docType, status: "submitted", submitted_at: new Date().toISOString(), uploaded_by: user.id, updated_at: new Date().toISOString() }).select("id").single();
+      const { data: newDoc, error: insertError } = await supabase.from("vendor_documents").insert({ vendor_id: vendorId, doc_type: docType, label: label || undefined, status: "submitted", submitted_at: new Date().toISOString(), uploaded_by: user.id, updated_at: new Date().toISOString() }).select("id").single();
       if (insertError || !newDoc) return { error: insertError?.message || "Failed to create document" };
       docId = newDoc.id;
     }
