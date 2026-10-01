@@ -14,7 +14,7 @@ Vendor accreditation, purchase requests, purchase orders, AP, AR, CRM, projects,
 
 ## Documentation
 
-Turnover documentation now lives in the Docsify site under [docs/](./docs/README.md). In a deployed app, visit `/docs`.
+Turnover documentation now lives in the Docsify site under [docs/](./docs/README.md). In production, visit [https://erp.telcovantage.com/docs/index.html#/README](https://erp.telcovantage.com/docs/index.html#/README).
 
 Open it locally with:
 
@@ -65,6 +65,7 @@ Start here:
 - [Setup](./docs/setup.md)
 - [Architecture](./docs/architecture.md)
 - [Operations](./docs/operations.md)
+- [Database turnover](./docs/database-turnover.md)
 - [Developer guide](./docs/developer-guide.md)
 - [Troubleshooting](./docs/troubleshooting.md)
 

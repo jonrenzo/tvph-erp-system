@@ -13,6 +13,7 @@ Use this documentation for onboarding future users, administrators, and develope
 - How the system is built: [Architecture](architecture.md)
 - Feature inventory: [Modules](modules.md)
 - Production routines and maintenance: [Operations](operations.md)
+- Database handoff without transferring the Supabase account: [Database turnover](database-turnover.md)
 - Developer conventions: [Developer guide](developer-guide.md)
 
 ## Current stack

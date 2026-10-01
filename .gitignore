@@ -48,6 +48,9 @@ scratch/
 # SharePoint vendor migration working data (contains extracted TINs, bank info, raw docs)
 /sharepoint-import-work/
 
+# database turnover exports (contains live business data)
+/turnover-exports/
+
 # supabase local CLI metadata
 supabase/.temp/
 

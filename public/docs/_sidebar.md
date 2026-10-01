@@ -4,6 +4,7 @@
 * [Architecture](architecture.md)
 * [Modules](modules.md)
 * [Database](database.md)
+* [Database turnover](database-turnover.md)
 * [Auth and RBAC](auth-rbac.md)
 * [Integrations](integrations.md)
 * [Operations](operations.md)
@@ -13,4 +14,3 @@
 * [Troubleshooting](troubleshooting.md)
 * [API docs](api.md)
 * [Existing references](references.md)
-
