@@ -14,7 +14,7 @@ Vendor accreditation, purchase requests, purchase orders, AP, AR, CRM, projects,
 
 ## Documentation
 
-Turnover documentation now lives in the Docsify site under [docs/](./docs/README.md).
+Turnover documentation now lives in the Docsify site under [docs/](./docs/README.md). In a deployed app, visit `/docs`.
 
 Open it locally with:
 
@@ -24,7 +24,7 @@ npx docsify-cli serve docs
 
 Then visit `http://localhost:3000`.
 
-The deployed app currently serves the older static user guide from `public/docs/` at `/docs`. The repo documentation source is `docs/`; keep it updated when architecture, setup, dependencies, routes, or operational procedures change.
+The deployed `/docs` route serves a copy of the Docsify site from `public/docs/`. Keep the source in `docs/` updated first, then copy it to `public/docs/` before deployment.
 
 ## Quick start
 
@@ -69,4 +69,3 @@ Start here:
 - [Troubleshooting](./docs/troubleshooting.md)
 
 The short project inventory used by agents is [docs/PROJECT_ANALYSIS.md](./docs/PROJECT_ANALYSIS.md).
-

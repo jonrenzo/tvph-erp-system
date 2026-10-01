@@ -76,7 +76,7 @@ supabase/
 scripts/               # Operational scripts (purge-db, seed docs, Telegram webhook)
 __tests__/             # Jest tests (business logic focus)
 docs/                  # Docsify handoff docs + project references
-public/docs/           # Static user guide currently served at /docs
+public/docs/           # Deployed Docsify copy currently served at /docs
 ```
 
 ## Modules
@@ -143,4 +143,4 @@ public/docs/           # Static user guide currently served at /docs
 - 14-point vendor accreditation defined in `lib/vendors/document-types.ts`; each doc type can hold **multiple files** (`vendor_document_files`), each with its own version history (`vendor_document_file_versions`) and add/update/delete actions in `app/dashboard/vendors/actions.ts` (portal uploads append files too)
 - Tests target business logic (PO guards, invoice guards), not UI snapshots
 - Root `README.md` is intentionally short; turnover docs live in Docsify source under `docs/`
-- `next.config.ts` currently redirects `/docs` to the existing static user guide in `public/docs/index.html`; Docsify source is repository documentation unless that redirect is changed
+- `next.config.ts` redirects `/docs` to the deployed Docsify copy in `public/docs/index.html`; source docs live under `docs/`
