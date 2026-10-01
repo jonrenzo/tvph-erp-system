@@ -1,10 +1,10 @@
 # Project Analysis — TelcoVantage ERP System
 
-> Last updated: 2026-08-26
+> Last updated: 2026-10-01
 
 ## Stack
 
-- **Framework**: Next.js 16.2 (App Router)
+- **Framework**: Next.js 16.2.4 (App Router)
 - **Language**: TypeScript 5 (strict)
 - **UI**: React 19, Tailwind CSS 4, Lucide icons
 - **Database**: Supabase (PostgreSQL) — raw SQL migrations, no ORM
@@ -71,10 +71,12 @@ utils/
 ├── string-similarity.ts
 
 supabase/
-└── migrations/        # 40 SQL migrations (schema source of truth) — 20260826_po_exec_approval_tiers adds pending_exec_approval + exec_* columns
+└── migrations/        # 67 SQL migrations (schema source of truth)
 
 scripts/               # Operational scripts (purge-db, seed docs, Telegram webhook)
 __tests__/             # Jest tests (business logic focus)
+docs/                  # Docsify handoff docs + project references
+public/docs/           # Static user guide currently served at /docs
 ```
 
 ## Modules
@@ -83,7 +85,7 @@ __tests__/             # Jest tests (business logic focus)
 |--------|-------|-------------|
 | Command Center | `/dashboard` | KPIs, cash-flow charts, compliance health |
 | Vendors | `/dashboard/vendors` | 14-point accreditation, magic-link upload portals |
-| Purchase Orders | `/dashboard/purchase-orders` | Draft→issue workflow (amount-tiered: ≤500k admin+finance, 500_001-1_000_000 +CTO/CEO 1-of-2, ≥1_000_001 +CTO&CEO 2-of-2), compliance gates, DOCX/PDF gen |
+| Purchase Orders | `/dashboard/purchase-orders` | Draft→issue workflow (amount-tiered: ≤500k admin+finance, 500_001-1_000_000 +CTO/CEO 1-of-2, ≥1_000_001 +CTO&CEO 2-of-2), compliance gates, signature portal, DOCX/PDF gen |
 | Invoices (AP) | `/dashboard/invoices` | OCR via Gemini, overbilling guards, payment vouchers |
 | CRM | `/dashboard/crm` | Accounts, contacts, opportunities |
 | Client Invoices | `/dashboard/client-invoices` | AR billing |
@@ -110,7 +112,6 @@ __tests__/             # Jest tests (business logic focus)
 | `ai`, `@ai-sdk/google`, `@ai-sdk/react` | AI assistant |
 | `resend`, `@react-email/*` | Email |
 | `pdf-lib`, `pdfkit`, `pizzip` | PDF/DOCX generation |
-| `@eigenpal/docx-editor-react` | Browser DOCX editor |
 | `recharts` | Charts |
 | `sonner` | Toasts |
 | `next-themes` | Theme switching |
@@ -119,7 +120,7 @@ __tests__/             # Jest tests (business logic focus)
 
 ## Database
 
-- **40 migrations** in `supabase/migrations/` — additive only, no down-migrations
+- **67 migrations** in `supabase/migrations/` — additive only, no down-migrations
 - **Key tables**: `profiles`, `vendors`, `vendor_documents`, `vendor_document_files`, `vendor_document_file_versions`, `tvph_documents`, `projects`, `project_vendors`, `vendor_contracts`, `purchase_orders` (status `pending_exec_approval` + `exec_required_count/exec_approved_by/exec_approved_at/exec_approval_requested_from` for amount-tiered exec stage), `service_invoices`, `payments`, `audit_logs`, `notifications`, `crm_accounts`, `crm_contacts`, `erp_documents`, `customer_documents`, `employee_documents`, `assets`, `email_logs` (`po_pending_exec`), `chat_messages`, `payment_requests`, `payment_reservations`, `completion_certificates`, `internal_entities`, `purchase_requests` (+ `pr_line_items`, `pr_site_details`; header carries `vendor_id` — optional nominated vendor prefilled onto the PO at conversion — plus `dp_amount`/`dp_percent` where `dp_amount = amount × dp_percent/100`, inherited by the PO, which also stores `dp_percent`)
 - **RLS** enabled on all tables
 - **Storage buckets**: `avatars`, `vendor-documents`, `tvph-documents`, `erp-documents`, `customer-documents`, `employee-documents`, + payment/PO buckets
@@ -128,7 +129,7 @@ __tests__/             # Jest tests (business logic focus)
 ## RBAC
 
 - **7 roles**: `superadmin`, `admin`, `finance`, `operations`, `viewer`, `cto` (Meinardo Opiana), `ceo` (Edardnal Giovanni Canicula)
-- **33 capabilities** mapped via `CAPABILITY_ROLES` in `lib/auth/roles.ts` — `po.approve_exec` → `superadmin,cto,ceo` (T2 1-of-2, T3 distinct CTO+CEO)
+- **48 capabilities** mapped via `CAPABILITY_ROLES` in `lib/auth/roles.ts` — `po.approve_exec` → `superadmin,cto,ceo` (T2 1-of-2, T3 distinct CTO+CEO)
 - `requireCapability(capability)` gates every Server Action and Route Handler
 - New Microsoft SSO users default to `viewer`; Telegram notifies admins for role assignment
 
@@ -141,3 +142,5 @@ __tests__/             # Jest tests (business logic focus)
 - AI tools (`lib/chat/tools.ts`) import server actions directly
 - 14-point vendor accreditation defined in `lib/vendors/document-types.ts`; each doc type can hold **multiple files** (`vendor_document_files`), each with its own version history (`vendor_document_file_versions`) and add/update/delete actions in `app/dashboard/vendors/actions.ts` (portal uploads append files too)
 - Tests target business logic (PO guards, invoice guards), not UI snapshots
+- Root `README.md` is intentionally short; turnover docs live in Docsify source under `docs/`
+- `next.config.ts` currently redirects `/docs` to the existing static user guide in `public/docs/index.html`; Docsify source is repository documentation unless that redirect is changed
